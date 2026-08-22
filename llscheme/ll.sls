@@ -51,8 +51,8 @@
            (let ([n (string->number (substring s 1 (string-length s)))])
              (and (fixnum? n) (positive? n) n)))))
 
-  ;; iN, float, double, ptr, void; (ptr addrspace N); (array N TY);
-  ;; (vector N TY); (struct TY ...)
+  ;; iN, float, double, ptr, void; (ptr N) for address space N;
+  ;; (array N TY); (vector N TY); (struct TY ...)
   (define (resolve-type ctx t)
     (cond
       [(symbol? t)
@@ -69,9 +69,9 @@
        (cond
          [(eq? (car t) 'struct)
           (ir:struct-type ctx (map (lambda (e) (resolve-type ctx e)) (cdr t)))]
-         [(and (eq? (car t) 'ptr) (= (length t) 3) (eq? (cadr t) 'addrspace)
-               (fixnum? (caddr t)) (fx>= (caddr t) 0))
-          (ir:pointer-type ctx (caddr t))]
+         [(and (eq? (car t) 'ptr) (= (length t) 2)
+               (fixnum? (cadr t)) (fx>= (cadr t) 0))
+          (ir:pointer-type ctx (cadr t))]
          [(and (eq? (car t) 'array) (= (length t) 3)
                (fixnum? (cadr t)) (positive? (cadr t)))
           (ir:array-type (resolve-type ctx (caddr t)) (cadr t))]
@@ -234,12 +234,12 @@
         (ir:const-null (ir:token-type ctx))
         (resolve-operand st #f form)))
 
-  ;; after `unwind`: `to caller` -> #f, or a (label %x) target
+  ;; unwind destination: the keyword operand `caller` -> #f, or (label %x)
   (define (unwind-dest st rest form)
     (cond
-      [(equal? rest '(to caller)) #f]
+      [(equal? rest '(caller)) #f]
       [(and (pair? rest) (null? (cdr rest))) (block-ref st (car rest))]
-      [else (ll-error "expected `unwind to caller` or `unwind (label %x)`"
+      [else (ll-error "expected unwind destination: caller or (label %x)"
                       form (fstate-fname st))]))
 
   ;; LLVMAtomicRMWBinOp; cross-checked by the coverage tests
@@ -394,11 +394,9 @@
                   name)))]
             [(assq op casts) =>
              (lambda (entry)
-               (arity 4 "(op type value to type)")
-               (unless (eq? (caddr args) 'to)
-                 (ll-error "cast expects `to`" form))
+               (arity 3 "(op src-type value dest-type)")
                (let ([ty (resolve-type ctx (car args))]
-                     [dst (resolve-type ctx (cadddr args))])
+                     [dst (resolve-type ctx (caddr args))])
                  ((cdr entry) b (resolve-operand st ty (cadr args)) dst name)))]
             [else
              (case op
@@ -432,68 +430,61 @@
                                          (fstate-phis st)))
                   ph)]
                [(call)
-                (arity>= 2 "(call type callee (type arg) ...)")
-                (let ([retty (resolve-type ctx (car args))])
+                ;; (call type (callee (type arg) ...)) -- callee grouped with
+                ;; its arguments, as in IR's own @f(args)
+                (arity 2 "(call type (callee (type arg) ...))")
+                (let ([retty (resolve-type ctx (car args))]
+                      [app (cadr args)])
+                  (unless (pair? app)
+                    (ll-error "call expects an application group (callee args...)"
+                              form))
                   (when (and (eq? (ir:type-kind retty) 'void)
                           (not (string=? name "")))
                     (ll-error "cannot bind the result of a void call" form))
                   (let-values ([(fnty avals)
-                                (call-signature st ctx retty (cddr args) form)])
-                    (ir:build-call b fnty (resolve-callee st fnty (cadr args))
+                                (call-signature st ctx retty (cdr app) form)])
+                    (ir:build-call b fnty (resolve-callee st fnty (car app))
                                    avals name)))]
                [(invoke)
-                ;; (invoke type callee (type arg) ...
-                ;;         to (label %ok) unwind (label %pad))
-                (arity>= 6 "(invoke type callee args... to (label %ok) unwind (label %pad))")
-                (let ([retty (resolve-type ctx (car args))])
+                ;; (invoke type (callee args...) (label %ok) (label %pad))
+                (arity 4 "(invoke type (callee args...) (label %ok) (label %pad))")
+                (let ([retty (resolve-type ctx (car args))]
+                      [app (cadr args)])
+                  (unless (pair? app)
+                    (ll-error "invoke expects an application group (callee args...)"
+                              form))
                   (when (and (eq? (ir:type-kind retty) 'void)
                           (not (string=? name "")))
                     (ll-error "cannot bind the result of a void invoke" form))
-                  (let loop ([rest (cddr args)] [groups '()])
-                    (cond
-                      [(null? rest)
-                       (ll-error "invoke expects `to ... unwind ...`" form)]
-                      [(eq? (car rest) 'to)
-                       (unless (and (= (length rest) 4)
-                                    (eq? (caddr rest) 'unwind))
-                         (ll-error "invoke expects `to (label %ok) unwind (label %pad)`"
-                                   form))
-                       (let-values ([(fnty avals)
-                                     (call-signature st ctx retty
-                                                     (reverse groups) form)])
-                         (ir:build-invoke b fnty
-                                          (resolve-callee st fnty (cadr args))
-                                          avals
-                                          (block-ref st (cadr rest))
-                                          (block-ref st (cadddr rest))
-                                          name))]
-                      [else (loop (cdr rest) (cons (car rest) groups))])))]
+                  (let-values ([(fnty avals)
+                                (call-signature st ctx retty (cdr app) form)])
+                    (ir:build-invoke b fnty
+                                     (resolve-callee st fnty (car app))
+                                     avals
+                                     (block-ref st (caddr args))
+                                     (block-ref st (cadddr args))
+                                     name)))]
                [(callbr)
-                ;; (callbr type (asm ...) (type arg) ...
-                ;;         to (label %fallthrough) ((label %ind) ...))
-                (arity>= 5 "(callbr type (asm ...) args... to (label %fall) ((label %i) ...))")
-                (unless (and (pair? (cadr args)) (eq? (caadr args) 'asm))
-                  (ll-error "callbr requires an inline-asm callee (LLVM restriction)"
-                            form))
-                (let ([retty (resolve-type ctx (car args))])
-                  (let loop ([rest (cddr args)] [groups '()])
-                    (cond
-                      [(null? rest)
-                       (ll-error "callbr expects `to (label %fall) (dests...)`" form)]
-                      [(eq? (car rest) 'to)
-                       (unless (= (length rest) 3)
-                         (ll-error "callbr expects `to (label %fall) ((label %i) ...)`"
-                                   form))
-                       (let-values ([(fnty avals)
-                                     (call-signature st ctx retty
-                                                     (reverse groups) form)])
-                         (ir:build-callbr b fnty
-                                          (resolve-callee st fnty (cadr args))
-                                          (block-ref st (cadr rest))
-                                          (map (lambda (d) (block-ref st d))
-                                               (caddr rest))
-                                          avals name))]
-                      [else (loop (cdr rest) (cons (car rest) groups))])))]
+                ;; (callbr type ((asm ...) args...)
+                ;;         (label %fallthrough) ((label %indirect) ...))
+                (arity 4 "(callbr type ((asm ...) args...) (label %fall) ((label %i) ...))")
+                (let ([retty (resolve-type ctx (car args))]
+                      [app (cadr args)])
+                  (unless (and (pair? app) (pair? (car app))
+                               (eq? (caar app) 'asm))
+                    (ll-error "callbr requires an inline-asm callee (LLVM restriction)"
+                              form))
+                  (unless (list? (cadddr args))
+                    (ll-error "callbr expects a list of indirect (label %x) targets"
+                              form))
+                  (let-values ([(fnty avals)
+                                (call-signature st ctx retty (cdr app) form)])
+                    (ir:build-callbr b fnty
+                                     (resolve-callee st fnty (car app))
+                                     (block-ref st (caddr args))
+                                     (map (lambda (d) (block-ref st d))
+                                          (cadddr args))
+                                     avals name)))]
                [(landingpad)
                 ;; (landingpad type clause ...) where clause is: cleanup |
                 ;; (catch type constant) | (filter type constant)
@@ -518,47 +509,41 @@
                 (ir:build-resume b
                   (resolve-operand st (resolve-type ctx (car args)) (cadr args)))]
                [(catchswitch)
-                ;; (catchswitch within none|%pad ((label %h) ...)
-                ;;              unwind to caller | unwind (label %x))
-                (arity>= 4 "(catchswitch within parent (handlers) unwind ...)")
-                (unless (and (eq? (car args) 'within) (list? (caddr args))
-                             (eq? (cadddr args) 'unwind))
-                  (ll-error "expected (catchswitch within parent (handlers) unwind ...)"
+                ;; (catchswitch none|%pad ((label %h) ...) caller|(label %x))
+                (arity 3 "(catchswitch parent ((label %h) ...) caller|(label %x))")
+                (unless (list? (cadr args))
+                  (ll-error "catchswitch expects a list of (label %h) handlers"
                             form))
-                (let* ([handlers (caddr args)]
+                (let* ([handlers (cadr args)]
                        [cs (ir:build-catchswitch b
-                             (parent-pad st ctx (cadr args))
-                             (unwind-dest st (cddddr args) form)
+                             (parent-pad st ctx (car args))
+                             (unwind-dest st (cddr args) form)
                              (length handlers) name)])
                   (for-each
                     (lambda (h) (ir:add-handler! cs (block-ref st h)))
                     handlers)
                   cs)]
                [(catchpad cleanuppad)
-                ;; (catchpad within %cs ((type arg) ...))
-                (arity 3 "(catchpad/cleanuppad within parent ((type arg) ...))")
-                (unless (and (eq? (car args) 'within) (list? (caddr args)))
-                  (ll-error "expected (within parent (args))" form))
-                (let ([parent (parent-pad st ctx (cadr args))]
+                ;; (catchpad none|%pad ((type arg) ...))
+                (arity 2 "(catchpad/cleanuppad parent ((type arg) ...))")
+                (unless (list? (cadr args))
+                  (ll-error "expected a list of (type arg) pad arguments" form))
+                (let ([parent (parent-pad st ctx (car args))]
                       [pargs (map (lambda (g) (resolve-operand st #f g))
-                                  (caddr args))])
+                                  (cadr args))])
                   (if (eq? op 'catchpad)
                       (ir:build-catchpad b parent pargs name)
                       (ir:build-cleanuppad b parent pargs name)))]
                [(catchret)
-                ;; (catchret from %pad to (label %next))
-                (arity 4 "(catchret from %pad to (label %next))")
-                (unless (and (eq? (car args) 'from) (eq? (caddr args) 'to))
-                  (ll-error "expected (catchret from %pad to (label %next))" form))
-                (ir:build-catchret b (resolve-operand st #f (cadr args))
-                                   (block-ref st (cadddr args)))]
+                ;; (catchret %pad (label %next))
+                (arity 2 "(catchret %pad (label %next))")
+                (ir:build-catchret b (resolve-operand st #f (car args))
+                                   (block-ref st (cadr args)))]
                [(cleanupret)
-                ;; (cleanupret from %pad unwind to caller | unwind (label %x))
-                (arity>= 3 "(cleanupret from %pad unwind ...)")
-                (unless (and (eq? (car args) 'from) (eq? (caddr args) 'unwind))
-                  (ll-error "expected (cleanupret from %pad unwind ...)" form))
-                (ir:build-cleanupret b (resolve-operand st #f (cadr args))
-                                     (unwind-dest st (cdddr args) form))]
+                ;; (cleanupret %pad caller|(label %x))
+                (arity 2 "(cleanupret %pad caller|(label %x))")
+                (ir:build-cleanupret b (resolve-operand st #f (car args))
+                                     (unwind-dest st (cdr args) form))]
                [(load)
                 (arity>= 2 "(load type (ptr p) ...)")
                 (let-values ([(ord attrs) (split-ordering (cddr args) form)])
@@ -785,21 +770,21 @@
                            form)]))]
       [else (ll-error "invalid constant initializer" form)]))
 
-  ;; (= @name (linkage? global|constant type init? attr*)); no initializer
-  ;; only for external/extern_weak declarations
+  ;; (= @name (global|constant linkage? type init? attr*)) -- the kind is
+  ;; the head, linkage is a modifier after it (like instruction flags);
+  ;; no initializer only for external/extern_weak declarations
   (define (parse-global item)
     ;; -> (values name linkage-int-or-#f constant? type-form init-form attrs)
     (unless (and (= (length item) 3) (global-name? (cadr item))
                  (pair? (caddr item)))
-      (ll-error "expected (= @name (global|constant type ...))" item))
-    (let* ([name (cadr item)]
-           [rhs (caddr item)]
-           [lk (and (symbol? (car rhs)) (assq (car rhs) linkages))]
-           [rhs (if lk (cdr rhs) rhs)])
-      (unless (and (pair? rhs) (memq (car rhs) '(global constant))
-                   (pair? (cdr rhs)))
-        (ll-error "expected global or constant after the linkage" item))
+      (ll-error "expected (= @name (global|constant ...))" item))
+    (let ([name (cadr item)]
+          [rhs (caddr item)])
+      (unless (and (memq (car rhs) '(global constant)) (pair? (cdr rhs)))
+        (ll-error "expected (global ...) or (constant ...)" item))
       (let* ([constant? (eq? (car rhs) 'constant)]
+             [lk (and (symbol? (cadr rhs)) (assq (cadr rhs) linkages))]
+             [rhs (if lk (cdr rhs) rhs)]
              [ty-form (cadr rhs)]
              [rest (cddr rhs)]
              [attr? (lambda (f) (and (pair? f) (eq? (car f) 'align)))]

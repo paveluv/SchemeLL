@@ -12,22 +12,22 @@ aggregates (insert/extractvalue with bare integer indices); full atomics
 (fence, atomicrmw with all 17 ops, cmpxchg with weak, atomic load/store
 with ordering after the operands); `undef` operands; and type grammar for
 `(array N TY)`, `(vector N TY)`, `(struct TY ...)`, and
-`(ptr addrspace N)`. (DECIDED 2026-08-22: named heads for aggregate
+`(ptr N)` for address spaces. (DECIDED 2026-08-22: named heads for aggregate
 types rather than IR-positional `[N x TY]`/`<N x TY>` transliteration —
 uniform with `struct`, easier to read, and far easier to pattern-match
 in the future nanopass layers.) Step 4 (2026-08-22) added
 module-level globals: `(= @name (linkage? global|constant type init?
-attr*))`, mirroring IR word order (`@x = private constant i64 42` →
-`(= @x (private constant i64 42))`); initializers cover literals,
+attr*))` (`@x = private constant i64 42` →
+`(= @x (constant private i64 42))`); initializers cover literals,
 undef/zeroinitializer/null, @globals/@functions, `(c "bytes")` /
 `(cz "bytes")` strings, and per-element-typed aggregates
 `((i64 1) (i32 2))`; no initializer = declaration (external/extern_weak
 only). Step 5 (2026-08-22) completed the opcode set with exception
-handling: invoke (`(= %r (invoke ty callee args... to (label %ok)
-unwind (label %pad)))`), landingpad with cleanup/catch/filter clauses,
-resume, the funclet family (catchswitch/catchpad/cleanuppad with
-`within none|%pad`, catchret/cleanupret with `unwind to caller` or a
-label target), callbr with a required inline-asm callee
+handling: invoke (`(= %r (invoke ty (callee args...) (label %ok)
+(label %pad)))`), landingpad with cleanup/catch/filter clauses,
+resume, the funclet family (catchswitch/catchpad/cleanuppad with a
+`none|%pad` parent operand, catchret/cleanupret with a `caller` or
+label unwind destination), callbr with a required inline-asm callee
 `(asm "template" "constraints" sideeffect? alignstack?)` (asm callees
 also work in call), and an optional `(personality ptr @fn)` clause
 between a define's signature and its first block. Every LLVMOpcode is
@@ -41,12 +41,43 @@ First layer of the llscheme DSL tower:
 a notation for LLVM IR that is ordinary Scheme data/syntax, sitting directly
 on top of (llvm ir).
 
-## Guiding principle: mechanical transliteration
+## The design principle (REVIEWED and DECIDED 2026-08-22)
 
-ll is textual LLVM IR with a fixed, reversible set of rewrites — nothing
-more. Anyone reading LLVM docs should be able to write ll without learning
-a second language, and `clang -S -emit-llvm` output should transliterate
-into ll line by line (great for learning and debugging). The rewrites:
+**An ll program is Scheme data that mirrors LLVM's *semantic structure*,
+spelled with LLVM's *vocabulary*.**
+
+1. **Prefix-only grammar.** Every composite form is a list whose *head*
+   names what it is (`define`, `label`, `=`, an opcode, a type
+   constructor, `asm`, `personality`, ...). Grammar words never appear at
+   any other position. (Empirically verified: nanopass `define-language`
+   productions cannot contain mid-pattern literal symbols — only head
+   keywords and meta-variables — so this rule is what keeps ll definable
+   as a nanopass language.)
+2. **After the head, everything is an operand**: a name (`%x`, `@f`), a
+   literal, a **keyword operand** (an enum-like word: `slt`, `seq_cst`,
+   `nsw`, `private`, `undef`, `null`, `none`, `caller`), a typed group
+   `(type value)`, or a nested form. Each head has a fixed shape (modulo
+   natural variadic tails). Keyword operands are data — nanopass models
+   them as terminals.
+3. **LLVM's vocabulary, LLVM's order.** Opcode names, flag names,
+   predicate names, type names, and operand order match textual IR, so
+   the LangRef doubles as ll documentation.
+4. **Textual fidelity is a tiebreaker, not a goal.** Where IR's concrete
+   syntax conflicts with rules 1–2 — infix markers (`to`, `within`,
+   `from`, `unwind`), dual spellings (`entry:` vs `%entry`), bracket
+   flavors (`[4 x i8]`, `<4 x i32>`) — structure wins and only the
+   vocabulary survives.
+5. **One name, one symbol.** A thing is spelled identically at definition
+   and every use.
+
+The line rules 1–2 draw: *structure words go in head position; semantic
+words are operands.* `zext` is structure; `seq_cst` is semantics.
+
+## The transliteration rules
+
+Under the principle, IR converts to ll with a fixed, reversible set of
+rewrites, and `clang -S -emit-llvm` output still transliterates line by
+line:
 
 1. Drop commas. Wrap each instruction in parens.
 2. `%x = <rhs>` becomes `(= %x (<rhs>))`. `%x`, `%same.ok`, `@fact` are
@@ -78,6 +109,23 @@ into ll line by line (great for learning and debugging). The rewrites:
 6. Trailing attributes become trailing groups: `, align 8` → `(align 8)`.
    Instruction flags stay in position as bare symbols: `icmp ne`, `add nsw`,
    `getelementptr inbounds` → `(icmp ne ...)`, `(add nsw ...)`, ...
+7. Mid-form grammar words are dropped or absorbed (rule 4 of the
+   principle; DECIDED 2026-08-22):
+   - casts lose `to`: `zext i32 %t to i64` → `(zext i32 %t i64)`;
+   - call/invoke/callbr group the callee with its arguments, mirroring
+     IR's own `@f(args)`: `call i64 @fact(i64 %n1)` →
+     `(call i64 (@fact (i64 %n1)))`; invoke/callbr destinations follow
+     as fixed positions with `to`/`unwind` dropped:
+     `(invoke i32 (@f (i32 %x)) (label %ok) (label %pad))`,
+     `(callbr void ((asm "" "")) (label %fall) ((label %i) ...))`;
+   - funclet EH loses `within`/`from`/`unwind`; `to caller` becomes the
+     keyword operand `caller`: `(catchswitch none ((label %h)) caller)`,
+     `(catchpad %cs (args))`, `(catchret %cp (label %ok))`,
+     `(cleanupret %clp caller)`;
+   - `ptr addrspace(1)` → `(ptr 1)`;
+   - global linkage moves after the kind head (the head must name the
+     form): `@x = private constant i64 42` →
+     `(= @x (constant private i64 42))`.
 
 Examples of the rule at work:
 
@@ -87,7 +135,8 @@ Examples of the rule at work:
 | `%ok = icmp ne i32 %goal, 0` | `(= %ok (icmp ne i32 %goal 0))` |
 | `store i64 %a, ptr %b, align 8` | `(store (i64 %a) (ptr %b) (align 8))` |
 | `%v = load i64, ptr %p` | `(= %v (load i64 (ptr %p)))` |
-| `%r = call i64 @fact(i64 %n1)` | `(= %r (call i64 @fact (i64 %n1)))` |
+| `%r = call i64 @fact(i64 %n1)` | `(= %r (call i64 (@fact (i64 %n1))))` |
+| `%t = zext i32 %x to i64` | `(= %t (zext i32 %x i64))` |
 | `br label %loop` | `(br (label %loop))` |
 | `br i1 %ok, label %a, label %b` | `(br i1 %ok (label %a) (label %b))` |
 | `ret i64 %r` | `(ret i64 %r)` |
@@ -115,7 +164,7 @@ b:                                    (label %b
   ret i64 1                             (ret i64 1))
 r:                                    (label %r
   %n1 = sub i64 %n, 1                   (= %n1 (sub i64 %n 1))
-  %f = call i64 @fact(i64 %n1)          (= %f (call i64 @fact (i64 %n1)))
+  %f = call i64 @fact(i64 %n1)          (= %f (call i64 (@fact (i64 %n1))))
   %r1 = mul i64 %n, %f                  (= %r1 (mul i64 %n %f))
   ret i64 %r1                           (ret i64 %r1)))
 }

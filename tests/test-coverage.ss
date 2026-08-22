@@ -197,18 +197,18 @@ entry:
 (check-entry! "casts"
   '((define i64 (@casts (i64 %x) (double %d) (ptr %p))
       (label %entry
-        (= %t (trunc i64 %x to i32))
-        (= %zx (zext i32 %t to i64))
-        (= %sx (sext i32 %t to i64))
-        (= %fui (fptoui double %d to i64))
-        (= %fsi (fptosi double %d to i64))
-        (= %uf (uitofp i64 %x to double))
-        (= %sf (sitofp i64 %x to double))
-        (= %ft (fptrunc double %d to float))
-        (= %fe (fpext float %ft to double))
-        (= %pi (ptrtoint ptr %p to i64))
-        (= %ip (inttoptr i64 %x to ptr))
-        (= %bc (bitcast double %d to i64))
+        (= %t (trunc i64 %x i32))
+        (= %zx (zext i32 %t i64))
+        (= %sx (sext i32 %t i64))
+        (= %fui (fptoui double %d i64))
+        (= %fsi (fptosi double %d i64))
+        (= %uf (uitofp i64 %x double))
+        (= %sf (sitofp i64 %x double))
+        (= %ft (fptrunc double %d float))
+        (= %fe (fpext float %ft double))
+        (= %pi (ptrtoint ptr %p i64))
+        (= %ip (inttoptr i64 %x ptr))
+        (= %bc (bitcast double %d i64))
         (ret i64 %bc))))
   "define i64 @casts(i64 %x, double %d, ptr %p) {
 entry:
@@ -345,8 +345,8 @@ entry:
         (ret void)))
     (define i64 (@caller (i64 %x))
       (label %entry
-        (call void @nop)
-        (= %r (call i64 @callee (i64 %x)))
+        (call void (@nop))
+        (= %r (call i64 (@callee (i64 %x))))
         (ret i64 %r)))
     (define i64 (@callee (i64 %x))
       (label %entry
@@ -381,17 +381,17 @@ entry:
         (= %v7 (lshr exact i64 %v6 1))
         (= %v8 (ashr exact i64 %v7 1))
         (= %v9 (or disjoint i64 %v8 %b))
-        (= %t (trunc i64 %v9 to i32))
-        (= %z (zext nneg i32 %t to i64))
+        (= %t (trunc i64 %v9 i32))
+        (= %z (zext nneg i32 %t i64))
         (= %p (alloca i64 (align 8)))
         (store volatile (i64 %z) (ptr %p) (align 8))
         (= %v (load volatile i64 (ptr %p) (align 8)))
         (= %g1 (getelementptr inbounds i64 (ptr %p) (i64 0)))
         (= %g2 (getelementptr nusw i64 (ptr %p) (i64 0)))
         (= %g3 (getelementptr nuw i64 (ptr %p) (i64 0)))
-        (= %i1 (ptrtoint ptr %g1 to i64))
-        (= %i2 (ptrtoint ptr %g2 to i64))
-        (= %i3 (ptrtoint ptr %g3 to i64))
+        (= %i1 (ptrtoint ptr %g1 i64))
+        (= %i2 (ptrtoint ptr %g2 i64))
+        (= %i3 (ptrtoint ptr %g3 i64))
         (= %s1 (add i64 %i1 %i2))
         (= %s2 (add i64 %s1 %i3))
         (= %r (add i64 %v %s2))
@@ -506,10 +506,10 @@ entry:
 ")
 
 (check-entry! "addrspace"
-  '((define (ptr addrspace 1) (@ascast (ptr %p))
+  '((define (ptr 1) (@ascast (ptr %p))
       (label %entry
-        (= %q (addrspacecast ptr %p to (ptr addrspace 1)))
-        (ret (ptr addrspace 1) %q))))
+        (= %q (addrspacecast ptr %p (ptr 1)))
+        (ret (ptr 1) %q))))
   "define ptr addrspace(1) @ascast(ptr %p) {
 entry:
   %q = addrspacecast ptr %p to ptr addrspace(1)
@@ -632,21 +632,21 @@ entry:
 
 (check-entry! "globals"
   '((= @counter (global i64 0))
-    (= @answer (private constant i64 42))
-    (= @weakg (weak global i64 1))
-    (= @weako (weak_odr global i64 2))
-    (= @lonce (linkonce global i64 3))
-    (= @lonceo (linkonce_odr global i64 4))
-    (= @intern (internal global i64 5))
-    (= @avail (available_externally global i64 6))
-    (= @commong (common global i64 0))
-    (= @append (appending global (array 2 i64) ((i64 1) (i64 2))))
-    (= @extg (external global i64))
-    (= @extw (extern_weak global i64))
-    (= @buf (internal global (array 4 i8) zeroinitializer (align 16)))
-    (= @msg (private constant (array 6 i8) (cz "hello")))
-    (= @pair (internal constant (struct i64 i32) ((i64 1) (i32 2))))
-    (= @vecc (internal constant (vector 2 i32) ((i32 7) (i32 9))))
+    (= @answer (constant private i64 42))
+    (= @weakg (global weak i64 1))
+    (= @weako (global weak_odr i64 2))
+    (= @lonce (global linkonce i64 3))
+    (= @lonceo (global linkonce_odr i64 4))
+    (= @intern (global internal i64 5))
+    (= @avail (global available_externally i64 6))
+    (= @commong (global common i64 0))
+    (= @append (global appending (array 2 i64) ((i64 1) (i64 2))))
+    (= @extg (global external i64))
+    (= @extw (global extern_weak i64))
+    (= @buf (global internal (array 4 i8) zeroinitializer (align 16)))
+    (= @msg (constant private (array 6 i8) (cz "hello")))
+    (= @pair (constant internal (struct i64 i32) ((i64 1) (i32 2))))
+    (= @vecc (constant internal (vector 2 i32) ((i32 7) (i32 9))))
     (= @pnull (global ptr null))
     (= @fptr (global ptr @reader))
     (define i64 (@reader)
@@ -686,10 +686,9 @@ entry:
     (define i32 (@guarded (i32 %x))
       (personality ptr @pers)
       (label %entry
-        (= %r (invoke i32 @compute (i32 %x)
-                to (label %ok) unwind (label %lpad))))
+        (= %r (invoke i32 (@compute (i32 %x)) (label %ok) (label %lpad))))
       (label %ok
-        (invoke void @may_throw to (label %done) unwind (label %lpad2)))
+        (invoke void (@may_throw) (label %done) (label %lpad2)))
       (label %done
         (ret i32 %r))
       (label %lpad
@@ -736,21 +735,21 @@ lpad2:
     (define void (@wineh)
       (personality ptr @wpers)
       (label %entry
-        (invoke void @may_throw2 to (label %ok) unwind (label %cs.bb)))
+        (invoke void (@may_throw2) (label %ok) (label %cs.bb)))
       (label %cs.bb
-        (= %cs (catchswitch within none ((label %handler)) unwind to caller)))
+        (= %cs (catchswitch none ((label %handler)) caller)))
       (label %handler
-        (= %cp (catchpad within %cs ((ptr null) (i32 64) (ptr null))))
-        (catchret from %cp to (label %ok)))
+        (= %cp (catchpad %cs ((ptr null) (i32 64) (ptr null))))
+        (catchret %cp (label %ok)))
       (label %ok
         (ret void)))
     (define void (@wincleanup)
       (personality ptr @wpers)
       (label %entry
-        (invoke void @may_throw2 to (label %ok) unwind (label %cl.bb)))
+        (invoke void (@may_throw2) (label %ok) (label %cl.bb)))
       (label %cl.bb
-        (= %clp (cleanuppad within none ()))
-        (cleanupret from %clp unwind to caller))
+        (= %clp (cleanuppad none ()))
+        (cleanupret %clp caller))
       (label %ok
         (ret void))))
   "declare i32 @wpers()
@@ -790,10 +789,10 @@ ok:
 (check-entry! "callbr"
   '((define i32 (@asmgoto (i32 %x))
       (label %entry
-        (callbr void (asm "" "") to (label %fall) ()))
+        (callbr void ((asm "" "")) (label %fall) ()))
       (label %fall
-        (= %r (callbr i32 (asm "" "=r,r,!i" sideeffect) (i32 %x)
-                to (label %out) ((label %alt)))))
+        (= %r (callbr i32 ((asm "" "=r,r,!i" sideeffect) (i32 %x))
+                (label %out) ((label %alt)))))
       (label %out
         (ret i32 %r))
       (label %alt

@@ -66,7 +66,23 @@ Newest entries first. Format: date, Done / Decided / Next.
   Rejected along the way: lol/mel (2026-08-22 discussion), M (MUMPS,
   Power Query), lowl/midl (MIDL = Microsoft IDL).
 
+- Grammar migration DECIDED + done: the ll design principle is now
+  formalized (prefix-only grammar; operands are names/literals/keyword
+  operands/typed groups/nested forms; LLVM vocabulary and order; textual
+  fidelity as tiebreaker; one name one symbol). All mid-form grammar words
+  removed: casts lose `to`; call/invoke/callbr group callee with args
+  (mirrors IR's @f(args)) and drop to/unwind; funclet EH drops
+  within/from/unwind (`caller` is a keyword operand); (ptr addrspace N)
+  -> (ptr N); global linkage moves after the kind head. Nanopass
+  limitation verified empirically (reference/nanopass cloned): mid-pattern
+  literals are rejected by define-language; the singleton-terminal
+  workaround makes keywords fields that every pass must thread. Golden IR
+  untouched.
+
 ### Next (coverage plan order)
+- Step 5.5 (pre-corpus blockers): varargs (declare/define/call-site fn
+  type), tail-call markers, alloca element counts, non-phi forward
+  references via placeholder + LLVMSetOperand patching.
 - Step 6: ll:disassemble + LLVM test-corpus round-trip (level 3).
 - Smaller leftovers: tail-call markers, alloca counts, scalable vectors,
   raw value injection.

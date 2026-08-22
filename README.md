@@ -29,7 +29,7 @@ What works today:
         (ret i64 1))
       (label %rec
         (= %n1 (sub i64 %n 1))
-        (= %f (call i64 @fact (i64 %n1)))
+        (= %f (call i64 (@fact (i64 %n1))))
         (= %r (mul i64 %n %f))
         (ret i64 %r)))))
 

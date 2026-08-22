@@ -24,7 +24,7 @@
         (ret i64 1))
       (label %rec
         (= %n1 (sub i64 %n 1))
-        (= %f (call i64 @fact (i64 %n1)))
+        (= %f (call i64 (@fact (i64 %n1))))
         (= %r (mul i64 %n %f))
         (ret i64 %r)))))
 
@@ -89,8 +89,8 @@
 (define misc-prog
   '((define i64 (@lowbyte (i64 %x))
       (label %entry
-        (= %t (trunc i64 %x to i8))
-        (= %z (zext i8 %t to i64))
+        (= %t (trunc i64 %x i8))
+        (= %z (zext i8 %t i64))
         (ret i64 %z)))
     (define i64 (@min (i64 %a) (i64 %b))
       (label %entry
@@ -103,8 +103,8 @@
         (ret double %h)))
     (define double (@int->half (i64 %x))
       (label %entry
-        (= %d (sitofp i64 %x to double))
-        (= %h (call double @half (double %d)))
+        (= %d (sitofp i64 %x double))
+        (= %h (call double (@half (double %d))))
         (ret double %h)))))
 
 (define misc-jit (ll:jit misc-prog))
@@ -232,8 +232,7 @@
     (define i64 (@safe-double (i64 %x))
       (personality ptr @pers)
       (label %entry
-        (= %r (invoke i64 @double-it (i64 %x)
-                to (label %ok) unwind (label %lpad))))
+        (= %r (invoke i64 (@double-it (i64 %x)) (label %ok) (label %lpad))))
       (label %ok
         (ret i64 %r))
       (label %lpad
@@ -253,25 +252,25 @@
              (ll:dump '((declare void (@g))
                         (define void (@f)
                           (label %entry
-                            (invoke void @g to (label %ok)))
+                            (invoke void (@g) (label %ok)))
                           (label %ok (ret void))))))
 (t:check-exn "callbr with a non-asm callee"
              (ll:dump '((declare void (@g))
                         (define void (@f)
                           (label %entry
-                            (callbr void @g to (label %ok) ()))
+                            (callbr void ((@g)) (label %ok) ()))
                           (label %ok (ret void))))))
 (t:check-exn "malformed catchret"
              (ll:dump '((define void (@f)
                           (label %entry
-                            (catchret %cp (label %ok)))
+                            (catchret from %cp to (label %ok)))
                           (label %ok (ret void))))))
 
 (t:section "ll: globals")
 
 (define counter-prog
-  '((= @counter (internal global i64 100))
-    (= @step (internal constant i64 7))
+  '((= @counter (global internal i64 100))
+    (= @step (constant internal i64 7))
     (define i64 (@tick)
       (label %entry
         (= %c (load i64 (ptr @counter)))
@@ -285,7 +284,7 @@
 (t:check "global keeps state: second tick" (= (tick) 114))
 
 (define msg-prog
-  '((= @msg (private constant (array 3 i8) (cz "hi")))
+  '((= @msg (constant private (array 3 i8) (cz "hi")))
     (define i8 (@first-byte)
       (label %entry
         (= %b (load i8 (ptr @msg)))
@@ -316,8 +315,8 @@
                      '((declare i64 (@inc i64))
                        (define i64 (@inc2 (i64 %x))
                          (label %entry
-                           (= %a (call i64 @inc (i64 %x)))
-                           (= %b (call i64 @inc (i64 %a)))
+                           (= %a (call i64 (@inc (i64 %x))))
+                           (= %b (call i64 (@inc (i64 %a))))
                            (ret i64 %b))))))
 (ir:verify-module m1)
 (ir:verify-module m2)
@@ -383,7 +382,7 @@
              (ll:dump '((declare i64 (@g i64))
                         (define i64 (@f (i64 %x))
                           (label %entry
-                            (= %y (call tail i64 @g (i64 %x)))
+                            (= %y (call tail i64 (@g (i64 %x))))
                             (ret i64 %y))))))
 (t:check-exn "unknown type"
              (ll:dump '((define i64 (@f (i37x %x))
