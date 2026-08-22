@@ -1,12 +1,13 @@
 ;;; (tests harness) -- minimal test harness: named checks, counted results.
+;;; Import as: (prefix (tests harness) t:)
 (library (tests harness)
-  (export check check-exn test-section test-summary-and-exit)
+  (export check check-exn section summary-and-exit)
   (import (chezscheme))
 
   (define passed 0)
   (define failed 0)
 
-  (define (test-section name)
+  (define (section name)
     (printf "~%== ~a ==~%" name))
 
   (define (pass! label)
@@ -26,12 +27,12 @@
           (pass! label)
           (fail! label "check returned #f"))))
 
-  ;; (check "label" expr) -- passes iff expr is true; exceptions fail.
+  ;; (t:check "label" expr) -- passes iff expr is true; exceptions fail.
   (define-syntax check
     (syntax-rules ()
       [(_ label expr) (run-check label (lambda () expr))]))
 
-  ;; (check-exn "label" expr) -- passes iff expr raises.
+  ;; (t:check-exn "label" expr) -- passes iff expr raises.
   (define-syntax check-exn
     (syntax-rules ()
       [(_ label expr)
@@ -41,6 +42,6 @@
                       expr
                       #f)))]))
 
-  (define (test-summary-and-exit)
+  (define (summary-and-exit)
     (printf "~%~a passed, ~a failed~%" passed failed)
     (exit (if (zero? failed) 0 1))))

@@ -40,7 +40,7 @@
    build-trunc build-zext build-sext
    build-si->fp build-ui->fp build-fp->si build-fp->ui
    build-fptrunc build-fpext build-ptr->int build-int->ptr build-bitcast)
-  (import (chezscheme) (llvm raw) (llvm base))
+  (import (chezscheme) (prefix (llvm raw) LLVM) (prefix (llvm base) base:))
 
   ;; ---- contexts -----------------------------------------------------------
 
@@ -58,7 +58,7 @@
   (define (context-live-ptr ctx)
     (let ([s (context-state ctx)])
       (unless (memq s '(owned borrowed))
-        (llvm-error 'context "context is no longer live" s))
+        (base:error 'context "context is no longer live" s))
       (context-ptr ctx)))
 
   (define (context-dispose! ctx)
@@ -85,7 +85,7 @@
 
   (define (module-live-ptr m)
     (unless (eq? (module-state m) 'owned)
-      (llvm-error 'module "module is no longer live (handed to JIT or disposed?)"
+      (base:error 'module "module is no longer live (handed to JIT or disposed?)"
                   (module-state m)))
     (module-ptr m))
 
@@ -100,16 +100,16 @@
       (module-state-set! m 'disposed)))
 
   (define (module->string m)
-    (cstring->string/dispose (LLVMPrintModuleToString (module-live-ptr m))))
+    (base:cstring->string/dispose (LLVMPrintModuleToString (module-live-ptr m))))
 
   ;; Raises with LLVM's diagnostic if the module is invalid.
   (define (verify-module m)
     (let-values ([(failed msg-ptr)
-                  (call-with-out-ptr
+                  (base:call-with-out-ptr
                    (lambda (out)
                      (LLVMVerifyModule (module-live-ptr m) 2 out)))]) ; 2 = return-status
-      (let ([msg (cstring->string/dispose msg-ptr)])
-        (check-bool 'verify-module failed msg))))
+      (let ([msg (base:cstring->string/dispose msg-ptr)])
+        (base:check-bool 'ir:verify-module failed msg))))
 
   (define (set-module-target-triple! m triple)
     (LLVMSetTarget (module-live-ptr m) triple))
@@ -120,9 +120,9 @@
   ;; Run new-pass-manager passes, e.g. (run-module-passes! m "default<O2>").
   (define (run-module-passes! m passes)
     (let ([opts (LLVMCreatePassBuilderOptions)])
-      (let ([err (LLVMRunPasses (module-live-ptr m) passes null-ptr opts)])
+      (let ([err (LLVMRunPasses (module-live-ptr m) passes base:null-ptr opts)])
         (LLVMDisposePassBuilderOptions opts)
-        (check-error-ref 'run-module-passes! err))))
+        (base:check-error-ref 'ir:run-module-passes! err))))
 
   ;; ---- builders -----------------------------------------------------------
 
@@ -135,7 +135,7 @@
 
   (define (builder-live-ptr b)
     (unless (eq? (builder-state b) 'owned)
-      (llvm-error 'builder "builder is no longer live" (builder-state b)))
+      (base:error 'builder "builder is no longer live" (builder-state b)))
     (builder-ptr b))
 
   (define (builder-dispose! b)
@@ -165,14 +165,14 @@
     (case-lambda
       [(ret params) (function-type ret params #f)]
       [(ret params vararg?)
-       (call-with-pointer-array params
+       (base:call-with-pointer-array params
          (lambda (arr n) (LLVMFunctionType ret arr n (if vararg? 1 0))))]))
 
   (define struct-type
     (case-lambda
       [(ctx elems) (struct-type ctx elems #f)]
       [(ctx elems packed?)
-       (call-with-pointer-array elems
+       (base:call-with-pointer-array elems
          (lambda (arr n)
            (LLVMStructTypeInContext (context-live-ptr ctx) arr n
                                     (if packed? 1 0))))]))
@@ -206,7 +206,7 @@
                   (cons (foreign-ref 'unsigned-64 arr (fx* 8 i)) acc))))))
 
   (define (type->string t)
-    (cstring->string/dispose (LLVMPrintTypeToString t)))
+    (base:cstring->string/dispose (LLVMPrintTypeToString t)))
 
   ;; ---- functions / values ----------------------------------------------------
 
@@ -215,7 +215,7 @@
 
   (define (named-function m name)
     (let ([f (LLVMGetNamedFunction (module-live-ptr m) name)])
-      (and (not (null-ptr? f)) f)))
+      (and (not (base:null-ptr? f)) f)))
 
   ;; With opaque pointers, LLVMTypeOf on a function gives `ptr`; this gives
   ;; the actual function type.
@@ -230,8 +230,8 @@
 
   (define (value-name v)
     (let-values ([(str-ptr len)
-                  (call-with-out-ptr (lambda (out) (LLVMGetValueName2 v out)))])
-      (cstring->string/len str-ptr len)))
+                  (base:call-with-out-ptr (lambda (out) (LLVMGetValueName2 v out)))])
+      (base:cstring->string/len str-ptr len)))
 
   (define (declaration? f) (not (zero? (LLVMIsDeclaration f))))
 
@@ -304,7 +304,7 @@
       [(eq) 32] [(ne) 33]
       [(ugt) 34] [(uge) 35] [(ult) 36] [(ule) 37]
       [(sgt) 38] [(sge) 39] [(slt) 40] [(sle) 41]
-      [else (llvm-error 'build-icmp "unknown integer predicate" pred)]))
+      [else (base:error 'ir:build-icmp "unknown integer predicate" pred)]))
 
   ;; LLVMRealPredicate values from llvm-c-19/Core.h.
   (define (real-predicate->int pred)
@@ -312,7 +312,7 @@
       [(false) 0] [(oeq) 1] [(ogt) 2] [(oge) 3] [(olt) 4] [(ole) 5]
       [(one) 6] [(ord) 7] [(uno) 8] [(ueq) 9] [(ugt) 10] [(uge) 11]
       [(ult) 12] [(ule) 13] [(une) 14] [(true) 15]
-      [else (llvm-error 'build-fcmp "unknown real predicate" pred)]))
+      [else (base:error 'ir:build-fcmp "unknown real predicate" pred)]))
 
   (define build-icmp
     (case-lambda
@@ -338,9 +338,9 @@
 
   ;; incoming: list of (value . block) pairs.
   (define (phi-add-incoming! phi incoming)
-    (call-with-pointer-array (map car incoming)
+    (base:call-with-pointer-array (map car incoming)
       (lambda (vals n)
-        (call-with-pointer-array (map cdr incoming)
+        (base:call-with-pointer-array (map cdr incoming)
           (lambda (blocks n2)
             (LLVMAddIncoming phi vals blocks n))))))
 
@@ -348,7 +348,7 @@
     (case-lambda
       [(b fn-type fn args) (build-call b fn-type fn args "")]
       [(b fn-type fn args nm)
-       (call-with-pointer-array args
+       (base:call-with-pointer-array args
          (lambda (arr n)
            (LLVMBuildCall2 (builder-live-ptr b) fn-type fn arr n nm)))]))
 
@@ -369,7 +369,7 @@
     (case-lambda
       [(b elem-ty ptr indices) (build-gep b elem-ty ptr indices "")]
       [(b elem-ty ptr indices nm)
-       (call-with-pointer-array indices
+       (base:call-with-pointer-array indices
          (lambda (arr n)
            (LLVMBuildGEP2 (builder-live-ptr b) elem-ty ptr arr n nm)))]))
 

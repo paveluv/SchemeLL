@@ -35,9 +35,11 @@ What works today:
 (add 3 4)                            ; => 7
 ```
 
-`(llvm jit)` is meant to be imported with a prefix (its exports carry no
-prefix of their own); for the other libraries the prefix is the importer's
-choice, as usual in R6RS.
+Project-wide naming convention: definitions carry no module prefix, and every
+project library is imported with a `prefix` (`ir:`, `jit:`, `target:`, `base:`,
+`config:`). `(llvm raw)` is imported as `(prefix (llvm raw) LLVM)`, which makes
+call sites read as the exact C names (`LLVMBuildAdd`, ...). See
+`project/RULES.md`.
 
 ## Requirements
 

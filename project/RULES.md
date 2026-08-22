@@ -11,8 +11,29 @@
 | 1 | `(llvm base)` | FFI utilities: C strings, out-params, pointer arrays, error → condition. |
 | 1 | `(llvm ir)` | Safe handles (context/module/builder records with ownership state), IR construction. |
 | 1/2 | `(llvm target)` | Native target init, target machines, object/assembly emission. |
-| 2 | `(llvm jit)` | ORC LLJIT: compile modules in memory, look up functions as ready-to-call Scheme procedures. Designed for prefixed import: `(prefix (llvm jit) jit:)` — its definitions carry no `jit-` prefix (`make`, `function`, `add-module!`, ...); internally it imports `(llvm ir)` as `ir:` to avoid name clashes. |
+| 2 | `(llvm jit)` | ORC LLJIT: compile modules in memory, look up functions as ready-to-call Scheme procedures. |
 | 3 | `(llscheme ...)` | (future) nanopass-based DSL. |
+
+## Naming and namespaces
+
+- Definitions never carry a module prefix (no `jit-make`, no `target-emit-...`),
+  and export clauses contain no renames. Namespacing is entirely the importer's
+  job, via R6RS `prefix` imports.
+- ALL imports of project libraries are prefixed, everywhere (libraries, tests,
+  examples, docs), with these canonical prefixes:
+  `config:` `base:` `ir:` `target:` `jit:` `t:` (tests harness), and
+  `(prefix (llvm raw) LLVM)` — no colon, so layer-0 call sites reconstruct the
+  exact C names (`LLVMBuildAdd`) and read side by side with the headers.
+- `(chezscheme)` / `(rnrs)` are imported unprefixed; that is the only exception.
+- Record-type prefixes within a library are fine and encouraged
+  (`context-dispose!`, `module->string`, `machine-triple`): they name the record,
+  not the module.
+- Condition `who` values: liveness errors use the record name (`'module`,
+  `'machine`, `'jit`); operation errors use the caller-facing prefixed name
+  (`'jit:add-module!`, `'target:emit-to-file`, `'ir:verify-module`).
+- `base:error` is the project's error raiser (today equivalent to R6RS `error`;
+  will grow a dedicated `&llvm` condition type). `(llvm base)` imports
+  `(except (chezscheme) error)` to define it.
 
 ## Environment pins
 
@@ -23,8 +44,10 @@
 
 ## FFI conventions (layer 0)
 
-- Scheme names in `(llvm raw)` are the exact C names (`LLVMBuildAdd`), so the LLVM
-  docs/headers can be read side by side with the code.
+- `(llvm raw)` definitions drop the leading `LLVM`; importing with
+  `(prefix (llvm raw) LLVM)` restores the exact C names at call sites, and the
+  `foreign-procedure` entry strings keep the full names, so grepping a C name
+  finds both the binding and its uses.
 - Type mapping: every `LLVM*Ref` → `void*` (an exact integer address; 0 = NULL);
   `const char*` input → `string`; `char*` that the caller must dispose → `void*`
   (convert with `cstring->string/dispose`); `LLVMBool` and enums → `int`;

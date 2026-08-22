@@ -10,361 +10,365 @@
 ;;;   size_t              -> size_t
 ;;;   out-params, arrays  -> void*        (foreign-alloc'd memory)
 ;;;
-;;; No logic in this file: names are the exact C names so the headers at
-;;; /usr/include/llvm-c-19/llvm-c/ read side by side with this code.
+;;; Definitions drop the leading "LLVM"; the canonical import is
+;;;   (prefix (llvm raw) LLVM)
+;;; which reconstructs the exact C names at call sites (LLVMBuildAdd, ...),
+;;; so the headers at /usr/include/llvm-c-19/llvm-c/ read side by side with
+;;; calling code. The foreign-procedure entry strings keep the full C names,
+;;; so grepping for a C name still finds this file. No logic in this file.
 (library (llvm raw)
   (export
    ;; Core: context / module / builder lifecycle
-   LLVMContextCreate LLVMContextDispose
-   LLVMModuleCreateWithNameInContext LLVMDisposeModule
-   LLVMSetTarget LLVMSetDataLayout
-   LLVMPrintModuleToString LLVMDisposeMessage
-   LLVMCreateBuilderInContext LLVMDisposeBuilder
+   ContextCreate ContextDispose
+   ModuleCreateWithNameInContext DisposeModule
+   SetTarget SetDataLayout
+   PrintModuleToString DisposeMessage
+   CreateBuilderInContext DisposeBuilder
    ;; Core: types
-   LLVMVoidTypeInContext
-   LLVMInt1TypeInContext LLVMInt8TypeInContext LLVMInt16TypeInContext
-   LLVMInt32TypeInContext LLVMInt64TypeInContext LLVMIntTypeInContext
-   LLVMFloatTypeInContext LLVMDoubleTypeInContext
-   LLVMPointerTypeInContext
-   LLVMFunctionType LLVMStructTypeInContext LLVMArrayType2
-   LLVMGetTypeKind LLVMGetIntTypeWidth
-   LLVMGetReturnType LLVMCountParamTypes LLVMGetParamTypes LLVMIsFunctionVarArg
-   LLVMPrintTypeToString LLVMTypeOf LLVMGlobalGetValueType
+   VoidTypeInContext
+   Int1TypeInContext Int8TypeInContext Int16TypeInContext
+   Int32TypeInContext Int64TypeInContext IntTypeInContext
+   FloatTypeInContext DoubleTypeInContext
+   PointerTypeInContext
+   FunctionType StructTypeInContext ArrayType2
+   GetTypeKind GetIntTypeWidth
+   GetReturnType CountParamTypes GetParamTypes IsFunctionVarArg
+   PrintTypeToString TypeOf GlobalGetValueType
    ;; Core: functions and values
-   LLVMAddFunction LLVMGetNamedFunction
-   LLVMGetParam LLVMCountParams
-   LLVMGetFirstFunction LLVMGetNextFunction
-   LLVMGetValueName2 LLVMIsDeclaration
-   LLVMSetLinkage LLVMSetFunctionCallConv
+   AddFunction GetNamedFunction
+   GetParam CountParams
+   GetFirstFunction GetNextFunction
+   GetValueName2 IsDeclaration
+   SetLinkage SetFunctionCallConv
    ;; Core: constants
-   LLVMConstInt LLVMConstReal LLVMConstNull LLVMConstPointerNull LLVMGetUndef
+   ConstInt ConstReal ConstNull ConstPointerNull GetUndef
    ;; Core: basic blocks
-   LLVMAppendBasicBlockInContext LLVMGetInsertBlock LLVMPositionBuilderAtEnd
+   AppendBasicBlockInContext GetInsertBlock PositionBuilderAtEnd
    ;; Core: instruction building
-   LLVMBuildRet LLVMBuildRetVoid LLVMBuildBr LLVMBuildCondBr
-   LLVMBuildAdd LLVMBuildSub LLVMBuildMul
-   LLVMBuildSDiv LLVMBuildUDiv LLVMBuildSRem LLVMBuildURem
-   LLVMBuildAnd LLVMBuildOr LLVMBuildXor
-   LLVMBuildShl LLVMBuildLShr LLVMBuildAShr
-   LLVMBuildFAdd LLVMBuildFSub LLVMBuildFMul LLVMBuildFDiv
-   LLVMBuildNeg LLVMBuildFNeg LLVMBuildNot
-   LLVMBuildICmp LLVMBuildFCmp LLVMBuildSelect
-   LLVMBuildPhi LLVMAddIncoming
-   LLVMBuildCall2
-   LLVMBuildAlloca LLVMBuildLoad2 LLVMBuildStore LLVMBuildGEP2
-   LLVMBuildTrunc LLVMBuildZExt LLVMBuildSExt
-   LLVMBuildSIToFP LLVMBuildUIToFP LLVMBuildFPToSI LLVMBuildFPToUI
-   LLVMBuildFPTrunc LLVMBuildFPExt
-   LLVMBuildPtrToInt LLVMBuildIntToPtr LLVMBuildBitCast
+   BuildRet BuildRetVoid BuildBr BuildCondBr
+   BuildAdd BuildSub BuildMul
+   BuildSDiv BuildUDiv BuildSRem BuildURem
+   BuildAnd BuildOr BuildXor
+   BuildShl BuildLShr BuildAShr
+   BuildFAdd BuildFSub BuildFMul BuildFDiv
+   BuildNeg BuildFNeg BuildNot
+   BuildICmp BuildFCmp BuildSelect
+   BuildPhi AddIncoming
+   BuildCall2
+   BuildAlloca BuildLoad2 BuildStore BuildGEP2
+   BuildTrunc BuildZExt BuildSExt
+   BuildSIToFP BuildUIToFP BuildFPToSI BuildFPToUI
+   BuildFPTrunc BuildFPExt
+   BuildPtrToInt BuildIntToPtr BuildBitCast
    ;; Analysis
-   LLVMVerifyModule LLVMVerifyFunction
+   VerifyModule VerifyFunction
    ;; Error.h
-   LLVMGetErrorMessage LLVMDisposeErrorMessage LLVMConsumeError
+   GetErrorMessage DisposeErrorMessage ConsumeError
    ;; TargetMachine.h / Target.h
-   LLVMGetDefaultTargetTriple LLVMGetHostCPUName LLVMGetHostCPUFeatures
-   LLVMGetTargetFromTriple
-   LLVMCreateTargetMachine LLVMDisposeTargetMachine
-   LLVMTargetMachineEmitToFile LLVMTargetMachineEmitToMemoryBuffer
-   LLVMCreateTargetDataLayout LLVMCopyStringRepOfTargetData LLVMDisposeTargetData
-   LLVMGetBufferStart LLVMGetBufferSize LLVMDisposeMemoryBuffer
+   GetDefaultTargetTriple GetHostCPUName GetHostCPUFeatures
+   GetTargetFromTriple
+   CreateTargetMachine DisposeTargetMachine
+   TargetMachineEmitToFile TargetMachineEmitToMemoryBuffer
+   CreateTargetDataLayout CopyStringRepOfTargetData DisposeTargetData
+   GetBufferStart GetBufferSize DisposeMemoryBuffer
    ;; Transforms/PassBuilder.h (new pass manager)
-   LLVMRunPasses LLVMCreatePassBuilderOptions LLVMDisposePassBuilderOptions
+   RunPasses CreatePassBuilderOptions DisposePassBuilderOptions
    ;; Orc.h / LLJIT.h
-   LLVMOrcCreateNewThreadSafeContext LLVMOrcThreadSafeContextGetContext
-   LLVMOrcDisposeThreadSafeContext
-   LLVMOrcCreateNewThreadSafeModule LLVMOrcDisposeThreadSafeModule
-   LLVMOrcCreateLLJITBuilder LLVMOrcDisposeLLJITBuilder
-   LLVMOrcCreateLLJIT LLVMOrcDisposeLLJIT
-   LLVMOrcLLJITGetMainJITDylib LLVMOrcLLJITAddLLVMIRModule LLVMOrcLLJITLookup)
-  (import (chezscheme) (llvm config))
+   OrcCreateNewThreadSafeContext OrcThreadSafeContextGetContext
+   OrcDisposeThreadSafeContext
+   OrcCreateNewThreadSafeModule OrcDisposeThreadSafeModule
+   OrcCreateLLJITBuilder OrcDisposeLLJITBuilder
+   OrcCreateLLJIT OrcDisposeLLJIT
+   OrcLLJITGetMainJITDylib OrcLLJITAddLLVMIRModule OrcLLJITLookup)
+  (import (chezscheme) (prefix (llvm config) config:))
 
   ;; Must run before any foreign-procedure below is evaluated.
-  (define llvm-loaded (load-llvm!))
+  (define llvm-loaded (config:load!))
 
   ;; --- Core: context / module / builder ---------------------------------
-  (define LLVMContextCreate
+  (define ContextCreate
     (foreign-procedure "LLVMContextCreate" () void*))
-  (define LLVMContextDispose
+  (define ContextDispose
     (foreign-procedure "LLVMContextDispose" (void*) void))
-  (define LLVMModuleCreateWithNameInContext
+  (define ModuleCreateWithNameInContext
     (foreign-procedure "LLVMModuleCreateWithNameInContext" (string void*) void*))
-  (define LLVMDisposeModule
+  (define DisposeModule
     (foreign-procedure "LLVMDisposeModule" (void*) void))
-  (define LLVMSetTarget
+  (define SetTarget
     (foreign-procedure "LLVMSetTarget" (void* string) void))
-  (define LLVMSetDataLayout
+  (define SetDataLayout
     (foreign-procedure "LLVMSetDataLayout" (void* string) void))
-  (define LLVMPrintModuleToString          ; returns char*, dispose!
+  (define PrintModuleToString          ; returns char*, dispose!
     (foreign-procedure "LLVMPrintModuleToString" (void*) void*))
-  (define LLVMDisposeMessage
+  (define DisposeMessage
     (foreign-procedure "LLVMDisposeMessage" (void*) void))
-  (define LLVMCreateBuilderInContext
+  (define CreateBuilderInContext
     (foreign-procedure "LLVMCreateBuilderInContext" (void*) void*))
-  (define LLVMDisposeBuilder
+  (define DisposeBuilder
     (foreign-procedure "LLVMDisposeBuilder" (void*) void))
 
   ;; --- Core: types --------------------------------------------------------
-  (define LLVMVoidTypeInContext
+  (define VoidTypeInContext
     (foreign-procedure "LLVMVoidTypeInContext" (void*) void*))
-  (define LLVMInt1TypeInContext
+  (define Int1TypeInContext
     (foreign-procedure "LLVMInt1TypeInContext" (void*) void*))
-  (define LLVMInt8TypeInContext
+  (define Int8TypeInContext
     (foreign-procedure "LLVMInt8TypeInContext" (void*) void*))
-  (define LLVMInt16TypeInContext
+  (define Int16TypeInContext
     (foreign-procedure "LLVMInt16TypeInContext" (void*) void*))
-  (define LLVMInt32TypeInContext
+  (define Int32TypeInContext
     (foreign-procedure "LLVMInt32TypeInContext" (void*) void*))
-  (define LLVMInt64TypeInContext
+  (define Int64TypeInContext
     (foreign-procedure "LLVMInt64TypeInContext" (void*) void*))
-  (define LLVMIntTypeInContext
+  (define IntTypeInContext
     (foreign-procedure "LLVMIntTypeInContext" (void* unsigned-int) void*))
-  (define LLVMFloatTypeInContext
+  (define FloatTypeInContext
     (foreign-procedure "LLVMFloatTypeInContext" (void*) void*))
-  (define LLVMDoubleTypeInContext
+  (define DoubleTypeInContext
     (foreign-procedure "LLVMDoubleTypeInContext" (void*) void*))
-  (define LLVMPointerTypeInContext         ; (ctx, address-space)
+  (define PointerTypeInContext         ; (ctx, address-space)
     (foreign-procedure "LLVMPointerTypeInContext" (void* unsigned-int) void*))
-  (define LLVMFunctionType                 ; (ret, param-array, count, vararg?)
+  (define FunctionType                 ; (ret, param-array, count, vararg?)
     (foreign-procedure "LLVMFunctionType" (void* void* unsigned-int int) void*))
-  (define LLVMStructTypeInContext          ; (ctx, elem-array, count, packed?)
+  (define StructTypeInContext          ; (ctx, elem-array, count, packed?)
     (foreign-procedure "LLVMStructTypeInContext" (void* void* unsigned-int int) void*))
-  (define LLVMArrayType2                   ; (elem-type, count)
+  (define ArrayType2                   ; (elem-type, count)
     (foreign-procedure "LLVMArrayType2" (void* unsigned-64) void*))
-  (define LLVMGetTypeKind
+  (define GetTypeKind
     (foreign-procedure "LLVMGetTypeKind" (void*) int))
-  (define LLVMGetIntTypeWidth
+  (define GetIntTypeWidth
     (foreign-procedure "LLVMGetIntTypeWidth" (void*) unsigned-int))
-  (define LLVMGetReturnType
+  (define GetReturnType
     (foreign-procedure "LLVMGetReturnType" (void*) void*))
-  (define LLVMCountParamTypes
+  (define CountParamTypes
     (foreign-procedure "LLVMCountParamTypes" (void*) unsigned-int))
-  (define LLVMGetParamTypes                ; (fn-type, dest-array)
+  (define GetParamTypes                ; (fn-type, dest-array)
     (foreign-procedure "LLVMGetParamTypes" (void* void*) void))
-  (define LLVMIsFunctionVarArg
+  (define IsFunctionVarArg
     (foreign-procedure "LLVMIsFunctionVarArg" (void*) int))
-  (define LLVMPrintTypeToString            ; returns char*, dispose!
+  (define PrintTypeToString            ; returns char*, dispose!
     (foreign-procedure "LLVMPrintTypeToString" (void*) void*))
-  (define LLVMTypeOf
+  (define TypeOf
     (foreign-procedure "LLVMTypeOf" (void*) void*))
-  (define LLVMGlobalGetValueType           ; function type of a fn (opaque ptrs!)
+  (define GlobalGetValueType           ; function type of a fn (opaque ptrs!)
     (foreign-procedure "LLVMGlobalGetValueType" (void*) void*))
 
   ;; --- Core: functions and values ----------------------------------------
-  (define LLVMAddFunction
+  (define AddFunction
     (foreign-procedure "LLVMAddFunction" (void* string void*) void*))
-  (define LLVMGetNamedFunction
+  (define GetNamedFunction
     (foreign-procedure "LLVMGetNamedFunction" (void* string) void*))
-  (define LLVMGetParam
+  (define GetParam
     (foreign-procedure "LLVMGetParam" (void* unsigned-int) void*))
-  (define LLVMCountParams
+  (define CountParams
     (foreign-procedure "LLVMCountParams" (void*) unsigned-int))
-  (define LLVMGetFirstFunction
+  (define GetFirstFunction
     (foreign-procedure "LLVMGetFirstFunction" (void*) void*))
-  (define LLVMGetNextFunction
+  (define GetNextFunction
     (foreign-procedure "LLVMGetNextFunction" (void*) void*))
-  (define LLVMGetValueName2                ; (value, size_t* out-len) -> const char* (borrowed)
+  (define GetValueName2                ; (value, size_t* out-len) -> const char* (borrowed)
     (foreign-procedure "LLVMGetValueName2" (void* void*) void*))
-  (define LLVMIsDeclaration
+  (define IsDeclaration
     (foreign-procedure "LLVMIsDeclaration" (void*) int))
-  (define LLVMSetLinkage
+  (define SetLinkage
     (foreign-procedure "LLVMSetLinkage" (void* int) void))
-  (define LLVMSetFunctionCallConv
+  (define SetFunctionCallConv
     (foreign-procedure "LLVMSetFunctionCallConv" (void* unsigned-int) void))
 
   ;; --- Core: constants ----------------------------------------------------
-  (define LLVMConstInt                     ; (type, value, sign-extend?)
+  (define ConstInt                     ; (type, value, sign-extend?)
     (foreign-procedure "LLVMConstInt" (void* unsigned-64 int) void*))
-  (define LLVMConstReal
+  (define ConstReal
     (foreign-procedure "LLVMConstReal" (void* double) void*))
-  (define LLVMConstNull
+  (define ConstNull
     (foreign-procedure "LLVMConstNull" (void*) void*))
-  (define LLVMConstPointerNull
+  (define ConstPointerNull
     (foreign-procedure "LLVMConstPointerNull" (void*) void*))
-  (define LLVMGetUndef
+  (define GetUndef
     (foreign-procedure "LLVMGetUndef" (void*) void*))
 
   ;; --- Core: basic blocks --------------------------------------------------
-  (define LLVMAppendBasicBlockInContext
+  (define AppendBasicBlockInContext
     (foreign-procedure "LLVMAppendBasicBlockInContext" (void* void* string) void*))
-  (define LLVMGetInsertBlock
+  (define GetInsertBlock
     (foreign-procedure "LLVMGetInsertBlock" (void*) void*))
-  (define LLVMPositionBuilderAtEnd
+  (define PositionBuilderAtEnd
     (foreign-procedure "LLVMPositionBuilderAtEnd" (void* void*) void))
 
   ;; --- Core: instruction building ------------------------------------------
-  (define LLVMBuildRet
+  (define BuildRet
     (foreign-procedure "LLVMBuildRet" (void* void*) void*))
-  (define LLVMBuildRetVoid
+  (define BuildRetVoid
     (foreign-procedure "LLVMBuildRetVoid" (void*) void*))
-  (define LLVMBuildBr
+  (define BuildBr
     (foreign-procedure "LLVMBuildBr" (void* void*) void*))
-  (define LLVMBuildCondBr
+  (define BuildCondBr
     (foreign-procedure "LLVMBuildCondBr" (void* void* void* void*) void*))
 
-  (define LLVMBuildAdd
+  (define BuildAdd
     (foreign-procedure "LLVMBuildAdd" (void* void* void* string) void*))
-  (define LLVMBuildSub
+  (define BuildSub
     (foreign-procedure "LLVMBuildSub" (void* void* void* string) void*))
-  (define LLVMBuildMul
+  (define BuildMul
     (foreign-procedure "LLVMBuildMul" (void* void* void* string) void*))
-  (define LLVMBuildSDiv
+  (define BuildSDiv
     (foreign-procedure "LLVMBuildSDiv" (void* void* void* string) void*))
-  (define LLVMBuildUDiv
+  (define BuildUDiv
     (foreign-procedure "LLVMBuildUDiv" (void* void* void* string) void*))
-  (define LLVMBuildSRem
+  (define BuildSRem
     (foreign-procedure "LLVMBuildSRem" (void* void* void* string) void*))
-  (define LLVMBuildURem
+  (define BuildURem
     (foreign-procedure "LLVMBuildURem" (void* void* void* string) void*))
-  (define LLVMBuildAnd
+  (define BuildAnd
     (foreign-procedure "LLVMBuildAnd" (void* void* void* string) void*))
-  (define LLVMBuildOr
+  (define BuildOr
     (foreign-procedure "LLVMBuildOr" (void* void* void* string) void*))
-  (define LLVMBuildXor
+  (define BuildXor
     (foreign-procedure "LLVMBuildXor" (void* void* void* string) void*))
-  (define LLVMBuildShl
+  (define BuildShl
     (foreign-procedure "LLVMBuildShl" (void* void* void* string) void*))
-  (define LLVMBuildLShr
+  (define BuildLShr
     (foreign-procedure "LLVMBuildLShr" (void* void* void* string) void*))
-  (define LLVMBuildAShr
+  (define BuildAShr
     (foreign-procedure "LLVMBuildAShr" (void* void* void* string) void*))
-  (define LLVMBuildFAdd
+  (define BuildFAdd
     (foreign-procedure "LLVMBuildFAdd" (void* void* void* string) void*))
-  (define LLVMBuildFSub
+  (define BuildFSub
     (foreign-procedure "LLVMBuildFSub" (void* void* void* string) void*))
-  (define LLVMBuildFMul
+  (define BuildFMul
     (foreign-procedure "LLVMBuildFMul" (void* void* void* string) void*))
-  (define LLVMBuildFDiv
+  (define BuildFDiv
     (foreign-procedure "LLVMBuildFDiv" (void* void* void* string) void*))
-  (define LLVMBuildNeg
+  (define BuildNeg
     (foreign-procedure "LLVMBuildNeg" (void* void* string) void*))
-  (define LLVMBuildFNeg
+  (define BuildFNeg
     (foreign-procedure "LLVMBuildFNeg" (void* void* string) void*))
-  (define LLVMBuildNot
+  (define BuildNot
     (foreign-procedure "LLVMBuildNot" (void* void* string) void*))
 
-  (define LLVMBuildICmp                    ; (builder, predicate, lhs, rhs, name)
+  (define BuildICmp                    ; (builder, predicate, lhs, rhs, name)
     (foreign-procedure "LLVMBuildICmp" (void* int void* void* string) void*))
-  (define LLVMBuildFCmp
+  (define BuildFCmp
     (foreign-procedure "LLVMBuildFCmp" (void* int void* void* string) void*))
-  (define LLVMBuildSelect
+  (define BuildSelect
     (foreign-procedure "LLVMBuildSelect" (void* void* void* void* string) void*))
-  (define LLVMBuildPhi
+  (define BuildPhi
     (foreign-procedure "LLVMBuildPhi" (void* void* string) void*))
-  (define LLVMAddIncoming                  ; (phi, value-array, block-array, count)
+  (define AddIncoming                  ; (phi, value-array, block-array, count)
     (foreign-procedure "LLVMAddIncoming" (void* void* void* unsigned-int) void))
-  (define LLVMBuildCall2                   ; (builder, fn-type, fn, arg-array, count, name)
+  (define BuildCall2                   ; (builder, fn-type, fn, arg-array, count, name)
     (foreign-procedure "LLVMBuildCall2" (void* void* void* void* unsigned-int string) void*))
-  (define LLVMBuildAlloca
+  (define BuildAlloca
     (foreign-procedure "LLVMBuildAlloca" (void* void* string) void*))
-  (define LLVMBuildLoad2                   ; (builder, elem-type, ptr, name)
+  (define BuildLoad2                   ; (builder, elem-type, ptr, name)
     (foreign-procedure "LLVMBuildLoad2" (void* void* void* string) void*))
-  (define LLVMBuildStore
+  (define BuildStore
     (foreign-procedure "LLVMBuildStore" (void* void* void*) void*))
-  (define LLVMBuildGEP2                    ; (builder, elem-type, ptr, index-array, count, name)
+  (define BuildGEP2                    ; (builder, elem-type, ptr, index-array, count, name)
     (foreign-procedure "LLVMBuildGEP2" (void* void* void* void* unsigned-int string) void*))
 
-  (define LLVMBuildTrunc
+  (define BuildTrunc
     (foreign-procedure "LLVMBuildTrunc" (void* void* void* string) void*))
-  (define LLVMBuildZExt
+  (define BuildZExt
     (foreign-procedure "LLVMBuildZExt" (void* void* void* string) void*))
-  (define LLVMBuildSExt
+  (define BuildSExt
     (foreign-procedure "LLVMBuildSExt" (void* void* void* string) void*))
-  (define LLVMBuildSIToFP
+  (define BuildSIToFP
     (foreign-procedure "LLVMBuildSIToFP" (void* void* void* string) void*))
-  (define LLVMBuildUIToFP
+  (define BuildUIToFP
     (foreign-procedure "LLVMBuildUIToFP" (void* void* void* string) void*))
-  (define LLVMBuildFPToSI
+  (define BuildFPToSI
     (foreign-procedure "LLVMBuildFPToSI" (void* void* void* string) void*))
-  (define LLVMBuildFPToUI
+  (define BuildFPToUI
     (foreign-procedure "LLVMBuildFPToUI" (void* void* void* string) void*))
-  (define LLVMBuildFPTrunc
+  (define BuildFPTrunc
     (foreign-procedure "LLVMBuildFPTrunc" (void* void* void* string) void*))
-  (define LLVMBuildFPExt
+  (define BuildFPExt
     (foreign-procedure "LLVMBuildFPExt" (void* void* void* string) void*))
-  (define LLVMBuildPtrToInt
+  (define BuildPtrToInt
     (foreign-procedure "LLVMBuildPtrToInt" (void* void* void* string) void*))
-  (define LLVMBuildIntToPtr
+  (define BuildIntToPtr
     (foreign-procedure "LLVMBuildIntToPtr" (void* void* void* string) void*))
-  (define LLVMBuildBitCast
+  (define BuildBitCast
     (foreign-procedure "LLVMBuildBitCast" (void* void* void* string) void*))
 
   ;; --- Analysis.h -----------------------------------------------------------
   ;; action: 0 = abort-process, 1 = print-message, 2 = return-status
-  (define LLVMVerifyModule                 ; (module, action, char** out-msg) -> bool (true = broken)
+  (define VerifyModule                 ; (module, action, char** out-msg) -> bool (true = broken)
     (foreign-procedure "LLVMVerifyModule" (void* int void*) int))
-  (define LLVMVerifyFunction
+  (define VerifyFunction
     (foreign-procedure "LLVMVerifyFunction" (void* int) int))
 
   ;; --- Error.h ---------------------------------------------------------------
-  (define LLVMGetErrorMessage              ; consumes the error, returns char* (dispose-error-message!)
+  (define GetErrorMessage              ; consumes the error, returns char* (dispose-error-message!)
     (foreign-procedure "LLVMGetErrorMessage" (void*) void*))
-  (define LLVMDisposeErrorMessage
+  (define DisposeErrorMessage
     (foreign-procedure "LLVMDisposeErrorMessage" (void*) void))
-  (define LLVMConsumeError
+  (define ConsumeError
     (foreign-procedure "LLVMConsumeError" (void*) void))
 
   ;; --- Target.h / TargetMachine.h ----------------------------------------------
-  (define LLVMGetDefaultTargetTriple       ; char*, dispose!
+  (define GetDefaultTargetTriple       ; char*, dispose!
     (foreign-procedure "LLVMGetDefaultTargetTriple" () void*))
-  (define LLVMGetHostCPUName               ; char*, dispose!
+  (define GetHostCPUName               ; char*, dispose!
     (foreign-procedure "LLVMGetHostCPUName" () void*))
-  (define LLVMGetHostCPUFeatures           ; char*, dispose!
+  (define GetHostCPUFeatures           ; char*, dispose!
     (foreign-procedure "LLVMGetHostCPUFeatures" () void*))
-  (define LLVMGetTargetFromTriple          ; (triple, target*, char** err) -> bool (true = failed)
+  (define GetTargetFromTriple          ; (triple, target*, char** err) -> bool (true = failed)
     (foreign-procedure "LLVMGetTargetFromTriple" (string void* void*) int))
-  (define LLVMCreateTargetMachine          ; (target, triple, cpu, features, opt, reloc, code-model)
+  (define CreateTargetMachine          ; (target, triple, cpu, features, opt, reloc, code-model)
     (foreign-procedure "LLVMCreateTargetMachine"
                        (void* string string string int int int) void*))
-  (define LLVMDisposeTargetMachine
+  (define DisposeTargetMachine
     (foreign-procedure "LLVMDisposeTargetMachine" (void*) void))
   ;; file-type: 0 = assembly, 1 = object
-  (define LLVMTargetMachineEmitToFile      ; (tm, module, path, file-type, char** err) -> bool (true = failed)
+  (define TargetMachineEmitToFile      ; (tm, module, path, file-type, char** err) -> bool (true = failed)
     (foreign-procedure "LLVMTargetMachineEmitToFile" (void* void* string int void*) int))
-  (define LLVMTargetMachineEmitToMemoryBuffer ; (tm, module, file-type, char** err, membuf* out)
+  (define TargetMachineEmitToMemoryBuffer ; (tm, module, file-type, char** err, membuf* out)
     (foreign-procedure "LLVMTargetMachineEmitToMemoryBuffer" (void* void* int void* void*) int))
-  (define LLVMCreateTargetDataLayout
+  (define CreateTargetDataLayout
     (foreign-procedure "LLVMCreateTargetDataLayout" (void*) void*))
-  (define LLVMCopyStringRepOfTargetData    ; char*, dispose!
+  (define CopyStringRepOfTargetData    ; char*, dispose!
     (foreign-procedure "LLVMCopyStringRepOfTargetData" (void*) void*))
-  (define LLVMDisposeTargetData
+  (define DisposeTargetData
     (foreign-procedure "LLVMDisposeTargetData" (void*) void))
-  (define LLVMGetBufferStart
+  (define GetBufferStart
     (foreign-procedure "LLVMGetBufferStart" (void*) void*))
-  (define LLVMGetBufferSize
+  (define GetBufferSize
     (foreign-procedure "LLVMGetBufferSize" (void*) size_t))
-  (define LLVMDisposeMemoryBuffer
+  (define DisposeMemoryBuffer
     (foreign-procedure "LLVMDisposeMemoryBuffer" (void*) void))
 
   ;; --- Transforms/PassBuilder.h ------------------------------------------------
-  (define LLVMRunPasses                    ; (module, passes-string, tm-or-null, options) -> LLVMErrorRef
+  (define RunPasses                    ; (module, passes-string, tm-or-null, options) -> LLVMErrorRef
     (foreign-procedure "LLVMRunPasses" (void* string void* void*) void*))
-  (define LLVMCreatePassBuilderOptions
+  (define CreatePassBuilderOptions
     (foreign-procedure "LLVMCreatePassBuilderOptions" () void*))
-  (define LLVMDisposePassBuilderOptions
+  (define DisposePassBuilderOptions
     (foreign-procedure "LLVMDisposePassBuilderOptions" (void*) void))
 
   ;; --- Orc.h / LLJIT.h -----------------------------------------------------------
-  (define LLVMOrcCreateNewThreadSafeContext
+  (define OrcCreateNewThreadSafeContext
     (foreign-procedure "LLVMOrcCreateNewThreadSafeContext" () void*))
-  (define LLVMOrcThreadSafeContextGetContext
+  (define OrcThreadSafeContextGetContext
     (foreign-procedure "LLVMOrcThreadSafeContextGetContext" (void*) void*))
-  (define LLVMOrcDisposeThreadSafeContext
+  (define OrcDisposeThreadSafeContext
     (foreign-procedure "LLVMOrcDisposeThreadSafeContext" (void*) void))
-  (define LLVMOrcCreateNewThreadSafeModule ; consumes module; tsctx stays ours
+  (define OrcCreateNewThreadSafeModule ; consumes module; tsctx stays ours
     (foreign-procedure "LLVMOrcCreateNewThreadSafeModule" (void* void*) void*))
-  (define LLVMOrcDisposeThreadSafeModule   ; only if NOT handed to the JIT
+  (define OrcDisposeThreadSafeModule   ; only if NOT handed to the JIT
     (foreign-procedure "LLVMOrcDisposeThreadSafeModule" (void*) void))
-  (define LLVMOrcCreateLLJITBuilder
+  (define OrcCreateLLJITBuilder
     (foreign-procedure "LLVMOrcCreateLLJITBuilder" () void*))
-  (define LLVMOrcDisposeLLJITBuilder
+  (define OrcDisposeLLJITBuilder
     (foreign-procedure "LLVMOrcDisposeLLJITBuilder" (void*) void))
-  (define LLVMOrcCreateLLJIT               ; (LLJIT* out, builder-or-null) -> LLVMErrorRef
+  (define OrcCreateLLJIT               ; (LLJIT* out, builder-or-null) -> LLVMErrorRef
     (foreign-procedure "LLVMOrcCreateLLJIT" (void* void*) void*))
-  (define LLVMOrcDisposeLLJIT              ; -> LLVMErrorRef
+  (define OrcDisposeLLJIT              ; -> LLVMErrorRef
     (foreign-procedure "LLVMOrcDisposeLLJIT" (void*) void*))
-  (define LLVMOrcLLJITGetMainJITDylib
+  (define OrcLLJITGetMainJITDylib
     (foreign-procedure "LLVMOrcLLJITGetMainJITDylib" (void*) void*))
-  (define LLVMOrcLLJITAddLLVMIRModule      ; consumes TSM even on error -> LLVMErrorRef
+  (define OrcLLJITAddLLVMIRModule      ; consumes TSM even on error -> LLVMErrorRef
     (foreign-procedure "LLVMOrcLLJITAddLLVMIRModule" (void* void* void*) void*))
-  (define LLVMOrcLLJITLookup               ; (jit, uint64* out-addr, name) -> LLVMErrorRef
+  (define OrcLLJITLookup               ; (jit, uint64* out-addr, name) -> LLVMErrorRef
     (foreign-procedure "LLVMOrcLLJITLookup" (void* void* string) void*)))

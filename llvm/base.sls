@@ -3,19 +3,19 @@
 ;;; Scheme conditions. Assumes a 64-bit platform (8-byte pointers).
 (library (llvm base)
   (export null-ptr null-ptr?
-          llvm-error
+          error
           cstring->string cstring->string/dispose cstring->string/len
           check-error-ref check-bool
           call-with-out-ptr call-with-out-ptr*
           call-with-pointer-array)
-  (import (chezscheme) (llvm raw))
+  (import (except (chezscheme) error) (prefix (llvm raw) LLVM))
 
   (define null-ptr 0)
   (define (null-ptr? p) (eqv? p 0))
 
   (define word-size 8)
 
-  (define (llvm-error who msg . irritants)
+  (define (error who msg . irritants)
     (raise (condition (make-error)
                       (make-who-condition who)
                       (make-message-condition msg)
@@ -49,13 +49,13 @@
       (let* ([cmsg (LLVMGetErrorMessage err)]
              [msg (or (cstring->string cmsg) "unknown LLVM error")])
         (LLVMDisposeErrorMessage cmsg)
-        (llvm-error who msg))))
+        (error who msg))))
 
   ;; For LLVMBool results where nonzero means failure and a char** out-param
   ;; holds the message (already read out by the caller).
   (define (check-bool who failed? msg)
     (unless (zero? failed?)
-      (llvm-error who (or msg "LLVM call failed"))))
+      (error who (or msg "LLVM call failed"))))
 
   ;; Allocate one zeroed pointer-sized out-slot, pass its address to proc,
   ;; return (values (proc addr) slot-contents). Frees the slot.

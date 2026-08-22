@@ -4,8 +4,8 @@
 ;;; This library is designed to be imported with a prefix:
 ;;;   (import (prefix (llvm jit) jit:))
 ;;; so definitions carry no jit- prefix of their own (make, function,
-;;; add-module!, ...). For the same reason (llvm ir) is imported here
-;;; ir:-prefixed.
+;;; add-module!, ...). As everywhere in this project, all project libraries
+;;; are imported prefixed (see project/RULES.md).
 ;;;
 ;;; Usage sketch:
 ;;;   (define jc (jit:make-context))
@@ -27,7 +27,7 @@
   (export jit? make dispose!
           context? make-context context-ir context-dispose!
           add-module! lookup-address function)
-  (import (chezscheme) (llvm raw) (llvm base)
+  (import (chezscheme) (prefix (llvm raw) LLVM) (prefix (llvm base) base:)
           (prefix (llvm ir) ir:)
           (prefix (llvm target) target:))
 
@@ -50,7 +50,7 @@
 
   (define (context-live-tsctx jc)
     (unless (eq? (context-state jc) 'owned)
-      (llvm-error 'jit-context "jit context is no longer live"
+      (base:error 'jit-context "jit context is no longer live"
                   (context-state jc)))
     (context-tsctx jc))
 
@@ -85,11 +85,11 @@
 
   (define (make)
     (sweep-dead-jits!)
-    (target:initialize-native-target!)
+    (target:initialize-native!)
     (let-values ([(err ptr)
-                  (call-with-out-ptr
-                   (lambda (out) (LLVMOrcCreateLLJIT out null-ptr)))])
-      (check-error-ref 'jit:make err)
+                  (base:call-with-out-ptr
+                   (lambda (out) (LLVMOrcCreateLLJIT out base:null-ptr)))])
+      (base:check-error-ref 'jit:make err)
       (let ([j ($make-jit ptr
                           (LLVMOrcLLJITGetMainJITDylib ptr)
                           (make-hashtable string-hash string=?)
@@ -99,7 +99,7 @@
 
   (define (jit-live-ptr j)
     (unless (eq? (jit-state j) 'owned)
-      (llvm-error 'jit "jit is no longer live" (jit-state j)))
+      (base:error 'jit "jit is no longer live" (jit-state j)))
     (jit-ptr j))
 
   (define (dispose! j)
@@ -107,7 +107,7 @@
       (jit-state-set! j 'disposed)
       (let ([err (LLVMOrcDisposeLLJIT (jit-ptr j))])
         ;; may run from the guardian sweep; swallow rather than raise
-        (unless (null-ptr? err) (LLVMConsumeError err)))))
+        (unless (base:null-ptr? err) (LLVMConsumeError err)))))
 
   ;; ---- signature capture -------------------------------------------------------
 
@@ -142,7 +142,7 @@
   (define (capture-signatures! j m)
     (let ([sigs (jit-signatures j)])
       (let loop ([f (LLVMGetFirstFunction (ir:module-live-ptr m))])
-        (unless (null-ptr? f)
+        (unless (base:null-ptr? f)
           (unless (ir:declaration? f)
             (hashtable-set! sigs (ir:value-name f) (function-signature f)))
           (loop (LLVMGetNextFunction f))))))
@@ -152,7 +152,7 @@
   (define (add-module! j jc m)
     (unless (eqv? (ir:context-live-ptr (ir:module-context m))
                   (ir:context-live-ptr (context-ir jc)))
-      (llvm-error 'jit:add-module!
+      (base:error 'jit:add-module!
                   "module was not created in this jit context" m jc))
     (capture-signatures! j m)
     (let ([mod-ptr (ir:module-live-ptr m)]
@@ -160,17 +160,17 @@
       (ir:module-consume! m)
       (let ([tsm (LLVMOrcCreateNewThreadSafeModule mod-ptr tsctx)])
         ;; AddLLVMIRModule consumes tsm even on error
-        (check-error-ref 'jit:add-module!
+        (base:check-error-ref 'jit:add-module!
                          (LLVMOrcLLJITAddLLVMIRModule
                           (jit-live-ptr j) (jit-dylib j) tsm)))))
 
   ;; Raw entry-point address of a JIT'd function (triggers compilation).
   (define (lookup-address j name)
     (let-values ([(err addr)
-                  (call-with-out-ptr
+                  (base:call-with-out-ptr
                    (lambda (out)
                      (LLVMOrcLLJITLookup (jit-live-ptr j) out name)))])
-      (check-error-ref 'jit:lookup-address err)
+      (base:check-error-ref 'jit:lookup-address err)
       addr))
 
   ;; The payoff: a JIT'd function as a ready-to-call Scheme procedure, with
@@ -179,9 +179,9 @@
     (let ([sig (hashtable-ref (jit-signatures j) name #f)])
       (cond
         [(not sig)
-         (llvm-error 'jit:function "function not defined in any added module" name)]
+         (base:error 'jit:function "function not defined in any added module" name)]
         [(eq? (car sig) 'unsupported)
-         (llvm-error 'jit:function (cdr sig) name)]
+         (base:error 'jit:function (cdr sig) name)]
         [else
          (let* ([addr (lookup-address j name)]
                 [fp (eval `(foreign-procedure ,addr ,(cdr sig) ,(car sig))

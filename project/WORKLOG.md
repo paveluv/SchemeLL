@@ -22,11 +22,12 @@ Newest entries first. Format: date, Done / Decided / Next.
 - Pin LLVM 19; isolate version knowledge in `config.sls`/`raw.sls`.
 - JIT'd procedures keep their jit record reachable by closing over it; guardian
   disposes unreachable jits lazily.
-- Namespacing: `(llvm jit)` names are un-prefixed at definition (`make`,
-  `function`, `add-module!`, ...) and the library is documented as
-  prefix-imported (`jit:`); it imports `(llvm ir)` as `ir:` internally to
-  avoid clashes. Other libraries keep self-describing names; prefixing them
-  is the importer's choice.
+- Namespacing (project-wide, see RULES.md "Naming and namespaces"): definitions
+  never carry module prefixes, no export renames, and ALL project imports are
+  prefixed (`config:` `base:` `ir:` `target:` `jit:` `t:`). `(llvm raw)` drops
+  the leading `LLVM` at definition and is imported as `(prefix (llvm raw) LLVM)`
+  so call sites read as exact C names. `base:error` is the project error raiser
+  (shadows R6RS error inside base).
 
 ### Next
 - Expose Scheme procedures to JIT'd code as absolute symbols
