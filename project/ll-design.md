@@ -23,14 +23,24 @@ into ll line by line (great for learning and debugging). The rewrites:
 3. Type annotations stay exactly where IR writes them (once per shared-type
    instruction, per-operand where IR is per-operand). Typed operand groups
    get parens: `store i64 %a, ptr %b` keeps two groups.
-4. `label %x` targets become `(label %x)`; a block header `x:` becomes the
-   instruction `(label %x)`. Note the deliberate deviation: IR spells a block
-   name two ways (`x:` at definition, `%x` at reference), ll spells it one
-   way. Blocks are function-local values in LLVM's `%` namespace (unnamed
-   blocks even share the auto-numbering counter with instruction results),
-   and one-name-one-symbol means the interpreter, future nanopass layers
-   emitting branches, and plain grep all match labels with simple symbol
-   equality. DECIDED 2026-08-21.
+4. `label %x` branch targets stay `(label %x)`. A block header `x:` opens a
+   *block group* `(label %x <insn> ... <terminator>)` that closes before the
+   next header — a function body is a list of block groups, and the first
+   group is the entry block. Two deliberate deviations from the textual
+   form, both DECIDED:
+   - Uniform `%` spelling (2026-08-21): IR spells a block name two ways
+     (`x:` at definition, `%x` at reference), ll spells it one way. Blocks
+     are function-local values in LLVM's `%` namespace (unnamed blocks even
+     share the auto-numbering counter with instruction results), and
+     one-name-one-symbol means the interpreter, nanopass layers emitting
+     branches, and plain grep all match labels with simple symbol equality.
+   - Grouped blocks (2026-08-22, replacing the original flat
+     label-as-instruction form): groups mirror LLVM's object model
+     (functions contain blocks contain instructions), read like asm (labels
+     one indent level left of instructions), make blocks the natural splice
+     unit for generators, and enable structural checks — instruction
+     outside a block, empty block, block not ending in a terminator, and
+     no nested blocks are all errors ll raises itself.
 5. phi's `[ 0, %entry ]` becomes `[0 %entry]` (Chez reads brackets as parens).
    Note: scheme-format normalizes brackets in quoted data to parens, so in
    committed sources phi pairs appear as `(0 %entry)`; both read the same.
@@ -67,20 +77,21 @@ see "Macros" below for why that never collides.
 
 ```llvm
 define i64 @fact(i64 %n) {          (define i64 (@fact (i64 %n))
-entry:
-  %isbase = icmp slt i64 %n, 2        (= %isbase (icmp slt i64 %n 2))
-  br i1 %isbase, label %b, label %r   (br i1 %isbase (label %b) (label %r))
-b:                                    (label %b)
-  ret i64 1                           (ret i64 1)
-r:                                    (label %r)
-  %n1 = sub i64 %n, 1                 (= %n1 (sub i64 %n 1))
-  %f = call i64 @fact(i64 %n1)        (= %f (call i64 @fact (i64 %n1)))
-  %r1 = mul i64 %n, %f                (= %r1 (mul i64 %n %f))
-  ret i64 %r1                         (ret i64 %r1))
+entry:                                (label %entry
+  %isbase = icmp slt i64 %n, 2          (= %isbase (icmp slt i64 %n 2))
+  br i1 %isbase, label %b, label %r     (br i1 %isbase (label %b) (label %r)))
+b:                                    (label %b
+  ret i64 1                             (ret i64 1))
+r:                                    (label %r
+  %n1 = sub i64 %n, 1                   (= %n1 (sub i64 %n 1))
+  %f = call i64 @fact(i64 %n1)          (= %f (call i64 @fact (i64 %n1)))
+  %r1 = mul i64 %n, %f                  (= %r1 (mul i64 %n %f))
+  ret i64 %r1                           (ret i64 %r1)))
 }
 ```
 
-Listed vertically it reads as assembly, per the vision.
+Listed vertically it reads as assembly, per the vision: labels sit one
+indent level left of their instructions.
 
 ## Branching: flat with labels (the proposal)
 
@@ -99,13 +110,14 @@ Between "flat with label instructions" and "nested structure", ll should be
 
 Block rules:
 
-- The entry block is implicit and named `%entry`; instructions before the
-  first `(label ...)` belong to it.
-- `(label %x)` starts block `%x`. Labels may be referenced before they are
-  defined (forward branches, phi incoming) — building does a block prepass.
-- Every block must end in a terminator; block names and `%` names are unique
-  per function (SSA). LLVM's verifier backstops both; ll should raise its
-  own, better-located errors where cheap.
+- Every instruction lives in exactly one block group
+  `(label %x <insn> ... <terminator>)`; a bare instruction at body level is
+  an error. The first group is the entry block (conventionally `%entry`).
+- Labels may be referenced before their group appears (forward branches,
+  phi incoming) — building creates all blocks in a prepass.
+- ll itself checks: instruction outside a block, empty block, block not
+  ending in `ret`/`br` (grows with the terminator set), nested blocks,
+  duplicate labels and `%` names (SSA). LLVM's verifier backstops the rest.
 
 ## Names, constants, escapes
 
@@ -126,10 +138,10 @@ Three possible embeddings were considered:
 `(ll:build ctx name prog)` walks it against an opcode table and produces an
 (llvm ir) module:
 
-- pass 1 per function: create the function, collect `(label %x)` and
-  pre-create basic blocks (forward references);
-- pass 2: emit instructions via (llvm ir) builders, resolving `%`/`@` names
-  through per-function/per-module environments (hashtables);
+- pass 1 per function: create the function and a basic block per
+  `(label %x ...)` group (forward references);
+- pass 2: emit each group's instructions via (llvm ir) builders, resolving
+  `%`/`@` names through per-function/per-module environments (hashtables);
 - phis emit empty and record their incoming pairs; a fixup loop at function
   end calls `ir:phi-add-incoming!` (phi is IR's only forward *value*
   reference).

@@ -98,20 +98,21 @@
 
 (check-entry! "intops"
   '((define i64 (@intops (i64 %a) (i64 %b))
-      (= %v1 (add i64 %a %b))
-      (= %v2 (sub i64 %v1 %b))
-      (= %v3 (mul i64 %v2 %b))
-      (= %v4 (udiv i64 %v3 %b))
-      (= %v5 (sdiv i64 %v4 %b))
-      (= %v6 (urem i64 %v5 %b))
-      (= %v7 (srem i64 %v6 %b))
-      (= %v8 (shl i64 %v7 %b))
-      (= %v9 (lshr i64 %v8 %b))
-      (= %v10 (ashr i64 %v9 %b))
-      (= %v11 (and i64 %v10 %b))
-      (= %v12 (or i64 %v11 %b))
-      (= %v13 (xor i64 %v12 %b))
-      (ret i64 %v13)))
+      (label %entry
+        (= %v1 (add i64 %a %b))
+        (= %v2 (sub i64 %v1 %b))
+        (= %v3 (mul i64 %v2 %b))
+        (= %v4 (udiv i64 %v3 %b))
+        (= %v5 (sdiv i64 %v4 %b))
+        (= %v6 (urem i64 %v5 %b))
+        (= %v7 (srem i64 %v6 %b))
+        (= %v8 (shl i64 %v7 %b))
+        (= %v9 (lshr i64 %v8 %b))
+        (= %v10 (ashr i64 %v9 %b))
+        (= %v11 (and i64 %v10 %b))
+        (= %v12 (or i64 %v11 %b))
+        (= %v13 (xor i64 %v12 %b))
+        (ret i64 %v13))))
   "define i64 @intops(i64 %a, i64 %b) {
 entry:
   %v1 = add i64 %a, %b
@@ -133,13 +134,14 @@ entry:
 
 (check-entry! "fltops"
   '((define double (@fltops (double %a) (double %b))
-      (= %v1 (fadd double %a %b))
-      (= %v2 (fsub double %v1 %b))
-      (= %v3 (fmul double %v2 %b))
-      (= %v4 (fdiv double %v3 %b))
-      (= %v5 (frem double %v4 %b))
-      (= %v6 (fneg double %v5))
-      (ret double %v6)))
+      (label %entry
+        (= %v1 (fadd double %a %b))
+        (= %v2 (fsub double %v1 %b))
+        (= %v3 (fmul double %v2 %b))
+        (= %v4 (fdiv double %v3 %b))
+        (= %v5 (frem double %v4 %b))
+        (= %v6 (fneg double %v5))
+        (ret double %v6))))
   "define double @fltops(double %a, double %b) {
 entry:
   %v1 = fadd double %a, %b
@@ -154,19 +156,20 @@ entry:
 
 (check-entry! "casts"
   '((define i64 (@casts (i64 %x) (double %d) (ptr %p))
-      (= %t (trunc i64 %x to i32))
-      (= %zx (zext i32 %t to i64))
-      (= %sx (sext i32 %t to i64))
-      (= %fui (fptoui double %d to i64))
-      (= %fsi (fptosi double %d to i64))
-      (= %uf (uitofp i64 %x to double))
-      (= %sf (sitofp i64 %x to double))
-      (= %ft (fptrunc double %d to float))
-      (= %fe (fpext float %ft to double))
-      (= %pi (ptrtoint ptr %p to i64))
-      (= %ip (inttoptr i64 %x to ptr))
-      (= %bc (bitcast double %d to i64))
-      (ret i64 %bc)))
+      (label %entry
+        (= %t (trunc i64 %x to i32))
+        (= %zx (zext i32 %t to i64))
+        (= %sx (sext i32 %t to i64))
+        (= %fui (fptoui double %d to i64))
+        (= %fsi (fptosi double %d to i64))
+        (= %uf (uitofp i64 %x to double))
+        (= %sf (sitofp i64 %x to double))
+        (= %ft (fptrunc double %d to float))
+        (= %fe (fpext float %ft to double))
+        (= %pi (ptrtoint ptr %p to i64))
+        (= %ip (inttoptr i64 %x to ptr))
+        (= %bc (bitcast double %d to i64))
+        (ret i64 %bc))))
   "define i64 @casts(i64 %x, double %d, ptr %p) {
 entry:
   %t = trunc i64 %x to i32
@@ -187,11 +190,12 @@ entry:
 
 (check-entry! "memory"
   '((define i64 (@mem (i64 %x))
-      (= %p (alloca i64 (align 8)))
-      (store (i64 %x) (ptr %p) (align 8))
-      (= %q (getelementptr i64 (ptr %p) (i64 0)))
-      (= %v (load i64 (ptr %q) (align 8)))
-      (ret i64 %v)))
+      (label %entry
+        (= %p (alloca i64 (align 8)))
+        (store (i64 %x) (ptr %p) (align 8))
+        (= %q (getelementptr i64 (ptr %p) (i64 0)))
+        (= %v (load i64 (ptr %q) (align 8)))
+        (ret i64 %v))))
   "define i64 @mem(i64 %x) {
 entry:
   %p = alloca i64, align 8
@@ -204,25 +208,26 @@ entry:
 
 (check-entry! "icmps"
   '((define i64 (@icmps (i64 %a) (i64 %b))
-      (= %c1 (icmp eq i64 %a %b))
-      (= %c2 (icmp ne i64 %a %b))
-      (= %c3 (icmp ugt i64 %a %b))
-      (= %c4 (icmp uge i64 %a %b))
-      (= %c5 (icmp ult i64 %a %b))
-      (= %c6 (icmp ule i64 %a %b))
-      (= %c7 (icmp sgt i64 %a %b))
-      (= %c8 (icmp sge i64 %a %b))
-      (= %c9 (icmp slt i64 %a %b))
-      (= %c10 (icmp sle i64 %a %b))
-      (= %s (select (i1 %c1) (i64 %a) (i64 %b)))
-      (br i1 %c10 (label %then) (label %else))
-      (label %then)
-      (br (label %join))
-      (label %else)
-      (br (label %join))
-      (label %join)
-      (= %ph (phi i64 (%a %then) (%s %else)))
-      (ret i64 %ph)))
+      (label %entry
+        (= %c1 (icmp eq i64 %a %b))
+        (= %c2 (icmp ne i64 %a %b))
+        (= %c3 (icmp ugt i64 %a %b))
+        (= %c4 (icmp uge i64 %a %b))
+        (= %c5 (icmp ult i64 %a %b))
+        (= %c6 (icmp ule i64 %a %b))
+        (= %c7 (icmp sgt i64 %a %b))
+        (= %c8 (icmp sge i64 %a %b))
+        (= %c9 (icmp slt i64 %a %b))
+        (= %c10 (icmp sle i64 %a %b))
+        (= %s (select (i1 %c1) (i64 %a) (i64 %b)))
+        (br i1 %c10 (label %then) (label %else)))
+      (label %then
+        (br (label %join)))
+      (label %else
+        (br (label %join)))
+      (label %join
+        (= %ph (phi i64 (%a %then) (%s %else)))
+        (ret i64 %ph))))
   "define i64 @icmps(i64 %a, i64 %b) {
 entry:
   %c1 = icmp eq i64 %a, %b
@@ -252,24 +257,25 @@ join:
 
 (check-entry! "fcmps"
   '((define i1 (@fcmps (double %a) (double %b))
-      (= %c0 (fcmp false double %a %b))
-      (= %c1 (fcmp oeq double %a %b))
-      (= %c2 (fcmp ogt double %a %b))
-      (= %c3 (fcmp oge double %a %b))
-      (= %c4 (fcmp olt double %a %b))
-      (= %c5 (fcmp ole double %a %b))
-      (= %c6 (fcmp one double %a %b))
-      (= %c7 (fcmp ord double %a %b))
-      (= %c8 (fcmp uno double %a %b))
-      (= %c9 (fcmp ueq double %a %b))
-      (= %c10 (fcmp ugt double %a %b))
-      (= %c11 (fcmp uge double %a %b))
-      (= %c12 (fcmp ult double %a %b))
-      (= %c13 (fcmp ule double %a %b))
-      (= %c14 (fcmp une double %a %b))
-      (= %c15 (fcmp true double %a %b))
-      (= %r (and i1 %c0 %c15))
-      (ret i1 %r)))
+      (label %entry
+        (= %c0 (fcmp false double %a %b))
+        (= %c1 (fcmp oeq double %a %b))
+        (= %c2 (fcmp ogt double %a %b))
+        (= %c3 (fcmp oge double %a %b))
+        (= %c4 (fcmp olt double %a %b))
+        (= %c5 (fcmp ole double %a %b))
+        (= %c6 (fcmp one double %a %b))
+        (= %c7 (fcmp ord double %a %b))
+        (= %c8 (fcmp uno double %a %b))
+        (= %c9 (fcmp ueq double %a %b))
+        (= %c10 (fcmp ugt double %a %b))
+        (= %c11 (fcmp uge double %a %b))
+        (= %c12 (fcmp ult double %a %b))
+        (= %c13 (fcmp ule double %a %b))
+        (= %c14 (fcmp une double %a %b))
+        (= %c15 (fcmp true double %a %b))
+        (= %r (and i1 %c0 %c15))
+        (ret i1 %r))))
   "define i1 @fcmps(double %a, double %b) {
 entry:
   %c0 = fcmp false double %a, %b
@@ -295,13 +301,16 @@ entry:
 
 (check-entry! "calls"
   '((define void (@nop)
-      (ret void))
+      (label %entry
+        (ret void)))
     (define i64 (@caller (i64 %x))
-      (call void @nop)
-      (= %r (call i64 @callee (i64 %x)))
-      (ret i64 %r))
+      (label %entry
+        (call void @nop)
+        (= %r (call i64 @callee (i64 %x)))
+        (ret i64 %r)))
     (define i64 (@callee (i64 %x))
-      (ret i64 %x)))
+      (label %entry
+        (ret i64 %x))))
   "define void @nop() {
 entry:
   ret void

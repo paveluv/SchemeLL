@@ -13,19 +13,20 @@
         [(string=? (substring s i (+ i m)) sub) #t]
         [else (loop (+ i 1))]))))
 
-(t:section "ll: @fact -- recursion, branches, implicit entry")
+(t:section "ll: @fact -- recursion, branches")
 
 (define fact-prog
   '((define i64 (@fact (i64 %n))
-      (= %isbase (icmp slt i64 %n 2))
-      (br i1 %isbase (label %base) (label %rec))
-      (label %base)
-      (ret i64 1)
-      (label %rec)
-      (= %n1 (sub i64 %n 1))
-      (= %f (call i64 @fact (i64 %n1)))
-      (= %r (mul i64 %n %f))
-      (ret i64 %r))))
+      (label %entry
+        (= %isbase (icmp slt i64 %n 2))
+        (br i1 %isbase (label %base) (label %rec)))
+      (label %base
+        (ret i64 1))
+      (label %rec
+        (= %n1 (sub i64 %n 1))
+        (= %f (call i64 @fact (i64 %n1)))
+        (= %r (mul i64 %n %f))
+        (ret i64 %r)))))
 
 (define fact (jit:function (ll:jit fact-prog) "fact"))
 (t:check "fact 20" (= (fact 20) 2432902008176640000))
@@ -43,16 +44,17 @@
 
 (define sum-prog
   '((define i64 (@sum (i64 %n))
-      (br (label %loop))
-      (label %loop)
-      (= %i (phi i64 (0 %entry) (%i1 %loop)))
-      (= %acc (phi i64 (0 %entry) (%acc1 %loop)))
-      (= %i1 (add i64 %i 1))
-      (= %acc1 (add i64 %acc %i1))
-      (= %done (icmp eq i64 %i1 %n))
-      (br i1 %done (label %exit) (label %loop))
-      (label %exit)
-      (ret i64 %acc1))))
+      (label %entry
+        (br (label %loop)))
+      (label %loop
+        (= %i (phi i64 (0 %entry) (%i1 %loop)))
+        (= %acc (phi i64 (0 %entry) (%acc1 %loop)))
+        (= %i1 (add i64 %i 1))
+        (= %acc1 (add i64 %acc %i1))
+        (= %done (icmp eq i64 %i1 %n))
+        (br i1 %done (label %exit) (label %loop)))
+      (label %exit
+        (ret i64 %acc1)))))
 
 (define sum (jit:function (ll:jit sum-prog) "sum"))
 (t:check "sum 10 = 55" (= (sum 10) 55))
@@ -62,16 +64,18 @@
 
 (define mem-prog
   '((define i64 (@roundtrip (i64 %x))
-      (= %p (alloca i64 (align 16)))
-      (store (i64 %x) (ptr %p) (align 8))
-      (= %v (load i64 (ptr %p) (align 8)))
-      (ret i64 %v))
+      (label %entry
+        (= %p (alloca i64 (align 16)))
+        (store (i64 %x) (ptr %p) (align 8))
+        (= %v (load i64 (ptr %p) (align 8)))
+        (ret i64 %v)))
     (define i64 (@via-gep (i64 %x))
-      (= %p (alloca i64))
-      (store (i64 %x) (ptr %p))
-      (= %q (getelementptr i64 (ptr %p) (i64 0)))
-      (= %v (load i64 (ptr %q)))
-      (ret i64 %v))))
+      (label %entry
+        (= %p (alloca i64))
+        (store (i64 %x) (ptr %p))
+        (= %q (getelementptr i64 (ptr %p) (i64 0)))
+        (= %v (load i64 (ptr %q)))
+        (ret i64 %v)))))
 
 (define mem-jit (ll:jit mem-prog))
 (t:check "alloca/store/load with align"
@@ -84,20 +88,24 @@
 
 (define misc-prog
   '((define i64 (@lowbyte (i64 %x))
-      (= %t (trunc i64 %x to i8))
-      (= %z (zext i8 %t to i64))
-      (ret i64 %z))
+      (label %entry
+        (= %t (trunc i64 %x to i8))
+        (= %z (zext i8 %t to i64))
+        (ret i64 %z)))
     (define i64 (@min (i64 %a) (i64 %b))
-      (= %c (icmp slt i64 %a %b))
-      (= %m (select (i1 %c) (i64 %a) (i64 %b)))
-      (ret i64 %m))
+      (label %entry
+        (= %c (icmp slt i64 %a %b))
+        (= %m (select (i1 %c) (i64 %a) (i64 %b)))
+        (ret i64 %m)))
     (define double (@half (double %x))
-      (= %h (fdiv double %x 2.0))
-      (ret double %h))
+      (label %entry
+        (= %h (fdiv double %x 2.0))
+        (ret double %h)))
     (define double (@int->half (i64 %x))
-      (= %d (sitofp i64 %x to double))
-      (= %h (call double @half (double %d)))
-      (ret double %h))))
+      (label %entry
+        (= %d (sitofp i64 %x to double))
+        (= %h (call double @half (double %d)))
+        (ret double %h)))))
 
 (define misc-jit (ll:jit misc-prog))
 (t:check "trunc/zext" (= ((jit:function misc-jit "lowbyte") 511) 255))
@@ -111,14 +119,16 @@
 (define jc (jit:make-context))
 (define m1 (ll:build (jit:context-ir jc) "m1"
                      '((define i64 (@inc (i64 %x))
-                         (= %r (add i64 %x 1))
-                         (ret i64 %r)))))
+                         (label %entry
+                           (= %r (add i64 %x 1))
+                           (ret i64 %r))))))
 (define m2 (ll:build (jit:context-ir jc) "m2"
                      '((declare i64 (@inc i64))
                        (define i64 (@inc2 (i64 %x))
-                         (= %a (call i64 @inc (i64 %x)))
-                         (= %b (call i64 @inc (i64 %a)))
-                         (ret i64 %b)))))
+                         (label %entry
+                           (= %a (call i64 @inc (i64 %x)))
+                           (= %b (call i64 @inc (i64 %a)))
+                           (ret i64 %b))))))
 (ir:verify-module m1)
 (ir:verify-module m2)
 (define xj (jit:make))
@@ -129,31 +139,52 @@
 
 (t:section "ll: errors")
 
+(t:check-exn "instruction outside a block"
+             (ll:dump '((define i64 (@f (i64 %x)) (ret i64 %x)))))
+(t:check-exn "block without terminator"
+             (ll:dump '((define i64 (@f (i64 %x))
+                          (label %entry
+                            (= %y (add i64 %x 1)))))))
+(t:check-exn "empty block"
+             (ll:dump '((define i64 (@f (i64 %x)) (label %entry)))))
+(t:check-exn "nested block"
+             (ll:dump '((define i64 (@f (i64 %x))
+                          (label %entry
+                            (label %inner (ret i64 %x))
+                            (ret i64 %x))))))
 (t:check-exn "unbound local"
-             (ll:dump '((define i64 (@f (i64 %x)) (ret i64 %nope)))))
+             (ll:dump '((define i64 (@f (i64 %x))
+                          (label %entry (ret i64 %nope))))))
 (t:check-exn "unknown opcode"
              (ll:dump '((define i64 (@f (i64 %x))
-                          (= %y (frob i64 %x))
-                          (ret i64 %y)))))
+                          (label %entry
+                            (= %y (frob i64 %x))
+                            (ret i64 %y))))))
 (t:check-exn "duplicate local name"
              (ll:dump '((define i64 (@f (i64 %x))
-                          (= %x (add i64 %x 1))
-                          (ret i64 %x)))))
+                          (label %entry
+                            (= %x (add i64 %x 1))
+                            (ret i64 %x))))))
 (t:check-exn "unknown label"
-             (ll:dump '((define i64 (@f (i64 %x)) (br (label %nowhere))))))
+             (ll:dump '((define i64 (@f (i64 %x))
+                          (label %entry (br (label %nowhere)))))))
 (t:check-exn "binding a result-less instruction"
              (ll:dump '((define i64 (@f (i64 %x))
-                          (= %p (alloca i64))
-                          (= %s (store (i64 %x) (ptr %p)))
-                          (ret i64 %x)))))
+                          (label %entry
+                            (= %p (alloca i64))
+                            (= %s (store (i64 %x) (ptr %p)))
+                            (ret i64 %x))))))
 (t:check-exn "unsupported flag rejected"
              (ll:dump '((define i64 (@f (i64 %x))
-                          (= %y (add nsw i64 %x 1))
-                          (ret i64 %y)))))
+                          (label %entry
+                            (= %y (add nsw i64 %x 1))
+                            (ret i64 %y))))))
 (t:check-exn "unknown type"
-             (ll:dump '((define i64 (@f (i37x %x)) (ret i64 0)))))
+             (ll:dump '((define i64 (@f (i37x %x))
+                          (label %entry (ret i64 0))))))
 (t:check-exn "untyped literal"
              (ll:dump '((define i64 (@f (i64 %x))
-                          (= %p (alloca i64))
-                          (store 5 (ptr %p))
-                          (ret i64 %x)))))
+                          (label %entry
+                            (= %p (alloca i64))
+                            (store 5 (ptr %p))
+                            (ret i64 %x))))))

@@ -3,16 +3,19 @@
 ;;;   (prefix (llscheme ll) ll:)
 ;;;
 ;;; An ll program is plain data -- a list of module items:
-;;;   (define <type> (@name (<type> %arg) ...) <insn> ...)
+;;;   (define <type> (@name (<type> %arg) ...) <block> ...)
 ;;;   (declare <type> (@name <type> ...))
-;;; and each instruction is textual LLVM IR transliterated: commas dropped,
-;;; parens added, `%x = rhs` as (= %x (rhs)), types kept in IR position,
-;;; block headers as (label %x), phi pairs as [value %label].
+;;; A function body is a list of block groups, mirroring LLVM's object
+;;; model (functions contain blocks contain instructions):
+;;;   (label %name <insn> ... <terminator>)
+;;; The first group is the entry block. Instructions are textual LLVM IR
+;;; transliterated: commas dropped, parens added, `%x = rhs` as
+;;; (= %x (rhs)), types kept in IR position, phi pairs as (value %label).
 ;;;
 ;;; The interpreter builds an (llvm ir) module in two passes per program
 ;;; (declare all functions, then emit bodies) and two passes per function
-;;; (create all labeled blocks, then emit instructions), so branches and
-;;; phi incoming may reference labels defined later. phi is the only
+;;; (create all blocks, then emit their instructions), so branches and
+;;; phi incoming may reference blocks defined later. phi is the only
 ;;; permitted forward reference to a *value*; everything else must be
 ;;; defined textually before use.
 (library (llscheme ll)
@@ -93,19 +96,29 @@
 
   (define (label-form? f) (and (pair? f) (eq? (car f) 'label)))
 
-  (define (check-label-form f)
-    (unless (and (label-form? f) (pair? (cdr f)) (null? (cddr f))
-                 (local-name? (cadr f)))
-      (ll-error "expected (label %name)" f)))
-
   (define (block-by-name st name)
     (unless (local-name? name) (ll-error "invalid label name" name))
     (or (hashtable-ref (fstate-blocks st) name #f)
         (ll-error "unknown label" name (fstate-fname st))))
 
   (define (block-ref st form)   ; a (label %x) branch target
-    (check-label-form form)
+    (unless (and (label-form? form) (pair? (cdr form)) (null? (cddr form))
+                 (local-name? (cadr form)))
+      (ll-error "expected branch target (label %name)" form (fstate-fname st)))
     (block-by-name st (cadr form)))
+
+  ;; block group: (label %name <insn> ... <terminator>)
+  (define (check-block-group g fname)
+    (unless (label-form? g)
+      (ll-error "instruction outside a block (expected (label %name insn ...))"
+                g fname))
+    (unless (and (pair? (cdr g)) (local-name? (cadr g)))
+      (ll-error "block label must be a %name" g fname))
+    (when (null? (cddr g))
+      (ll-error "empty block" (cadr g) fname))
+    (let ([final (car (last-pair g))])
+      (unless (and (pair? final) (memq (car final) terminator-ops))
+        (ll-error "block does not end in a terminator" (cadr g) fname))))
 
   (define (add-block! st f name)
     (when (hashtable-ref (fstate-blocks st) name #f)
@@ -139,6 +152,9 @@
 
   ;; instructions with no bindable result
   (define no-result-ops '(store br ret))
+
+  ;; instructions that may (and must) end a block
+  (define terminator-ops '(ret br))
 
   ;; trailing attribute groups, e.g. (align 8)
   (define (apply-attrs! v attrs form)
@@ -283,9 +299,8 @@
       [(not (pair? form))
        (ll-error "invalid instruction" form (fstate-fname st))]
       [(label-form? form)
-       ;; block prepass created it; from here on emit into it
-       (check-label-form form)
-       (ir:position-at-end! (fstate-builder st) (block-by-name st (cadr form)))]
+       (ll-error "blocks do not nest: (label ...) inside a block"
+                 form (fstate-fname st))]
       [(eq? (car form) '=)
        (unless (and (= (length form) 3) (local-name? (cadr form))
                     (pair? (caddr form)))
@@ -374,22 +389,16 @@
                   (ir:set-value-name! pv (strip-sigil pname))
                   (hashtable-set! (fstate-locals st) pname pv)
                   (loop (cdr ps) (+ i 1)))))
-            ;; block prepass: implicit %entry unless the body opens with a label
-            (let ([entry-name (if (label-form? (car body))
-                                  (begin (check-label-form (car body))
-                                         (cadr (car body)))
-                                  '%entry)])
-              (unless (label-form? (car body))
-                (add-block! st f '%entry))
-              (for-each
-                (lambda (fm)
-                  (when (label-form? fm)
-                    (check-label-form fm)
-                    (add-block! st f (cadr fm))))
-                body)
-              (ir:position-at-end! builder (block-by-name st entry-name)))
-            ;; emit, then resolve phi incoming
-            (for-each (lambda (fm) (emit-insn! st fm)) body)
+            ;; every body form is a block group; the first is the entry
+            ;; block. Create all blocks before emitting, so branches and
+            ;; phi incoming may reference blocks defined later.
+            (for-each (lambda (g) (check-block-group g fname)) body)
+            (for-each (lambda (g) (add-block! st f (cadr g))) body)
+            (for-each
+              (lambda (g)
+                (ir:position-at-end! builder (block-by-name st (cadr g)))
+                (for-each (lambda (fm) (emit-insn! st fm)) (cddr g)))
+              body)
             (fixup-phis! st)
             (ir:builder-dispose! builder))))))
 

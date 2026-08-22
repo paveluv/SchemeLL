@@ -17,6 +17,12 @@ Newest entries first. Format: date, Done / Decided / Next.
   block/instruction iteration, opcode/predicate getters.
 - Score: opcodes 42+25=67/67, icmp 10/10, fcmp 16/16.
 
+- Switched ll to grouped block form (DECIDED, replaces flat labels):
+  `(label %name insn ... terminator)`, first group = entry block, no `_`
+  shorthand (one-name-one-symbol ruling). New structural errors:
+  instruction outside a block, empty block, missing terminator, nested
+  blocks. Migrated interpreter, tests, corpus, examples, README, design doc.
+
 ### Next (coverage plan order)
 - Step 2: instruction flags via setters (nsw/nuw/exact/inbounds/fast-math).
 - Step 3: switch, unreachable, indirectbr, freeze, va_arg, addrspacecast,

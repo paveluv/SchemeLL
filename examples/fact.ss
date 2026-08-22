@@ -6,15 +6,16 @@
 
 (define fact-prog
   '((define i64 (@fact (i64 %n))
-      (= %isbase (icmp slt i64 %n 2))
-      (br i1 %isbase (label %base) (label %rec))
-      (label %base)
-      (ret i64 1)
-      (label %rec)
-      (= %n1 (sub i64 %n 1))
-      (= %f (call i64 @fact (i64 %n1)))
-      (= %r (mul i64 %n %f))
-      (ret i64 %r))))
+      (label %entry
+        (= %isbase (icmp slt i64 %n 2))
+        (br i1 %isbase (label %base) (label %rec)))
+      (label %base
+        (ret i64 1))
+      (label %rec
+        (= %n1 (sub i64 %n 1))
+        (= %f (call i64 @fact (i64 %n1)))
+        (= %r (mul i64 %n %f))
+        (ret i64 %r)))))
 
 (printf "=== the ll program, transliterated to LLVM IR ===~%~a~%"
         (ll:dump fact-prog))
