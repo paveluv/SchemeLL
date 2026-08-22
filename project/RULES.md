@@ -11,7 +11,7 @@
 | 1 | `(llvm base)` | FFI utilities: C strings, out-params, pointer arrays, error → condition. |
 | 1 | `(llvm ir)` | Safe handles (context/module/builder records with ownership state), IR construction. |
 | 1/2 | `(llvm target)` | Native target init, target machines, object/assembly emission. |
-| 2 | `(llvm jit)` | ORC LLJIT: compile modules in memory, look up functions as ready-to-call Scheme procedures. |
+| 2 | `(llvm jit)` | ORC LLJIT: compile modules in memory, look up functions as ready-to-call Scheme procedures. Designed for prefixed import: `(prefix (llvm jit) jit:)` — its exports carry no `jit-` prefix of their own (renamed in the export clause; internal names keep the prefix). |
 | 3 | `(llscheme ...)` | (future) nanopass-based DSL. |
 
 ## Environment pins
@@ -50,7 +50,7 @@ A dangling pointer takes down the whole Chez session, so:
 - Every `char*` returned by LLVM that we own must be released with
   `LLVMDisposeMessage` (or `LLVMDisposeErrorMessage` for error strings). Do the
   convert-and-dispose in one call: `cstring->string/dispose`.
-- JIT'd code lifetime: procedures returned by `jit-function` close over the jit
+- JIT'd code lifetime: procedures returned by `jit:function` close over the jit
   record, so the LLJIT instance stays reachable (and its code mapped) as long as any
   generated procedure is alive. Unreachable jits are disposed lazily by a guardian.
 - Dispose order: builders before modules before contexts.

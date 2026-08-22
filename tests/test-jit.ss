@@ -1,10 +1,10 @@
 ;;; In-memory JIT: build IR, compile, call as Scheme procedures. No files.
-(import (chezscheme) (tests harness) (llvm ir) (llvm jit))
+(import (chezscheme) (tests harness) (llvm ir) (prefix (llvm jit) jit:))
 
 (test-section "jit: add(i32,i32) end to end")
 
-(define jc (make-jit-context))
-(define ctx (jit-context-context jc))
+(define jc (jit:make-context))
+(define ctx (jit:context-ir jc))
 (define mod (make-module ctx "jit_test"))
 (define b (make-builder ctx))
 
@@ -42,30 +42,31 @@
 (verify-module mod)
 (builder-dispose! b)
 
-(define j (make-jit))
-(jit-add-module! j jc mod)
+(define j (jit:make))
+(jit:add-module! j jc mod)
 
-(check "module is consumed after jit-add-module!"
+(check "module is consumed after jit:add-module!"
        (guard (e [#t #t]) (module->string mod) #f))
 
-(define add (jit-function j "add"))
+(define add (jit:function j "add"))
 (check "add: (add 3 4) = 7" (= (add 3 4) 7))
 (check "add: negative operands" (= (add -10 3) -7))
 (check "add: i32 wraparound" (= (add #x7fffffff 1) (- #x80000000)))
 
-(define fact (jit-function j "fact"))
+(define fact (jit:function j "fact"))
 (check "fact: recursion, (fact 20)" (= (fact 20) 2432902008176640000))
 (check "fact: base case" (= (fact 0) 1))
 
-(define hypot2 (jit-function j "hypot2"))
+(define hypot2 (jit:function j "hypot2"))
 (check "hypot2: doubles" (= (hypot2 3.0 4.0) 25.0))
 
 (test-section "jit: lookups and errors")
 
-(check "jit-lookup-address returns a nonzero address"
-       (positive? (jit-lookup-address j "add")))
-(check-exn "jit-function raises for unknown name"
-           (jit-function j "no_such_fn"))
+(check "jit:lookup-address returns a nonzero address"
+       (positive? (jit:lookup-address j "add")))
+(check-exn "jit:function raises for unknown name"
+           (jit:function j "no_such_fn"))
+(check "predicates" (and (jit:jit? j) (jit:context? jc)))
 
 (test-section "jit: two modules, one jit")
 
@@ -79,16 +80,16 @@
                           (list (function-param add3-fn 0) (const-int i32 3))))
 (verify-module mod2)
 (builder-dispose! b2)
-(jit-add-module! j jc mod2)
+(jit:add-module! j jc mod2)
 
 (check "cross-module call: (add3 39) = 42"
-       (= ((jit-function j "add3") 39) 42))
+       (= ((jit:function j "add3") 39) 42))
 (check "declarations don't shadow signatures"
        (= (add 1 1) 2))
 
 (test-section "jit: disposal")
 
-(jit-context-dispose! jc)
-(check "explicit jit-dispose!" (begin (jit-dispose! j) #t))
+(jit:context-dispose! jc)
+(check "explicit jit:dispose!" (begin (jit:dispose! j) #t))
 (check-exn "calling a procedure from a disposed jit raises" (add 1 2))
-(check-exn "lookup on a disposed jit raises" (jit-lookup-address j "add"))
+(check-exn "lookup on a disposed jit raises" (jit:lookup-address j "add"))

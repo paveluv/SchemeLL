@@ -15,24 +15,29 @@ What works today:
   bytevector; new-pass-manager optimization via `run-module-passes!`.
 
 ```scheme
-(import (llvm ir) (llvm jit))
+(import (prefix (llvm ir) ir:)
+        (prefix (llvm jit) jit:))
 
-(define jc (make-jit-context))
-(define ctx (jit-context-context jc))
-(define mod (make-module ctx "demo"))
-(define b (make-builder ctx))
+(define jc (jit:make-context))
+(define ctx (jit:context-ir jc))
+(define mod (ir:make-module ctx "demo"))
+(define b (ir:make-builder ctx))
 
-(define i32 (int32-type ctx))
-(define f (add-function mod "add" (function-type i32 (list i32 i32))))
-(position-at-end! b (append-block ctx f "entry"))
-(build-ret b (build-add b (function-param f 0) (function-param f 1)))
+(define i32 (ir:int32-type ctx))
+(define f (ir:add-function mod "add" (ir:function-type i32 (list i32 i32))))
+(ir:position-at-end! b (ir:append-block ctx f "entry"))
+(ir:build-ret b (ir:build-add b (ir:function-param f 0) (ir:function-param f 1)))
 
-(define j (make-jit))
-(jit-add-module! j jc mod)
+(define j (jit:make))
+(jit:add-module! j jc mod)
 
-(define add (jit-function j "add"))  ; a plain Scheme procedure
+(define add (jit:function j "add"))  ; a plain Scheme procedure
 (add 3 4)                            ; => 7
 ```
+
+`(llvm jit)` is meant to be imported with a prefix (its exports carry no
+prefix of their own); for the other libraries the prefix is the importer's
+choice, as usual in R6RS.
 
 ## Requirements
 

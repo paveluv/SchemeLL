@@ -1,13 +1,17 @@
 ;;; (llvm jit) -- layer 2: ORC LLJIT. Compile LLVM modules fully in memory
 ;;; and expose JIT'd functions as ordinary Scheme procedures.
 ;;;
+;;; This library is designed to be imported with a prefix:
+;;;   (import (prefix (llvm jit) jit:))
+;;; so the exported names carry no jit- prefix of their own.
+;;;
 ;;; Usage sketch:
-;;;   (define jc (make-jit-context))
-;;;   (define m (make-module (jit-context-context jc) "m"))
+;;;   (define jc (jit:make-context))
+;;;   (define m (make-module (jit:context-ir jc) "m"))
 ;;;   ... build IR in m ...
-;;;   (define j (make-jit))
-;;;   (jit-add-module! j jc m)        ; m is consumed here
-;;;   (define f (jit-function j "add"))
+;;;   (define j (jit:make))
+;;;   (jit:add-module! j jc m)        ; m is consumed here
+;;;   (define f (jit:function j "add"))
 ;;;   (f 3 4)
 ;;;
 ;;; Lifetime rules:
@@ -18,9 +22,16 @@
 ;;;   - Function signatures are captured at add-module time (the IR is
 ;;;     inaccessible afterwards), so jit-function needs no type annotations.
 (library (llvm jit)
-  (export jit? make-jit jit-dispose!
-          jit-context? make-jit-context jit-context-context jit-context-dispose!
-          jit-add-module! jit-lookup-address jit-function)
+  (export jit?
+          (rename (make-jit make)
+                  (jit-dispose! dispose!)
+                  (jit-add-module! add-module!)
+                  (jit-lookup-address lookup-address)
+                  (jit-function function)
+                  (jit-context? context?)
+                  (make-jit-context make-context)
+                  (jit-context-context context-ir)
+                  (jit-context-dispose! context-dispose!)))
   (import (chezscheme) (llvm raw) (llvm base) (llvm ir) (llvm target))
 
   ;; ---- jit contexts (ORC ThreadSafeContext) -------------------------------

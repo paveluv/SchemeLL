@@ -2,15 +2,15 @@
 ;;; Run with: scheme --libdirs . --script examples/jit-add.ss
 ;;;
 ;;; The `prefix` import modifier acts as a namespace: every export of
-;;; (llvm ir) is visible here as ir:<name>. The (llvm jit) exports already
-;;; carry a jit prefix in their names (make-jit, jit-function, ...), so they
-;;; are imported unprefixed.
+;;; (llvm ir) is visible here as ir:<name>, every export of (llvm jit) as
+;;; jit:<name>. (llvm jit) exports carry no prefix of their own for exactly
+;;; this reason.
 (import (chezscheme)
         (prefix (llvm ir) ir:)
-        (llvm jit))
+        (prefix (llvm jit) jit:))
 
-(define jc (make-jit-context))
-(define ctx (jit-context-context jc))
+(define jc (jit:make-context))
+(define ctx (jit:context-ir jc))
 (define mod (ir:make-module ctx "demo"))
 (define b (ir:make-builder ctx))
 
@@ -23,9 +23,9 @@
 (ir:verify-module mod)
 (ir:builder-dispose! b)
 
-(define j (make-jit))
-(jit-add-module! j jc mod)
-(jit-context-dispose! jc)
+(define j (jit:make))
+(jit:add-module! j jc mod)
+(jit:context-dispose! jc)
 
-(define add (jit-function j "add"))   ; a plain Scheme procedure
+(define add (jit:function j "add"))   ; a plain Scheme procedure
 (printf "(add 3 4) => ~a~%" (add 3 4))
