@@ -23,8 +23,15 @@ Newest entries first. Format: date, Done / Decided / Next.
   instruction outside a block, empty block, missing terminator, nested
   blocks. Migrated interpreter, tests, corpus, examples, README, design doc.
 
+- Step 2 done: instruction flags. Peeled from IR position, validated per
+  opcode (wrap ops, exact ops, or/disjoint, zext/nneg, load-store/volatile),
+  applied via C API setters; fast-math flags gated by
+  LLVMCanValueUseFastMathFlags; gep takes its no-wrap mask at construction
+  (inbounds implies nusw, as in the IR parser). Two new coverage axes from
+  bitmask enums (LLVMFastMath* 7/7, LLVMGEPFlag* 3/3). tail/musttail/notail
+  still rejected.
+
 ### Next (coverage plan order)
-- Step 2: instruction flags via setters (nsw/nuw/exact/inbounds/fast-math).
 - Step 3: switch, unreachable, indirectbr, freeze, va_arg, addrspacecast,
   vector/aggregate ops, atomics — shrink the exclusion ledger.
 - Step 4: globals, constant expressions, aggregate types in type grammar.

@@ -114,6 +114,30 @@
 (t:check "sitofp + intra-module call"
          (= ((jit:function misc-jit "int->half") 5) 2.5))
 
+(t:section "ll: instruction flags")
+
+(define flags-prog
+  '((define i64 (@fsum (i64 %a) (i64 %b))
+      (label %entry
+        (= %v1 (add nsw i64 %a %b))
+        (= %v2 (mul nuw nsw i64 %v1 2))
+        (= %v3 (sdiv exact i64 %v2 2))
+        (= %p (alloca i64))
+        (store volatile (i64 %v3) (ptr %p))
+        (= %v (load volatile i64 (ptr %p)))
+        (= %g (getelementptr inbounds i64 (ptr %p) (i64 0)))
+        (= %w (load i64 (ptr %g)))
+        (= %r (add i64 %v %w))
+        (ret i64 %r)))))
+
+(t:check "flags: jit executes correctly"
+         (= ((jit:function (ll:jit flags-prog) "fsum") 3 4) 14))
+(t:check "flags appear in dumped IR"
+         (let ([s (ll:dump flags-prog)])
+           (and (contains? s "add nsw") (contains? s "mul nuw nsw")
+                (contains? s "sdiv exact") (contains? s "load volatile")
+                (contains? s "getelementptr inbounds"))))
+
 (t:section "ll: declare -- cross-module calls in one jit")
 
 (define jc (jit:make-context))
@@ -174,10 +198,26 @@
                             (= %p (alloca i64))
                             (= %s (store (i64 %x) (ptr %p)))
                             (ret i64 %x))))))
-(t:check-exn "unsupported flag rejected"
+(t:check-exn "flag invalid for opcode: udiv nsw"
              (ll:dump '((define i64 (@f (i64 %x))
                           (label %entry
-                            (= %y (add nsw i64 %x 1))
+                            (= %y (udiv nsw i64 %x 1))
+                            (ret i64 %y))))))
+(t:check-exn "fast-math flag on integer op"
+             (ll:dump '((define i64 (@f (i64 %x))
+                          (label %entry
+                            (= %y (add fast i64 %x 1))
+                            (ret i64 %y))))))
+(t:check-exn "gep flag on non-gep"
+             (ll:dump '((define i64 (@f (i64 %x))
+                          (label %entry
+                            (= %y (add inbounds i64 %x 1))
+                            (ret i64 %y))))))
+(t:check-exn "tail still unsupported"
+             (ll:dump '((declare i64 (@g i64))
+                        (define i64 (@f (i64 %x))
+                          (label %entry
+                            (= %y (call tail i64 @g (i64 %x)))
                             (ret i64 %y))))))
 (t:check-exn "unknown type"
              (ll:dump '((define i64 (@f (i37x %x))

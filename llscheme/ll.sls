@@ -146,9 +146,83 @@
       (ptrtoint . ,ir:build-ptr->int) (inttoptr . ,ir:build-int->ptr)
       (bitcast . ,ir:build-bitcast)))
 
-  ;; IR flags we recognize but do not support yet -- reject loudly rather
-  ;; than silently changing semantics.
-  (define unsupported-flags '(nsw nuw exact inbounds fast nnan ninf nsz tail))
+  ;; ---- instruction flags -----------------------------------------------------
+  ;; Flags sit where IR writes them: between the opcode and the type (for
+  ;; fcmp, before the predicate). They are peeled off the front of the
+  ;; argument list, validated per opcode, and applied to the built
+  ;; instruction via the C API setters (getelementptr takes its no-wrap
+  ;; mask at construction instead).
+
+  ;; LLVMFastMathFlags bits; cross-checked against the installed headers
+  ;; by tests/test-coverage.ss
+  (define fmf-bits
+    '((reassoc . 1) (nnan . 2) (ninf . 4) (nsz . 8)
+      (arcp . 16) (contract . 32) (afn . 64) (fast . 127)))
+
+  ;; LLVMGEPNoWrapFlags bits; inbounds implies nusw, as in the IR parser
+  (define gep-flag-bits
+    '((inbounds . 3) (nusw . 2) (nuw . 4)))
+
+  (define wrap-flag-ops '(add sub mul shl))
+  (define exact-flag-ops '(udiv sdiv lshr ashr))
+
+  (define flag-symbols
+    '(nsw nuw exact disjoint nneg volatile inbounds nusw
+       reassoc nnan ninf nsz arcp contract afn fast))
+
+  ;; call-position flags we do not support yet -- reject loudly rather
+  ;; than silently changing semantics
+  (define unsupported-flags '(tail musttail notail))
+
+  ;; split leading flag symbols from the rest of an instruction's arguments
+  (define (span-flags rest)
+    (let loop ([r rest] [flags '()])
+      (if (and (pair? r) (symbol? (car r)) (memq (car r) flag-symbols))
+          (loop (cdr r) (cons (car r) flags))
+          (values (reverse flags) r))))
+
+  (define (require-flag-op op ops flag form)
+    (unless (memq op ops)
+      (ll-error "flag is not valid for this opcode" flag form)))
+
+  (define (apply-flags! op v flags form)
+    (let ([fmf (fold-left
+                 (lambda (mask flag)
+                   (case flag
+                     [(nsw) (require-flag-op op wrap-flag-ops flag form)
+                      (ir:set-nsw! v) mask]
+                     [(nuw) (require-flag-op op wrap-flag-ops flag form)
+                      (ir:set-nuw! v) mask]
+                     [(exact) (require-flag-op op exact-flag-ops flag form)
+                      (ir:set-exact! v) mask]
+                     [(disjoint) (require-flag-op op '(or) flag form)
+                      (ir:set-disjoint! v) mask]
+                     [(nneg) (require-flag-op op '(zext) flag form)
+                      (ir:set-nneg! v) mask]
+                     [(volatile) (require-flag-op op '(load store) flag form)
+                      (ir:set-volatile! v) mask]
+                     [(inbounds nusw)
+                      (ll-error "flag is only valid on getelementptr" flag form)]
+                     [else (bitwise-ior mask (cdr (assq flag fmf-bits)))]))
+                 0 flags)])
+      (unless (zero? fmf)
+        (unless (ir:can-use-fast-math-flags? v)
+          (ll-error "fast-math flags are not valid on this instruction" op form))
+        (ir:set-fast-math-flags! v fmf))))
+
+  (define (gep-flags-mask flags form)
+    (fold-left (lambda (mask flag)
+                 (cond
+                   [(assq flag gep-flag-bits) =>
+                    (lambda (p) (bitwise-ior mask (cdr p)))]
+                   [else (ll-error "flag is not valid on getelementptr" flag form)]))
+               0 flags))
+
+  ;; apply post-hoc flags; getelementptr consumed its flags at construction
+  (define (finish-op! op flags form v)
+    (unless (or (null? flags) (eq? op 'getelementptr))
+      (apply-flags! op v flags form))
+    v)
 
   ;; instructions with no bindable result
   (define no-result-ops '(store br ret))
@@ -170,129 +244,132 @@
   ;; ---- instruction emission ------------------------------------------------------------
 
   (define (emit-op st form name)
-    (let ([op (car form)] [args (cdr form)]
-          [b (fstate-builder st)] [ctx (fstate-ctx st)])
-      (define (arity n shape)
-        (unless (= (length args) n)
-          (ll-error (string-append "expected " shape) form (fstate-fname st))))
-      (define (arity>= n shape)
-        (unless (>= (length args) n)
-          (ll-error (string-append "expected " shape) form (fstate-fname st))))
-      (when (and (pair? args) (memq (car args) unsupported-flags))
-        (ll-error "instruction flag not yet supported" (car args) form))
-      (cond
-        [(assq op binops) =>
-         (lambda (entry)
-           (arity 3 "(op type a b)")
-           (let ([ty (resolve-type ctx (car args))])
-             ((cdr entry) b
-              (resolve-operand st ty (cadr args))
-              (resolve-operand st ty (caddr args))
-              name)))]
-        [(assq op casts) =>
-         (lambda (entry)
-           (arity 4 "(op type value to type)")
-           (unless (eq? (caddr args) 'to)
-             (ll-error "cast expects `to`" form))
-           (let ([ty (resolve-type ctx (car args))]
-                 [dst (resolve-type ctx (cadddr args))])
-             ((cdr entry) b (resolve-operand st ty (cadr args)) dst name)))]
-        [else
-         (case op
-           [(icmp fcmp)
-            (arity 4 "(icmp/fcmp pred type a b)")
-            (let* ([pred (car args)]
-                   [ty (resolve-type ctx (cadr args))]
-                   [x (resolve-operand st ty (caddr args))]
-                   [y (resolve-operand st ty (cadddr args))])
-              (if (eq? op 'icmp)
-                  (ir:build-icmp b pred x y name)
-                  (ir:build-fcmp b pred x y name)))]
-           [(select)
-            (arity 3 "(select (i1 c) (type a) (type b))")
-            (ir:build-select b
-                             (resolve-operand st #f (car args))
-                             (resolve-operand st #f (cadr args))
-                             (resolve-operand st #f (caddr args))
-                             name)]
-           [(fneg)
-            (arity 2 "(fneg type value)")
-            (ir:build-fneg b
-                           (resolve-operand st (resolve-type ctx (car args)) (cadr args))
-                           name)]
-           [(phi)
-            (arity>= 2 "(phi type [value %label] ...)")
-            ;; emit empty; incoming resolves at end of function, when
-            ;; every value and label is bound (IR's only forward value ref)
-            (let ([ph (ir:build-phi b (resolve-type ctx (car args)) name)])
-              (fstate-phis-set! st (cons (list ph (car args) (cdr args) form)
+    (let-values ([(flags args) (span-flags (cdr form))])
+      (let ([op (car form)]
+            [b (fstate-builder st)] [ctx (fstate-ctx st)])
+        (define (arity n shape)
+          (unless (= (length args) n)
+            (ll-error (string-append "expected " shape) form (fstate-fname st))))
+        (define (arity>= n shape)
+          (unless (>= (length args) n)
+            (ll-error (string-append "expected " shape) form (fstate-fname st))))
+        (when (and (pair? args) (memq (car args) unsupported-flags))
+          (ll-error "instruction flag not yet supported" (car args) form))
+        (finish-op! op flags form
+          (cond
+            [(assq op binops) =>
+             (lambda (entry)
+               (arity 3 "(op type a b)")
+               (let ([ty (resolve-type ctx (car args))])
+                 ((cdr entry) b
+                  (resolve-operand st ty (cadr args))
+                  (resolve-operand st ty (caddr args))
+                  name)))]
+            [(assq op casts) =>
+             (lambda (entry)
+               (arity 4 "(op type value to type)")
+               (unless (eq? (caddr args) 'to)
+                 (ll-error "cast expects `to`" form))
+               (let ([ty (resolve-type ctx (car args))]
+                     [dst (resolve-type ctx (cadddr args))])
+                 ((cdr entry) b (resolve-operand st ty (cadr args)) dst name)))]
+            [else
+             (case op
+               [(icmp fcmp)
+                (arity 4 "(icmp/fcmp pred type a b)")
+                (let* ([pred (car args)]
+                       [ty (resolve-type ctx (cadr args))]
+                       [x (resolve-operand st ty (caddr args))]
+                       [y (resolve-operand st ty (cadddr args))])
+                  (if (eq? op 'icmp)
+                    (ir:build-icmp b pred x y name)
+                    (ir:build-fcmp b pred x y name)))]
+               [(select)
+                (arity 3 "(select (i1 c) (type a) (type b))")
+                (ir:build-select b
+                                 (resolve-operand st #f (car args))
+                                 (resolve-operand st #f (cadr args))
+                                 (resolve-operand st #f (caddr args))
+                                 name)]
+               [(fneg)
+                (arity 2 "(fneg type value)")
+                (ir:build-fneg b
+                               (resolve-operand st (resolve-type ctx (car args)) (cadr args))
+                               name)]
+               [(phi)
+                (arity>= 2 "(phi type [value %label] ...)")
+                ;; emit empty; incoming resolves at end of function, when
+                ;; every value and label is bound (IR's only forward value ref)
+                (let ([ph (ir:build-phi b (resolve-type ctx (car args)) name)])
+                  (fstate-phis-set! st (cons (list ph (car args) (cdr args) form)
                                          (fstate-phis st)))
-              ph)]
-           [(call)
-            (arity>= 2 "(call type callee (type arg) ...)")
-            (let ([retty (resolve-type ctx (car args))]
-                  [callee-form (cadr args)]
-                  [groups (cddr args)])
-              (for-each
-                (lambda (g)
-                  (unless (and (pair? g) (pair? (cdr g)) (null? (cddr g)))
-                    (ll-error "call argument must be (type value)" g form)))
-                groups)
-              (when (and (eq? (ir:type-kind retty) 'void)
-                         (not (string=? name "")))
-                (ll-error "cannot bind the result of a void call" form))
-              (let* ([atys (map (lambda (g) (resolve-type ctx (car g))) groups)]
-                     [avals (map (lambda (g ty) (resolve-operand st ty (cadr g)))
-                                 groups atys)])
-                (ir:build-call b (ir:function-type retty atys)
-                               (resolve-operand st #f callee-form)
-                               avals name)))]
-           [(load)
-            (arity>= 2 "(load type (ptr p) ...)")
-            (let ([v (ir:build-load b (resolve-type ctx (car args))
+                  ph)]
+               [(call)
+                (arity>= 2 "(call type callee (type arg) ...)")
+                (let ([retty (resolve-type ctx (car args))]
+                      [callee-form (cadr args)]
+                      [groups (cddr args)])
+                  (for-each
+                    (lambda (g)
+                      (unless (and (pair? g) (pair? (cdr g)) (null? (cddr g)))
+                        (ll-error "call argument must be (type value)" g form)))
+                    groups)
+                  (when (and (eq? (ir:type-kind retty) 'void)
+                          (not (string=? name "")))
+                    (ll-error "cannot bind the result of a void call" form))
+                  (let* ([atys (map (lambda (g) (resolve-type ctx (car g))) groups)]
+                         [avals (map (lambda (g ty) (resolve-operand st ty (cadr g)))
+                                  groups atys)])
+                    (ir:build-call b (ir:function-type retty atys)
+                                   (resolve-operand st #f callee-form)
+                                   avals name)))]
+               [(load)
+                (arity>= 2 "(load type (ptr p) ...)")
+                (let ([v (ir:build-load b (resolve-type ctx (car args))
+                                        (resolve-operand st #f (cadr args))
+                                        name)])
+                  (apply-attrs! v (cddr args) form)
+                  v)]
+               [(store)
+                (arity>= 2 "(store (type v) (ptr p) ...)")
+                (let ([s (ir:build-store b
+                                         (resolve-operand st #f (car args))
+                                         (resolve-operand st #f (cadr args)))])
+                  (apply-attrs! s (cddr args) form)
+                  s)]
+               [(alloca)
+                (arity>= 1 "(alloca type ...)")
+                (let ([v (ir:build-alloca b (resolve-type ctx (car args)) name)])
+                  (apply-attrs! v (cdr args) form)
+                  v)]
+               [(getelementptr)
+                (arity>= 2 "(getelementptr type (ptr p) (type index) ...)")
+                (ir:build-gep/flags b (resolve-type ctx (car args))
                                     (resolve-operand st #f (cadr args))
-                                    name)])
-              (apply-attrs! v (cddr args) form)
-              v)]
-           [(store)
-            (arity>= 2 "(store (type v) (ptr p) ...)")
-            (let ([s (ir:build-store b
-                                     (resolve-operand st #f (car args))
-                                     (resolve-operand st #f (cadr args)))])
-              (apply-attrs! s (cddr args) form)
-              s)]
-           [(alloca)
-            (arity>= 1 "(alloca type ...)")
-            (let ([v (ir:build-alloca b (resolve-type ctx (car args)) name)])
-              (apply-attrs! v (cdr args) form)
-              v)]
-           [(getelementptr)
-            (arity>= 2 "(getelementptr type (ptr p) (type index) ...)")
-            (ir:build-gep b (resolve-type ctx (car args))
-                          (resolve-operand st #f (cadr args))
-                          (map (lambda (g) (resolve-operand st #f g)) (cddr args))
-                          name)]
-           [(br)
-            (cond
-              [(= (length args) 1)         ; (br (label %x))
-               (ir:build-br b (block-ref st (car args)))]
-              [(= (length args) 4)         ; (br i1 %c (label %a) (label %b))
-               (let ([c (resolve-operand st (resolve-type ctx (car args))
-                                         (cadr args))])
-                 (ir:build-cond-br b c
-                                   (block-ref st (caddr args))
-                                   (block-ref st (cadddr args))))]
-              [else (ll-error "expected (br (label %x)) or (br i1 %c (label %a) (label %b))"
-                              form (fstate-fname st))])]
-           [(ret)
-            (cond
-              [(equal? args '(void)) (ir:build-ret-void b)]
-              [(= (length args) 2)
-               (ir:build-ret b (resolve-operand st (resolve-type ctx (car args))
-                                                (cadr args)))]
-              [else (ll-error "expected (ret void) or (ret type value)"
-                              form (fstate-fname st))])]
-           [else (ll-error "unknown opcode" op form)])])))
+                                    (map (lambda (g) (resolve-operand st #f g)) (cddr args))
+                                    (gep-flags-mask flags form)
+                                    name)]
+               [(br)
+                (cond
+                  [(= (length args) 1)         ; (br (label %x))
+                   (ir:build-br b (block-ref st (car args)))]
+                  [(= (length args) 4)         ; (br i1 %c (label %a) (label %b))
+                   (let ([c (resolve-operand st (resolve-type ctx (car args))
+                                             (cadr args))])
+                     (ir:build-cond-br b c
+                                       (block-ref st (caddr args))
+                                       (block-ref st (cadddr args))))]
+                  [else (ll-error "expected (br (label %x)) or (br i1 %c (label %a) (label %b))"
+                          form (fstate-fname st))])]
+               [(ret)
+                (cond
+                  [(equal? args '(void)) (ir:build-ret-void b)]
+                  [(= (length args) 2)
+                   (ir:build-ret b (resolve-operand st (resolve-type ctx (car args))
+                                                    (cadr args)))]
+                  [else (ll-error "expected (ret void) or (ret type value)"
+                          form (fstate-fname st))])]
+               [else (ll-error "unknown opcode" op form)])])))))
 
   (define (emit-insn! st form)
     (cond

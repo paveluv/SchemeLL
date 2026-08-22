@@ -2,7 +2,7 @@
 ;;; The headers are the machine-readable ground truth the coverage tests
 ;;; check against (see project/coverage-plan.md). Import as: (prefix ... o:)
 (library (tests oracle)
-  (export enum-alist)
+  (export enum-alist bitmask-alist)
   (import (chezscheme) (prefix (llvm config) config:))
 
   (define (read-file path)
@@ -76,6 +76,30 @@
                                   v))])
                   (loop (cdr items) val
                         (cons (cons (string->symbol name) val) acc))))))))
+
+  ;; ((name . 2^n) ...) for every `<prefix><name> = (1 << n)` line in the
+  ;; header -- for anonymous bitmask enums like LLVMFastMathFlags and
+  ;; LLVMGEPNoWrapFlags, whose non-bit entries (None/All) are skipped.
+  (define (bitmask-alist header prefix)
+    (let ([text (read-file (string-append config:header-directory "/" header))])
+      (let loop ([i 0] [acc '()])
+        (let ([j (str-index text prefix i)])
+          (if (not j)
+              (reverse acc)
+              (let* ([eol (or (str-index text "\n" j) (string-length text))]
+                     [entry (parse-bit-line (substring text j eol))])
+                (loop eol (if entry (cons entry acc) acc))))))))
+
+  (define (parse-bit-line line)   ; "NAME = (1 << N)..." -> (NAME . 2^N) | #f
+    (let ([eq (str-index line " = (1 << " 0)])
+      (and eq
+           (let* ([rest (substring line (+ eq 9) (string-length line))]
+                  [close (str-index rest ")" 0)])
+             (and close
+                  (let ([n (string->number (trim (substring rest 0 close)))])
+                    (and (fixnum? n)
+                         (cons (string->symbol (substring line 0 eq))
+                               (bitwise-arithmetic-shift-left 1 n)))))))))
 
   ;; ((entry-name . value) ...) for `typedef enum { ... } <enum-name>;`
   ;; in the given installed llvm-c header.

@@ -29,6 +29,10 @@
     add-function named-function function-type-of
     function-param function-params value-name set-value-name! declaration?
     set-alignment!
+    ;; instruction flags
+    set-nsw! set-nuw! set-exact! set-nneg! set-disjoint! set-volatile!
+    set-fast-math-flags! fast-math-flags can-use-fast-math-flags?
+    gep-no-wrap-flags
     const-int const-real const-null undef-value
     ;; basic blocks / positioning
     append-block position-at-end! insert-block
@@ -40,7 +44,7 @@
     build-neg build-fneg build-not
     build-icmp build-fcmp build-select
     build-phi phi-add-incoming!
-    build-call build-alloca build-load build-store build-gep
+    build-call build-alloca build-load build-store build-gep build-gep/flags
     build-trunc build-zext build-sext
     build-si->fp build-ui->fp build-fp->si build-fp->ui
     build-fptrunc build-fpext build-ptr->int build-int->ptr build-bitcast)
@@ -285,6 +289,19 @@
 
   (define (set-alignment! v bytes) (LLVMSetAlignment v bytes))
 
+  ;; instruction flags: setters set the flag; getters return bitmasks/booleans
+  (define (set-nsw! v) (LLVMSetNSW v 1))
+  (define (set-nuw! v) (LLVMSetNUW v 1))
+  (define (set-exact! v) (LLVMSetExact v 1))
+  (define (set-nneg! v) (LLVMSetNNeg v 1))
+  (define (set-disjoint! v) (LLVMSetIsDisjoint v 1))
+  (define (set-volatile! v) (LLVMSetVolatile v 1))
+  (define (set-fast-math-flags! v mask) (LLVMSetFastMathFlags v mask))
+  (define (fast-math-flags v) (LLVMGetFastMathFlags v))
+  (define (can-use-fast-math-flags? v)
+    (not (zero? (LLVMCanValueUseFastMathFlags v))))
+  (define (gep-no-wrap-flags v) (LLVMGEPGetNoWrapFlags v))
+
   (define (declaration? f) (not (zero? (LLVMIsDeclaration f))))
 
   (define (const-int ty n)
@@ -425,6 +442,16 @@
        (base:call-with-pointer-array indices
          (lambda (arr n)
            (LLVMBuildGEP2 (builder-live-ptr b) elem-ty ptr arr n nm)))]))
+
+  ;; flags: LLVMGEPNoWrapFlags bitmask (inbounds/nusw/nuw)
+  (define build-gep/flags
+    (case-lambda
+      [(b elem-ty ptr indices flags) (build-gep/flags b elem-ty ptr indices flags "")]
+      [(b elem-ty ptr indices flags nm)
+       (base:call-with-pointer-array indices
+         (lambda (arr n)
+           (LLVMBuildGEPWithNoWrapFlags (builder-live-ptr b)
+                                        elem-ty ptr arr n nm flags)))]))
 
   (define-syntax define-cast
     (syntax-rules ()

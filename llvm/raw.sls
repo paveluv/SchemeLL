@@ -43,6 +43,11 @@
     GetInstructionOpcode GetICmpPredicate GetFCmpPredicate
     GetValueName2 SetValueName2 IsDeclaration
     SetLinkage SetFunctionCallConv SetAlignment
+    ;; instruction flags (setters + getters)
+    SetNSW GetNSW SetNUW GetNUW SetExact GetExact SetNNeg GetNNeg
+    SetIsDisjoint GetIsDisjoint SetVolatile GetVolatile
+    SetFastMathFlags GetFastMathFlags CanValueUseFastMathFlags
+    GEPGetNoWrapFlags
     ;; Core: constants
     ConstInt ConstReal ConstNull ConstPointerNull GetUndef
     ;; Core: basic blocks
@@ -58,7 +63,7 @@
     BuildICmp BuildFCmp BuildSelect
     BuildPhi AddIncoming
     BuildCall2
-    BuildAlloca BuildLoad2 BuildStore BuildGEP2
+    BuildAlloca BuildLoad2 BuildStore BuildGEP2 BuildGEPWithNoWrapFlags
     BuildTrunc BuildZExt BuildSExt
     BuildSIToFP BuildUIToFP BuildFPToSI BuildFPToUI
     BuildFPTrunc BuildFPExt
@@ -198,6 +203,42 @@
   (define SetAlignment                 ; (load/store/alloca/global, bytes)
     (foreign-procedure "LLVMSetAlignment" (void* unsigned-int) void))
 
+  ;; instruction flags; each setter is only valid on the instruction kinds
+  ;; that carry the flag (add/sub/mul/shl for nsw/nuw, div/shr for exact,
+  ;; or for disjoint, zext for nneg, load/store for volatile)
+  (define SetNSW
+    (foreign-procedure "LLVMSetNSW" (void* int) void))
+  (define GetNSW
+    (foreign-procedure "LLVMGetNSW" (void*) int))
+  (define SetNUW
+    (foreign-procedure "LLVMSetNUW" (void* int) void))
+  (define GetNUW
+    (foreign-procedure "LLVMGetNUW" (void*) int))
+  (define SetExact
+    (foreign-procedure "LLVMSetExact" (void* int) void))
+  (define GetExact
+    (foreign-procedure "LLVMGetExact" (void*) int))
+  (define SetNNeg
+    (foreign-procedure "LLVMSetNNeg" (void* int) void))
+  (define GetNNeg
+    (foreign-procedure "LLVMGetNNeg" (void*) int))
+  (define SetIsDisjoint
+    (foreign-procedure "LLVMSetIsDisjoint" (void* int) void))
+  (define GetIsDisjoint
+    (foreign-procedure "LLVMGetIsDisjoint" (void*) int))
+  (define SetVolatile
+    (foreign-procedure "LLVMSetVolatile" (void* int) void))
+  (define GetVolatile
+    (foreign-procedure "LLVMGetVolatile" (void*) int))
+  (define SetFastMathFlags             ; LLVMFastMathFlags bitmask
+    (foreign-procedure "LLVMSetFastMathFlags" (void* unsigned-int) void))
+  (define GetFastMathFlags
+    (foreign-procedure "LLVMGetFastMathFlags" (void*) unsigned-int))
+  (define CanValueUseFastMathFlags     ; is this an FPMathOperator?
+    (foreign-procedure "LLVMCanValueUseFastMathFlags" (void*) int))
+  (define GEPGetNoWrapFlags            ; LLVMGEPNoWrapFlags bitmask
+    (foreign-procedure "LLVMGEPGetNoWrapFlags" (void*) unsigned-int))
+
   ;; --- Core: constants ----------------------------------------------------
   (define ConstInt                     ; (type, value, sign-extend?)
     (foreign-procedure "LLVMConstInt" (void* unsigned-64 int) void*))
@@ -291,6 +332,9 @@
     (foreign-procedure "LLVMBuildStore" (void* void* void*) void*))
   (define BuildGEP2                    ; (builder, elem-type, ptr, index-array, count, name)
     (foreign-procedure "LLVMBuildGEP2" (void* void* void* void* unsigned-int string) void*))
+  (define BuildGEPWithNoWrapFlags      ; ... + LLVMGEPNoWrapFlags bitmask
+    (foreign-procedure "LLVMBuildGEPWithNoWrapFlags"
+                       (void* void* void* void* unsigned-int string unsigned-int) void*))
 
   (define BuildTrunc
     (foreign-procedure "LLVMBuildTrunc" (void* void* void* string) void*))

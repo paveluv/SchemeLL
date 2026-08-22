@@ -1,8 +1,11 @@
 # Design proposal: (llscheme ll) — LLVM IR as s-expressions
 
 Status: first slice IMPLEMENTED in `llscheme/ll.sls` (2026-08-21); this
-document is the grammar reference. Not yet supported (rejected with clear
-errors, see "Open questions"): instruction flags (nsw/nuw/inbounds/...),
+document is the grammar reference. Instruction flags supported since
+2026-08-22 (nsw/nuw/exact/disjoint/nneg/volatile, fast-math flags,
+getelementptr inbounds/nusw/nuw) — written in IR position between opcode
+and type (for fcmp, before the predicate), validated per opcode. Not yet
+supported (rejected with clear errors): tail-call markers,
 vector/array/struct types, module-level globals, alloca element counts,
 raw value injection, and non-phi references to textually-later values.
 

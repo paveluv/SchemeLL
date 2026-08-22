@@ -19,6 +19,8 @@
 (define opcode-oracle (o:enum-alist "Core.h" "LLVMOpcode"))
 (define int-pred-oracle (o:enum-alist "Core.h" "LLVMIntPredicate"))
 (define real-pred-oracle (o:enum-alist "Core.h" "LLVMRealPredicate"))
+(define fmf-oracle (o:bitmask-alist "Core.h" "LLVMFastMath"))
+(define gep-flag-oracle (o:bitmask-alist "Core.h" "LLVMGEPFlag"))
 
 (define exclusions
   (call-with-input-file "project/coverage-exclusions.ss" read))
@@ -35,12 +37,21 @@
 
 (define icmp-opcode (cdr (assq 'LLVMICmp opcode-oracle)))
 (define fcmp-opcode (cdr (assq 'LLVMFCmp opcode-oracle)))
+(define gep-opcode (cdr (assq 'LLVMGetElementPtr opcode-oracle)))
 
 ;; ---- observation ------------------------------------------------------------
 
 (define observed-opcodes (make-eqv-hashtable))
 (define observed-int-preds (make-eqv-hashtable))
 (define observed-real-preds (make-eqv-hashtable))
+(define observed-fmf (make-eqv-hashtable))
+(define observed-gep-flags (make-eqv-hashtable))
+
+(define (observe-bits! table mask)
+  (for-each (lambda (bit)
+              (unless (zero? (bitwise-and mask bit))
+                (hashtable-set! table bit #t)))
+            '(1 2 4 8 16 32 64)))
 
 (define (observe-module! m)
   (for-each
@@ -54,7 +65,11 @@
                 (when (= op icmp-opcode)
                   (hashtable-set! observed-int-preds (ir:icmp-predicate ins) #t))
                 (when (= op fcmp-opcode)
-                  (hashtable-set! observed-real-preds (ir:fcmp-predicate ins) #t))))
+                  (hashtable-set! observed-real-preds (ir:fcmp-predicate ins) #t))
+                (when (= op gep-opcode)
+                  (observe-bits! observed-gep-flags (ir:gep-no-wrap-flags ins)))
+                (when (ir:can-use-fast-math-flags? ins)
+                  (observe-bits! observed-fmf (ir:fast-math-flags ins)))))
             (ir:block-instructions bb)))
         (ir:function-blocks f)))
     (ir:module-functions m)))
@@ -329,6 +344,92 @@ entry:
 }
 ")
 
+(check-entry! "flags"
+  '((define i64 (@flags (i64 %a) (i64 %b))
+      (label %entry
+        (= %v1 (add nsw i64 %a %b))
+        (= %v2 (sub nuw i64 %v1 %b))
+        (= %v3 (mul nuw nsw i64 %v2 %b))
+        (= %v4 (shl nsw i64 %v3 1))
+        (= %v5 (udiv exact i64 %v4 2))
+        (= %v6 (sdiv exact i64 %v5 2))
+        (= %v7 (lshr exact i64 %v6 1))
+        (= %v8 (ashr exact i64 %v7 1))
+        (= %v9 (or disjoint i64 %v8 %b))
+        (= %t (trunc i64 %v9 to i32))
+        (= %z (zext nneg i32 %t to i64))
+        (= %p (alloca i64 (align 8)))
+        (store volatile (i64 %z) (ptr %p) (align 8))
+        (= %v (load volatile i64 (ptr %p) (align 8)))
+        (= %g1 (getelementptr inbounds i64 (ptr %p) (i64 0)))
+        (= %g2 (getelementptr nusw i64 (ptr %p) (i64 0)))
+        (= %g3 (getelementptr nuw i64 (ptr %p) (i64 0)))
+        (= %i1 (ptrtoint ptr %g1 to i64))
+        (= %i2 (ptrtoint ptr %g2 to i64))
+        (= %i3 (ptrtoint ptr %g3 to i64))
+        (= %s1 (add i64 %i1 %i2))
+        (= %s2 (add i64 %s1 %i3))
+        (= %r (add i64 %v %s2))
+        (ret i64 %r))))
+  "define i64 @flags(i64 %a, i64 %b) {
+entry:
+  %v1 = add nsw i64 %a, %b
+  %v2 = sub nuw i64 %v1, %b
+  %v3 = mul nuw nsw i64 %v2, %b
+  %v4 = shl nsw i64 %v3, 1
+  %v5 = udiv exact i64 %v4, 2
+  %v6 = sdiv exact i64 %v5, 2
+  %v7 = lshr exact i64 %v6, 1
+  %v8 = ashr exact i64 %v7, 1
+  %v9 = or disjoint i64 %v8, %b
+  %t = trunc i64 %v9 to i32
+  %z = zext nneg i32 %t to i64
+  %p = alloca i64, align 8
+  store volatile i64 %z, ptr %p, align 8
+  %v = load volatile i64, ptr %p, align 8
+  %g1 = getelementptr inbounds i64, ptr %p, i64 0
+  %g2 = getelementptr nusw i64, ptr %p, i64 0
+  %g3 = getelementptr nuw i64, ptr %p, i64 0
+  %i1 = ptrtoint ptr %g1 to i64
+  %i2 = ptrtoint ptr %g2 to i64
+  %i3 = ptrtoint ptr %g3 to i64
+  %s1 = add i64 %i1, %i2
+  %s2 = add i64 %s1, %i3
+  %r = add i64 %v, %s2
+  ret i64 %r
+}
+")
+
+(check-entry! "fmf"
+  '((define double (@fmf (double %a) (double %b))
+      (label %entry
+        (= %v1 (fadd fast double %a %b))
+        (= %v2 (fsub nnan double %v1 %b))
+        (= %v3 (fmul nsz double %v2 %b))
+        (= %v4 (fdiv arcp double %v3 %b))
+        (= %v5 (frem contract double %v4 %b))
+        (= %v6 (fneg afn double %v5))
+        (= %v7 (fadd reassoc double %v6 %b))
+        (= %v8 (fsub ninf double %v7 %b))
+        (= %c (fcmp nnan oeq double %v8 %b))
+        (= %r (select (i1 %c) (double %v7) (double %v8)))
+        (ret double %r))))
+  "define double @fmf(double %a, double %b) {
+entry:
+  %v1 = fadd fast double %a, %b
+  %v2 = fsub nnan double %v1, %b
+  %v3 = fmul nsz double %v2, %b
+  %v4 = fdiv arcp double %v3, %b
+  %v5 = frem contract double %v4, %b
+  %v6 = fneg afn double %v5
+  %v7 = fadd reassoc double %v6, %b
+  %v8 = fsub ninf double %v7, %b
+  %c = fcmp nnan oeq double %v8, %b
+  %r = select i1 %c, double %v7, double %v8
+  ret double %r
+}
+")
+
 ;; ---- the ledger check (level 1) -----------------------------------------------------
 
 (t:section "coverage: observed + excluded = oracle (level 1)")
@@ -365,10 +466,16 @@ entry:
 (check-axis! "opcodes" 'opcode opcode-oracle observed-opcodes)
 (check-axis! "icmp predicates" 'int-predicate int-pred-oracle observed-int-preds)
 (check-axis! "fcmp predicates" 'real-predicate real-pred-oracle observed-real-preds)
+(check-axis! "fast-math flags" 'fast-math fmf-oracle observed-fmf)
+(check-axis! "gep flags" 'gep-flag gep-flag-oracle observed-gep-flags)
 
 (t:check "oracle extraction sane: LLVMRet = 1"
          (= (cdr (assq 'LLVMRet opcode-oracle)) 1))
 (t:check "oracle extraction sane: LLVMIntEQ = 32"
          (= (cdr (assq 'LLVMIntEQ int-pred-oracle)) 32))
+(t:check "oracle extraction sane: LLVMFastMathNoNaNs = 2"
+         (= (cdr (assq 'LLVMFastMathNoNaNs fmf-oracle)) 2))
+(t:check "oracle extraction sane: LLVMGEPFlagNUW = 4"
+         (= (cdr (assq 'LLVMGEPFlagNUW gep-flag-oracle)) 4))
 
 (ir:context-dispose! ctx)
