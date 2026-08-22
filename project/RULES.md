@@ -11,7 +11,7 @@
 | 1 | `(llvm base)` | FFI utilities: C strings, out-params, pointer arrays, error → condition. |
 | 1 | `(llvm ir)` | Safe handles (context/module/builder records with ownership state), IR construction. |
 | 1/2 | `(llvm target)` | Native target init, target machines, object/assembly emission. |
-| 2 | `(llvm jit)` | ORC LLJIT: compile modules in memory, look up functions as ready-to-call Scheme procedures. Designed for prefixed import: `(prefix (llvm jit) jit:)` — its exports carry no `jit-` prefix of their own (renamed in the export clause; internal names keep the prefix). |
+| 2 | `(llvm jit)` | ORC LLJIT: compile modules in memory, look up functions as ready-to-call Scheme procedures. Designed for prefixed import: `(prefix (llvm jit) jit:)` — its definitions carry no `jit-` prefix (`make`, `function`, `add-module!`, ...); internally it imports `(llvm ir)` as `ir:` to avoid name clashes. |
 | 3 | `(llscheme ...)` | (future) nanopass-based DSL. |
 
 ## Environment pins
