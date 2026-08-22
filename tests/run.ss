@@ -5,5 +5,6 @@
 (load "tests/test-jit.ss")
 (load "tests/test-object.ss")
 (load "tests/test-ll.ss")
+(load "tests/test-coverage.ss")
 
 (t:summary-and-exit)

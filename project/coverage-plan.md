@@ -1,6 +1,10 @@
 # Plan: verifiable 100% IR coverage for (llscheme ll)
 
-Status: PLAN, agreed direction. "100% coverage" is meaningless without a
+Status: Levels 1+2 IMPLEMENTED (2026-08-22): `tests/test-coverage.ss` +
+`tests/oracle.sls` (enum extraction from installed headers) +
+`project/coverage-exclusions.ss` (the ledger). Score at implementation:
+opcodes 42 implemented + 25 excluded = 67/67; icmp 10/10; fcmp 16/16.
+Levels 3 (corpus round-trip via ll:disassemble) still to do. "100% coverage" is meaningless without a
 machine-checkable oracle and an explicit scope. This plan defines both, and
 three verification levels that turn coverage from a claim into a test that
 fails.

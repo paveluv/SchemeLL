@@ -14,7 +14,10 @@
     module? make-module module-dispose! module-live-ptr module-consume!
     module-context module->string verify-module
     set-module-target-triple! set-module-data-layout!
-    run-module-passes!
+    run-module-passes! parse-ir
+    ;; walking built IR (observation / disassembly)
+    module-functions function-blocks block-instructions
+    instruction-opcode icmp-predicate fcmp-predicate
     ;; builders
     builder? make-builder builder-dispose! builder-live-ptr
     ;; types
@@ -124,6 +127,49 @@
       (let ([err (LLVMRunPasses (module-live-ptr m) passes base:null-ptr opts)])
         (LLVMDisposePassBuilderOptions opts)
         (base:check-error-ref 'ir:run-module-passes! err))))
+
+  ;; Parse textual LLVM IR into a fresh module, using LLVM's own parser.
+  ;; Raises with the parser's diagnostics on malformed IR.
+  (define (parse-ir ctx name text)
+    (let* ([bv (string->utf8 text)]
+           [len (bytevector-length bv)]
+           [buf (foreign-alloc (fxmax 1 len))])
+      (do ([i 0 (fx+ i 1)])
+          ((fx= i len))
+        (foreign-set! 'unsigned-8 buf i (bytevector-u8-ref bv i)))
+      (let ([membuf (LLVMCreateMemoryBufferWithMemoryRangeCopy buf len name)])
+        (foreign-free buf)
+        (let ([mod-out (foreign-alloc 8)])
+          (foreign-set! 'unsigned-64 mod-out 0 0)
+          ;; ParseIRInContext consumes membuf, success or not
+          (let-values ([(failed msg-ptr)
+                        (base:call-with-out-ptr
+                          (lambda (err-out)
+                            (LLVMParseIRInContext (context-live-ptr ctx)
+                                                  membuf mod-out err-out)))])
+            (let ([mp (foreign-ref 'unsigned-64 mod-out 0)])
+              (foreign-free mod-out)
+              (base:check-bool 'ir:parse-ir failed
+                               (base:cstring->string/dispose msg-ptr))
+              ($make-module mp ctx 'owned)))))))
+
+  ;; ---- walking built IR ------------------------------------------------------
+
+  (define (ptr-chain first next start)
+    (let loop ([p (first start)] [acc '()])
+      (if (base:null-ptr? p) (reverse acc) (loop (next p) (cons p acc)))))
+
+  (define (module-functions m)
+    (ptr-chain LLVMGetFirstFunction LLVMGetNextFunction (module-live-ptr m)))
+  (define (function-blocks f)
+    (ptr-chain LLVMGetFirstBasicBlock LLVMGetNextBasicBlock f))
+  (define (block-instructions bb)
+    (ptr-chain LLVMGetFirstInstruction LLVMGetNextInstruction bb))
+
+  ;; raw LLVMOpcode / predicate enum values; interpretation is the caller's
+  (define (instruction-opcode ins) (LLVMGetInstructionOpcode ins))
+  (define (icmp-predicate ins) (LLVMGetICmpPredicate ins))
+  (define (fcmp-predicate ins) (LLVMGetFCmpPredicate ins))
 
   ;; ---- builders -----------------------------------------------------------
 

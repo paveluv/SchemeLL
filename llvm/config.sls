@@ -3,12 +3,15 @@
 ;;; moving to LLVM 20 touches this file and (llvm raw) only.
 ;;; Import as: (prefix (llvm config) config:)
 (library (llvm config)
-  (export major-version shared-object load!)
+  (export major-version shared-object header-directory load!)
   (import (chezscheme))
 
   (define major-version 19)
 
   (define shared-object "libLLVM-19.so")
+
+  ;; installed LLVM C API headers; the coverage oracle reads enums from here
+  (define header-directory "/usr/include/llvm-c-19/llvm-c")
 
   (define loaded? #f)
 

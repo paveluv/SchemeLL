@@ -38,6 +38,9 @@
     AddFunction GetNamedFunction
     GetParam CountParams
     GetFirstFunction GetNextFunction
+    GetFirstBasicBlock GetNextBasicBlock
+    GetFirstInstruction GetNextInstruction
+    GetInstructionOpcode GetICmpPredicate GetFCmpPredicate
     GetValueName2 SetValueName2 IsDeclaration
     SetLinkage SetFunctionCallConv SetAlignment
     ;; Core: constants
@@ -71,6 +74,8 @@
     TargetMachineEmitToFile TargetMachineEmitToMemoryBuffer
     CreateTargetDataLayout CopyStringRepOfTargetData DisposeTargetData
     GetBufferStart GetBufferSize DisposeMemoryBuffer
+    ;; IRReader.h + memory buffers from bytes
+    ParseIRInContext CreateMemoryBufferWithMemoryRangeCopy
     ;; Transforms/PassBuilder.h (new pass manager)
     RunPasses CreatePassBuilderOptions DisposePassBuilderOptions
     ;; Orc.h / LLJIT.h
@@ -166,6 +171,20 @@
     (foreign-procedure "LLVMGetFirstFunction" (void*) void*))
   (define GetNextFunction
     (foreign-procedure "LLVMGetNextFunction" (void*) void*))
+  (define GetFirstBasicBlock
+    (foreign-procedure "LLVMGetFirstBasicBlock" (void*) void*))
+  (define GetNextBasicBlock
+    (foreign-procedure "LLVMGetNextBasicBlock" (void*) void*))
+  (define GetFirstInstruction
+    (foreign-procedure "LLVMGetFirstInstruction" (void*) void*))
+  (define GetNextInstruction
+    (foreign-procedure "LLVMGetNextInstruction" (void*) void*))
+  (define GetInstructionOpcode         ; LLVMOpcode enum value
+    (foreign-procedure "LLVMGetInstructionOpcode" (void*) int))
+  (define GetICmpPredicate             ; only meaningful on icmp instructions
+    (foreign-procedure "LLVMGetICmpPredicate" (void*) int))
+  (define GetFCmpPredicate             ; only meaningful on fcmp instructions
+    (foreign-procedure "LLVMGetFCmpPredicate" (void*) int))
   (define GetValueName2                ; (value, size_t* out-len) -> const char* (borrowed)
     (foreign-procedure "LLVMGetValueName2" (void* void*) void*))
   (define SetValueName2                ; (value, name, byte-length)
@@ -344,6 +363,12 @@
     (foreign-procedure "LLVMGetBufferSize" (void*) size_t))
   (define DisposeMemoryBuffer
     (foreign-procedure "LLVMDisposeMemoryBuffer" (void*) void))
+
+  ;; --- IRReader.h -----------------------------------------------------------------
+  (define ParseIRInContext             ; (ctx, membuf, module* out, char** err) -> bool (true = failed); consumes membuf
+    (foreign-procedure "LLVMParseIRInContext" (void* void* void* void*) int))
+  (define CreateMemoryBufferWithMemoryRangeCopy ; (data, len, name); copies data
+    (foreign-procedure "LLVMCreateMemoryBufferWithMemoryRangeCopy" (void* size_t string) void*))
 
   ;; --- Transforms/PassBuilder.h ------------------------------------------------
   (define RunPasses                    ; (module, passes-string, tm-or-null, options) -> LLVMErrorRef

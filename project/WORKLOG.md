@@ -2,6 +2,28 @@
 
 Newest entries first. Format: date, Done / Decided / Next.
 
+## 2026-08-22 — coverage plan + harness (levels 1+2)
+
+### Done
+- `project/coverage-plan.md`: verifiable-coverage strategy (oracles from
+  installed headers, exclusion ledger, observed-opcode enforcement, golden
+  round-trips via LLVM's parser, corpus round-trip as the endgame).
+- Implemented levels 1+2: `tests/oracle.sls` extracts enums from Core.h at
+  test time; `tests/test-coverage.ss` builds a 7-entry golden corpus, walks
+  the emitted IR with LLVMGetInstructionOpcode, and enforces
+  observed + excluded = oracle (no gaps, no overlap, no stale exclusions).
+  Verified the harness fails when an exclusion is removed.
+- Bindings added: LLVMParseIRInContext + memory buffers (ir:parse-ir),
+  block/instruction iteration, opcode/predicate getters.
+- Score: opcodes 42+25=67/67, icmp 10/10, fcmp 16/16.
+
+### Next (coverage plan order)
+- Step 2: instruction flags via setters (nsw/nuw/exact/inbounds/fast-math).
+- Step 3: switch, unreachable, indirectbr, freeze, va_arg, addrspacecast,
+  vector/aggregate ops, atomics — shrink the exclusion ledger.
+- Step 4: globals, constant expressions, aggregate types in type grammar.
+- Step 6: ll:disassemble + LLVM test-corpus round-trip (level 3).
+
 ## 2026-08-21 — project start
 
 ### Done
