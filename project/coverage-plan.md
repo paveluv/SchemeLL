@@ -9,7 +9,10 @@ no-wrap flags 3/3 as new bitmask-enum axes; nsw/nuw/exact/disjoint/nneg/
 volatile proven by golden round-trips. Step 3 done 2026-08-22: opcodes
 56+11=67/67 (only exception handling and UserOp1/2 remain excluded);
 atomic orderings 6+1=7/7 and atomicrmw ops 17/17 as new enum axes.
-Level 3 (corpus round-trip via ll:disassemble) still to do. "100% coverage" is meaningless without a
+Step 4 done 2026-08-22: module-level globals; linkage axis 11 + 6
+obsolete = 17/17; constant expressions deferred (opaque pointers made
+the common ones unnecessary). Level 3 (corpus round-trip via
+ll:disassemble) still to do. "100% coverage" is meaningless without a
 machine-checkable oracle and an explicit scope. This plan defines both, and
 three verification levels that turn coverage from a claim into a test that
 fails.

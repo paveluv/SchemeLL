@@ -35,6 +35,10 @@
     set-fast-math-flags! fast-math-flags can-use-fast-math-flags?
     gep-no-wrap-flags
     const-int const-real const-null undef-value const-vector block-address
+    const-array const-struct const-string
+    ;; module-level globals
+    add-global set-initializer! set-global-constant! set-linkage! linkage
+    module-globals
     ;; basic blocks / positioning
     append-block position-at-end! insert-block
     ;; instructions
@@ -329,6 +333,34 @@
 
   ;; the address of a (non-entry) basic block, as a ptr constant
   (define (block-address fn block) (LLVMBlockAddress fn block))
+
+  (define (const-array elem-type constants)
+    (base:call-with-pointer-array constants
+      (lambda (arr n) (LLVMConstArray2 elem-type arr n))))
+
+  (define (const-struct ctx constants)   ; literal (anonymous) struct constant
+    (base:call-with-pointer-array constants
+      (lambda (arr n)
+        (LLVMConstStructInContext (context-live-ptr ctx) arr n 0))))
+
+  ;; bytes of s as an i8 array constant; null-terminate? adds the final \00
+  (define (const-string ctx s null-terminate?)
+    (LLVMConstStringInContext2 (context-live-ptr ctx) s
+                               (bytevector-length (string->utf8 s))
+                               (if null-terminate? 0 1)))
+
+  ;; ---- module-level globals -------------------------------------------------
+
+  (define (add-global m ty name)
+    (LLVMAddGlobal (module-live-ptr m) ty name))
+
+  (define (set-initializer! g const) (LLVMSetInitializer g const))
+  (define (set-global-constant! g) (LLVMSetGlobalConstant g 1))
+  (define (set-linkage! g linkage-int) (LLVMSetLinkage g linkage-int))
+  (define (linkage g) (LLVMGetLinkage g))
+
+  (define (module-globals m)
+    (ptr-chain LLVMGetFirstGlobal LLVMGetNextGlobal (module-live-ptr m)))
 
   ;; ---- basic blocks ------------------------------------------------------------
 

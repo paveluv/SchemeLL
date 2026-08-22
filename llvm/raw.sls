@@ -51,6 +51,10 @@
     ;; Core: constants
     ConstInt ConstReal ConstNull ConstPointerNull GetUndef
     ConstVector BlockAddress
+    ConstArray2 ConstStructInContext ConstStringInContext2
+    ;; module-level globals
+    AddGlobal GetFirstGlobal GetNextGlobal
+    SetInitializer SetGlobalConstant GetLinkage
     ;; Core: basic blocks
     AppendBasicBlockInContext GetInsertBlock PositionBuilderAtEnd
     ;; Core: instruction building
@@ -264,6 +268,28 @@
     (foreign-procedure "LLVMConstVector" (void* unsigned-int) void*))
   (define BlockAddress                 ; (function, basic-block)
     (foreign-procedure "LLVMBlockAddress" (void* void*) void*))
+  (define ConstArray2                  ; (elem-type, constant-array, count)
+    (foreign-procedure "LLVMConstArray2" (void* void* unsigned-64) void*))
+  (define ConstStructInContext         ; (ctx, constant-array, count, packed?)
+    (foreign-procedure "LLVMConstStructInContext"
+                       (void* void* unsigned-int int) void*))
+  (define ConstStringInContext2        ; (ctx, bytes, length, dont-null-terminate?)
+    (foreign-procedure "LLVMConstStringInContext2"
+                       (void* string size_t int) void*))
+
+  ;; --- module-level globals ------------------------------------------------
+  (define AddGlobal                    ; created with external linkage, no init
+    (foreign-procedure "LLVMAddGlobal" (void* void* string) void*))
+  (define GetFirstGlobal
+    (foreign-procedure "LLVMGetFirstGlobal" (void*) void*))
+  (define GetNextGlobal
+    (foreign-procedure "LLVMGetNextGlobal" (void*) void*))
+  (define SetInitializer               ; (global, constant)
+    (foreign-procedure "LLVMSetInitializer" (void* void*) void))
+  (define SetGlobalConstant
+    (foreign-procedure "LLVMSetGlobalConstant" (void* int) void))
+  (define GetLinkage                   ; LLVMLinkage enum value
+    (foreign-procedure "LLVMGetLinkage" (void*) int))
 
   ;; --- Core: basic blocks --------------------------------------------------
   (define AppendBasicBlockInContext

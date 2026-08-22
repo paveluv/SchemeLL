@@ -220,6 +220,43 @@
                             (= %a (ptrtoint ptr (blockaddress @g %tgt) to i64))
                             (ret i64 %a))))))
 
+(t:section "ll: globals")
+
+(define counter-prog
+  '((= @counter (internal global i64 100))
+    (= @step (internal constant i64 7))
+    (define i64 (@tick)
+      (label %entry
+        (= %c (load i64 (ptr @counter)))
+        (= %s (load i64 (ptr @step)))
+        (= %n (add i64 %c %s))
+        (store (i64 %n) (ptr @counter))
+        (ret i64 %n)))))
+
+(define tick (jit:function (ll:jit counter-prog) "tick"))
+(t:check "global keeps state: first tick" (= (tick) 107))
+(t:check "global keeps state: second tick" (= (tick) 114))
+
+(define msg-prog
+  '((= @msg (private constant (3 x i8) (cz "hi")))
+    (define i8 (@first-byte)
+      (label %entry
+        (= %b (load i8 (ptr @msg)))
+        (ret i8 %b)))))
+(t:check "string constant readable"
+         (= ((jit:function (ll:jit msg-prog) "first-byte"))
+            (char->integer #\h)))
+
+(t:check-exn "global definition needs an initializer"
+             (ll:dump '((= @x (global i64)))))
+(t:check-exn "aggregate initializer on scalar global"
+             (ll:dump '((= @x (global i64 ((i64 1) (i64 2)))))))
+(t:check-exn "unbound global in initializer"
+             (ll:dump '((= @x (global ptr @nope)))))
+(t:check-exn "duplicate global name"
+             (ll:dump '((= @x (global i64 0))
+                        (= @x (global i64 1)))))
+
 (t:section "ll: declare -- cross-module calls in one jit")
 
 (define jc (jit:make-context))

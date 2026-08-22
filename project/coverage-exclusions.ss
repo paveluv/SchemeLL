@@ -19,4 +19,11 @@
  (opcode LLVMUserOp2 "internal to LLVM passes; never valid in IR")
  (ordering LLVMAtomicOrderingNotAtomic
            "the absence of an ordering, not a writable one")
+ ;; -- obsolete linkage enum entries: not expressible in textual IR --
+ (linkage LLVMLinkOnceODRAutoHideLinkage "marked obsolete in Core.h")
+ (linkage LLVMDLLImportLinkage "marked obsolete in Core.h")
+ (linkage LLVMDLLExportLinkage "marked obsolete in Core.h")
+ (linkage LLVMGhostLinkage "marked obsolete in Core.h")
+ (linkage LLVMLinkerPrivateLinkage "obsolete; lowered away since LLVM 3")
+ (linkage LLVMLinkerPrivateWeakLinkage "obsolete; lowered away since LLVM 3")
 )

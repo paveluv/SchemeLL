@@ -12,10 +12,17 @@ aggregates (insert/extractvalue with bare integer indices); full atomics
 (fence, atomicrmw with all 17 ops, cmpxchg with weak, atomic load/store
 with ordering after the operands); `undef` operands; and type grammar for
 `(N x TY)` arrays (write `[N x TY]`), `(< N x TY >)` vectors,
-`(struct TY ...)`, and `(ptr addrspace N)`. Not yet supported (rejected
-with clear errors): exception handling, tail-call markers, module-level
-globals, alloca element counts, raw value injection, and non-phi
-references to textually-later values.
+`(struct TY ...)`, and `(ptr addrspace N)`. Step 4 (2026-08-22) added
+module-level globals: `(= @name (linkage? global|constant type init?
+attr*))`, mirroring IR word order (`@x = private constant i64 42` →
+`(= @x (private constant i64 42))`); initializers cover literals,
+undef/zeroinitializer/null, @globals/@functions, `(c "bytes")` /
+`(cz "bytes")` strings, and per-element-typed aggregates
+`((i64 1) (i32 2))`; no initializer = declaration (external/extern_weak
+only). Not yet supported (rejected with clear errors): exception
+handling, tail-call markers, constant expressions (opaque pointers made
+the common ones unnecessary; add on demand), alloca element counts, raw
+value injection, and non-phi references to textually-later values.
 
 First layer of the llscheme DSL tower:
 a notation for LLVM IR that is ordinary Scheme data/syntax, sitting directly

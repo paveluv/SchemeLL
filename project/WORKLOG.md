@@ -39,8 +39,14 @@ Newest entries first. Format: date, Done / Decided / Next.
   axes: atomic orderings 6+1=7/7, atomicrmw ops 17/17. Remaining ledger:
   9 exception-handling opcodes + UserOp1/2.
 
+- Step 4 done: module-level globals as (= @name (linkage? global|constant
+  ty init? attrs)) items — IR word order preserved; initializers: literals,
+  undef/zeroinitializer/null, cross-references to globals/functions,
+  c/cz strings, per-element-typed aggregates. New linkage axis
+  11 + 6 obsolete = 17/17. Constant expressions deferred with rationale
+  (opaque pointers obsoleted the common ones); add on demand.
+
 ### Next (coverage plan order)
-- Step 4: module-level globals, constant expressions.
 - Step 5: exception handling (the last 9 ledger opcodes).
 - Step 6: ll:disassemble + LLVM test-corpus round-trip (level 3).
 

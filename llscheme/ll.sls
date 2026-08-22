@@ -114,6 +114,9 @@
        (ir:block-address
          (hashtable-ref (fstate-globals st) (cadr form) #f)
          (block-by-name st (caddr form)))]
+      [(memq form '(null zeroinitializer))
+       (unless ty (ll-error "null/zeroinitializer needs a type annotation" form))
+       (ir:const-null ty)]
       [(and (integer? form) (exact? form))
        (unless ty (ll-error "integer literal needs a type annotation" form))
        (ir:const-int ty form)]
@@ -581,11 +584,77 @@
                  pairs))))
       (reverse (fstate-phis st))))
 
+  ;; ---- global variables and constant initializers ---------------------------
+
+  ;; LLVMLinkage; cross-checked against the headers by the coverage tests.
+  ;; Keys are the IR keywords.
+  (define linkages
+    '((external . 0) (available_externally . 1)
+      (linkonce . 2) (linkonce_odr . 3)
+      (weak . 5) (weak_odr . 6) (appending . 7)
+      (internal . 8) (private . 9)
+      (extern_weak . 12) (common . 14)))
+
+  ;; initializers: literals, undef/zeroinitializer/null, @globals,
+  ;; (c "bytes") / (cz "bytes"), and per-element-typed aggregates
+  ;; like ((i64 1) (i32 2)) -- exactly how IR spells them.
+  (define (resolve-constant ctx globals ty form)
+    (define (constant-group g)
+      (unless (and (pair? g) (pair? (cdr g)) (null? (cddr g)))
+        (ll-error "aggregate element must be (type constant)" g form))
+      (resolve-constant ctx globals (resolve-type ctx (car g)) (cadr g)))
+    (cond
+      [(eq? form 'undef) (ir:undef-value ty)]
+      [(memq form '(zeroinitializer null)) (ir:const-null ty)]
+      [(global-name? form)
+       (or (hashtable-ref globals form #f)
+           (ll-error "unbound global in initializer" form))]
+      [(and (integer? form) (exact? form)) (ir:const-int ty form)]
+      [(flonum? form) (ir:const-real ty form)]
+      [(and (pair? form) (memq (car form) '(c cz)))
+       (unless (and (= (length form) 2) (string? (cadr form)))
+         (ll-error "expected (c \"bytes\") or (cz \"bytes\")" form))
+       (ir:const-string ctx (cadr form) (eq? (car form) 'cz))]
+      [(and (pair? form) (for-all pair? form))
+       (let ([elts (map constant-group form)])
+         (case (ir:type-kind ty)
+           [(array) (ir:const-array (resolve-type ctx (caar form)) elts)]
+           [(vector) (ir:const-vector elts)]
+           [(struct) (ir:const-struct ctx elts)]
+           [else (ll-error "aggregate initializer for a non-aggregate type"
+                           form)]))]
+      [else (ll-error "invalid constant initializer" form)]))
+
+  ;; (= @name (linkage? global|constant type init? attr*)); no initializer
+  ;; only for external/extern_weak declarations
+  (define (parse-global item)
+    ;; -> (values name linkage-int-or-#f constant? type-form init-form attrs)
+    (unless (and (= (length item) 3) (global-name? (cadr item))
+                 (pair? (caddr item)))
+      (ll-error "expected (= @name (global|constant type ...))" item))
+    (let* ([name (cadr item)]
+           [rhs (caddr item)]
+           [lk (and (symbol? (car rhs)) (assq (car rhs) linkages))]
+           [rhs (if lk (cdr rhs) rhs)])
+      (unless (and (pair? rhs) (memq (car rhs) '(global constant))
+                   (pair? (cdr rhs)))
+        (ll-error "expected global or constant after the linkage" item))
+      (let* ([constant? (eq? (car rhs) 'constant)]
+             [ty-form (cadr rhs)]
+             [rest (cddr rhs)]
+             [attr? (lambda (f) (and (pair? f) (eq? (car f) 'align)))]
+             [init (and (pair? rest) (not (attr? (car rest))) (car rest))]
+             [attrs (if init (cdr rest) rest)])
+        (unless (for-all attr? attrs)
+          (ll-error "malformed global attributes" attrs item))
+        (values name (and lk (cdr lk)) constant? ty-form init attrs))))
+
   ;; ---- module items ---------------------------------------------------------------------
 
   (define (item-kind item)
-    (unless (and (pair? item) (memq (car item) '(define declare)))
-      (ll-error "unknown module item (expected define or declare)" item))
+    (unless (and (pair? item) (memq (car item) '(define declare =)))
+      (ll-error "unknown module item (expected define, declare or (= @name ...))"
+                item))
     (car item))
 
   (define (item-signature item)  ; -> (values ret-type-form name-sym rest)
@@ -601,10 +670,23 @@
                  (local-name? (cadr p)))
       (ll-error "parameter must be (type %name)" p item)))
 
-  ;; pass 1: create every function up front, so bodies may call in any order
+  ;; pass 1: create every function and global variable up front, so bodies
+  ;; and initializers may reference them in any order
   (define (declare-item! ctx m globals item)
     (let ([kind (item-kind item)])
-      (let-values ([(retty-form fname rest) (item-signature item)])
+      (if (eq? kind '=)
+          (let-values ([(name lk constant? ty-form init attrs)
+                        (parse-global item)])
+            (when (hashtable-ref globals name #f)
+              (ll-error "duplicate global name" name))
+            (hashtable-set! globals name
+                            (ir:add-global m (resolve-type ctx ty-form)
+                                           (strip-sigil name))))
+          (declare-function! ctx m globals item kind))))
+
+  (define (declare-function! ctx m globals item kind)
+    (let-values ([(retty-form fname rest) (item-signature item)])
+      (begin
         (when (hashtable-ref globals fname #f)
           (ll-error "duplicate global name" fname))
         (let* ([retty (resolve-type ctx retty-form)]
@@ -619,8 +701,21 @@
                           (ir:add-function m (strip-sigil fname)
                                            (ir:function-type retty ptys)))))))
 
-  ;; pass 2: emit the body of each define
+  ;; pass 2: set global initializers/linkage; emit the body of each define
   (define (emit-item! ctx m globals item)
+    (when (eq? (item-kind item) '=)
+      (let-values ([(name lk constant? ty-form init attrs) (parse-global item)])
+        (let ([g (hashtable-ref globals name #f)])
+          (when lk (ir:set-linkage! g lk))
+          (when constant? (ir:set-global-constant! g))
+          (if init
+              (ir:set-initializer! g
+                (resolve-constant ctx globals (resolve-type ctx ty-form) init))
+              ;; 0 = external, 12 = extern_weak: declarations
+              (unless (memq lk '(0 12))
+                (ll-error "a global without an initializer must be external or extern_weak"
+                          name)))
+          (apply-attrs! g attrs item))))
     (when (eq? (item-kind item) 'define)
       (let-values ([(retty-form fname params) (item-signature item)])
         (let ([f (hashtable-ref globals fname #f)]

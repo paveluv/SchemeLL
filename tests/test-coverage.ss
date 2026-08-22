@@ -23,6 +23,7 @@
 (define gep-flag-oracle (o:bitmask-alist "Core.h" "LLVMGEPFlag"))
 (define ordering-oracle (o:enum-alist "Core.h" "LLVMAtomicOrdering"))
 (define rmw-oracle (o:enum-alist "Core.h" "LLVMAtomicRMWBinOp"))
+(define linkage-oracle (o:enum-alist "Core.h" "LLVMLinkage"))
 
 (define exclusions
   (call-with-input-file "project/coverage-exclusions.ss" read))
@@ -54,6 +55,7 @@
 (define observed-gep-flags (make-eqv-hashtable))
 (define observed-orderings (make-eqv-hashtable))
 (define observed-rmw-ops (make-eqv-hashtable))
+(define observed-linkages (make-eqv-hashtable))
 
 (define (observe-bits! table mask)
   (for-each (lambda (bit)
@@ -63,7 +65,11 @@
 
 (define (observe-module! m)
   (for-each
+    (lambda (g) (hashtable-set! observed-linkages (ir:linkage g) #t))
+    (ir:module-globals m))
+  (for-each
     (lambda (f)
+      (hashtable-set! observed-linkages (ir:linkage f) #t)
       (for-each
         (lambda (bb)
           (for-each
@@ -624,6 +630,55 @@ entry:
 }
 ")
 
+(check-entry! "globals"
+  '((= @counter (global i64 0))
+    (= @answer (private constant i64 42))
+    (= @weakg (weak global i64 1))
+    (= @weako (weak_odr global i64 2))
+    (= @lonce (linkonce global i64 3))
+    (= @lonceo (linkonce_odr global i64 4))
+    (= @intern (internal global i64 5))
+    (= @avail (available_externally global i64 6))
+    (= @commong (common global i64 0))
+    (= @append (appending global (2 x i64) ((i64 1) (i64 2))))
+    (= @extg (external global i64))
+    (= @extw (extern_weak global i64))
+    (= @buf (internal global (4 x i8) zeroinitializer (align 16)))
+    (= @msg (private constant (6 x i8) (cz "hello")))
+    (= @pair (internal constant (struct i64 i32) ((i64 1) (i32 2))))
+    (= @vecc (internal constant (< 2 x i32 >) ((i32 7) (i32 9))))
+    (= @pnull (global ptr null))
+    (= @fptr (global ptr @reader))
+    (define i64 (@reader)
+      (label %entry
+        (= %v (load i64 (ptr @counter)))
+        (ret i64 %v))))
+  "@counter = global i64 0
+@answer = private constant i64 42
+@weakg = weak global i64 1
+@weako = weak_odr global i64 2
+@lonce = linkonce global i64 3
+@lonceo = linkonce_odr global i64 4
+@intern = internal global i64 5
+@avail = available_externally global i64 6
+@commong = common global i64 0
+@append = appending global [2 x i64] [i64 1, i64 2]
+@extg = external global i64
+@extw = extern_weak global i64
+@buf = internal global [4 x i8] zeroinitializer, align 16
+@msg = private constant [6 x i8] c\"hello\\00\"
+@pair = internal constant { i64, i32 } { i64 1, i32 2 }
+@vecc = internal constant <2 x i32> <i32 7, i32 9>
+@pnull = global ptr null
+@fptr = global ptr @reader
+
+define i64 @reader() {
+entry:
+  %v = load i64, ptr @counter
+  ret i64 %v
+}
+")
+
 ;; ---- the ledger check (level 1) -----------------------------------------------------
 
 (t:section "coverage: observed + excluded = oracle (level 1)")
@@ -664,6 +719,7 @@ entry:
 (check-axis! "gep flags" 'gep-flag gep-flag-oracle observed-gep-flags)
 (check-axis! "atomic orderings" 'ordering ordering-oracle observed-orderings)
 (check-axis! "atomicrmw ops" 'rmw-binop rmw-oracle observed-rmw-ops)
+(check-axis! "linkages" 'linkage linkage-oracle observed-linkages)
 
 (t:check "oracle extraction sane: LLVMRet = 1"
          (= (cdr (assq 'LLVMRet opcode-oracle)) 1))
