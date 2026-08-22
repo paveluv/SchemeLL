@@ -169,10 +169,10 @@
 (define vec-prog
   '((define i32 (@splat3 (i32 %x))
       (label %entry
-        (= %v (insertelement ((< 4 x i32 >) undef) (i32 %x) (i64 0)))
-        (= %s (shufflevector ((< 4 x i32 >) %v) ((< 4 x i32 >) undef)
+        (= %v (insertelement ((vector 4 i32) undef) (i32 %x) (i64 0)))
+        (= %s (shufflevector ((vector 4 i32) %v) ((vector 4 i32) undef)
                              (mask 0 0 0 0)))
-        (= %e (extractelement ((< 4 x i32 >) %s) (i64 3)))
+        (= %e (extractelement ((vector 4 i32) %s) (i64 3)))
         (ret i32 %e)))))
 (t:check "vector splat/extract"
          (= ((jit:function (ll:jit vec-prog) "splat3") 7) 7))
@@ -238,7 +238,7 @@
 (t:check "global keeps state: second tick" (= (tick) 114))
 
 (define msg-prog
-  '((= @msg (private constant (3 x i8) (cz "hi")))
+  '((= @msg (private constant (array 3 i8) (cz "hi")))
     (define i8 (@first-byte)
       (label %entry
         (= %b (load i8 (ptr @msg)))

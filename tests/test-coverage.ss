@@ -520,10 +520,10 @@ entry:
 (check-entry! "vectors"
   '((define i32 (@vec (i32 %x))
       (label %entry
-        (= %v (insertelement ((< 4 x i32 >) undef) (i32 %x) (i64 0)))
-        (= %s (shufflevector ((< 4 x i32 >) %v) ((< 4 x i32 >) undef)
+        (= %v (insertelement ((vector 4 i32) undef) (i32 %x) (i64 0)))
+        (= %s (shufflevector ((vector 4 i32) %v) ((vector 4 i32) undef)
                              (mask 0 5 1 4)))
-        (= %e (extractelement ((< 4 x i32 >) %s) (i64 3)))
+        (= %e (extractelement ((vector 4 i32) %s) (i64 3)))
         (ret i32 %e))))
   "define i32 @vec(i32 %x) {
 entry:
@@ -540,8 +540,8 @@ entry:
         (= %a (insertvalue ((struct i64 i32) undef) (i64 %x) 0))
         (= %b (insertvalue ((struct i64 i32) %a) (i32 %y) 1))
         (= %f (extractvalue ((struct i64 i32) %b) 0))
-        (= %arr (insertvalue ((2 x i64) undef) (i64 %f) 1))
-        (= %g (extractvalue ((2 x i64) %arr) 1))
+        (= %arr (insertvalue ((array 2 i64) undef) (i64 %f) 1))
+        (= %g (extractvalue ((array 2 i64) %arr) 1))
         (ret i64 %g))))
   "define i64 @agg(i64 %x, i32 %y) {
 entry:
@@ -640,13 +640,13 @@ entry:
     (= @intern (internal global i64 5))
     (= @avail (available_externally global i64 6))
     (= @commong (common global i64 0))
-    (= @append (appending global (2 x i64) ((i64 1) (i64 2))))
+    (= @append (appending global (array 2 i64) ((i64 1) (i64 2))))
     (= @extg (external global i64))
     (= @extw (extern_weak global i64))
-    (= @buf (internal global (4 x i8) zeroinitializer (align 16)))
-    (= @msg (private constant (6 x i8) (cz "hello")))
+    (= @buf (internal global (array 4 i8) zeroinitializer (align 16)))
+    (= @msg (private constant (array 6 i8) (cz "hello")))
     (= @pair (internal constant (struct i64 i32) ((i64 1) (i32 2))))
-    (= @vecc (internal constant (< 2 x i32 >) ((i32 7) (i32 9))))
+    (= @vecc (internal constant (vector 2 i32) ((i32 7) (i32 9))))
     (= @pnull (global ptr null))
     (= @fptr (global ptr @reader))
     (define i64 (@reader)

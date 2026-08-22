@@ -46,6 +46,10 @@ Newest entries first. Format: date, Done / Decided / Next.
   11 + 6 obsolete = 17/17. Constant expressions deferred with rationale
   (opaque pointers obsoleted the common ones); add on demand.
 
+- Type syntax DECIDED: (array N TY) and (vector N TY) named heads (uniform
+  with struct, nanopass-friendly), replacing the IR-positional
+  (N x TY) / (< N x TY >) forms.
+
 ### Next (coverage plan order)
 - Step 5: exception handling (the last 9 ledger opcodes).
 - Step 6: ll:disassemble + LLVM test-corpus round-trip (level 3).

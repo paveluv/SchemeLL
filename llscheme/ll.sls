@@ -51,8 +51,8 @@
            (let ([n (string->number (substring s 1 (string-length s)))])
              (and (fixnum? n) (positive? n) n)))))
 
-  ;; iN, float, double, ptr, void; (ptr addrspace N); (N x TY) arrays
-  ;; (write [N x TY], IR-style); (< N x TY >) vectors; (struct TY ...)
+  ;; iN, float, double, ptr, void; (ptr addrspace N); (array N TY);
+  ;; (vector N TY); (struct TY ...)
   (define (resolve-type ctx t)
     (cond
       [(symbol? t)
@@ -72,13 +72,12 @@
          [(and (eq? (car t) 'ptr) (= (length t) 3) (eq? (cadr t) 'addrspace)
                (fixnum? (caddr t)) (fx>= (caddr t) 0))
           (ir:pointer-type ctx (caddr t))]
-         [(and (= (length t) 3) (fixnum? (car t)) (positive? (car t))
-               (eq? (cadr t) 'x))
-          (ir:array-type (resolve-type ctx (caddr t)) (car t))]
-         [(and (= (length t) 5) (eq? (car t) '<) (fixnum? (cadr t))
-               (positive? (cadr t)) (eq? (caddr t) 'x)
-               (eq? (car (cddddr t)) '>))
-          (ir:vector-type (resolve-type ctx (cadddr t)) (cadr t))]
+         [(and (eq? (car t) 'array) (= (length t) 3)
+               (fixnum? (cadr t)) (positive? (cadr t)))
+          (ir:array-type (resolve-type ctx (caddr t)) (cadr t))]
+         [(and (eq? (car t) 'vector) (= (length t) 3)
+               (fixnum? (cadr t)) (positive? (cadr t)))
+          (ir:vector-type (resolve-type ctx (caddr t)) (cadr t))]
          [else (ll-error "invalid type" t)])]
       [else (ll-error "invalid type" t)]))
 
