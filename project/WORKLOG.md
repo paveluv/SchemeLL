@@ -33,6 +33,12 @@ Newest entries first. Format: date, Done / Decided / Next.
   enforced by `project/hooks/pre-commit` (`git config core.hooksPath
   project/hooks`, once per clone). `make format` formats everything.
 
+- Wrote the design proposal for the first DSL layer: `project/ll-design.md`
+  ((llscheme ll), LLVM IR as s-expressions). Key calls: mechanical
+  transliteration from textual IR, flat control flow with `(label %x)`
+  instructions, data-interpreter core + thin quasiquoting macro (not
+  per-opcode macros). Awaiting review before implementation.
+
 ### Next
 - Expose Scheme procedures to JIT'd code as absolute symbols
   (`LLVMOrcAbsoluteSymbols` + `foreign-callable` + `lock-object`) — enables two-way
