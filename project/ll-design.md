@@ -18,7 +18,13 @@ into ll line by line (great for learning and debugging). The rewrites:
    instruction, per-operand where IR is per-operand). Typed operand groups
    get parens: `store i64 %a, ptr %b` keeps two groups.
 4. `label %x` targets become `(label %x)`; a block header `x:` becomes the
-   instruction `(label %x)`.
+   instruction `(label %x)`. Note the deliberate deviation: IR spells a block
+   name two ways (`x:` at definition, `%x` at reference), ll spells it one
+   way. Blocks are function-local values in LLVM's `%` namespace (unnamed
+   blocks even share the auto-numbering counter with instruction results),
+   and one-name-one-symbol means the interpreter, future nanopass layers
+   emitting branches, and plain grep all match labels with simple symbol
+   equality. DECIDED 2026-08-21.
 5. phi's `[ 0, %entry ]` becomes `[0 %entry]` (Chez reads brackets as parens).
 6. Trailing attributes become trailing groups: `, align 8` → `(align 8)`.
    Instruction flags stay in position as bare symbols: `icmp ne`, `add nsw`,
