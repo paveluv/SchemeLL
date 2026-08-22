@@ -24,7 +24,8 @@
     type->string
     ;; functions / values
     add-function named-function function-type-of
-    function-param function-params value-name declaration?
+    function-param function-params value-name set-value-name! declaration?
+    set-alignment!
     const-int const-real const-null undef-value
     ;; basic blocks / positioning
     append-block position-at-end! insert-block
@@ -32,7 +33,7 @@
     build-ret build-ret-void build-br build-cond-br
     build-add build-sub build-mul build-sdiv build-udiv build-srem build-urem
     build-and build-or build-xor build-shl build-lshr build-ashr
-    build-fadd build-fsub build-fmul build-fdiv
+    build-fadd build-fsub build-fmul build-fdiv build-frem
     build-neg build-fneg build-not
     build-icmp build-fcmp build-select
     build-phi phi-add-incoming!
@@ -233,6 +234,11 @@
                   (base:call-with-out-ptr (lambda (out) (LLVMGetValueName2 v out)))])
       (base:cstring->string/len str-ptr len)))
 
+  (define (set-value-name! v name)
+    (LLVMSetValueName2 v name (bytevector-length (string->utf8 name))))
+
+  (define (set-alignment! v bytes) (LLVMSetAlignment v bytes))
+
   (define (declaration? f) (not (zero? (LLVMIsDeclaration f))))
 
   (define (const-int ty n)
@@ -285,6 +291,7 @@
   (define-binop build-fsub LLVMBuildFSub)
   (define-binop build-fmul LLVMBuildFMul)
   (define-binop build-fdiv LLVMBuildFDiv)
+  (define-binop build-frem LLVMBuildFRem)
 
   (define-syntax define-unop
     (syntax-rules ()

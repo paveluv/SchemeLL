@@ -12,7 +12,8 @@
 | 1 | `(llvm ir)` | Safe handles (context/module/builder records with ownership state), IR construction. |
 | 1/2 | `(llvm target)` | Native target init, target machines, object/assembly emission. |
 | 2 | `(llvm jit)` | ORC LLJIT: compile modules in memory, look up functions as ready-to-call Scheme procedures. |
-| 3 | `(llscheme ...)` | (future) nanopass-based DSL. |
+| 3 | `(llscheme ll)` | LLVM IR as s-expressions (`project/ll-design.md`): data interpreter over an opcode table; `build`/`jit`/`dump`. |
+| 4 | `(llscheme ...)` | (future) nanopass-based structured DSL, compiling down to ll. |
 
 ## Naming and namespaces
 
@@ -21,7 +22,7 @@
   job, via R6RS `prefix` imports.
 - ALL imports of project libraries are prefixed, everywhere (libraries, tests,
   examples, docs), with these canonical prefixes:
-  `config:` `base:` `ir:` `target:` `jit:` `t:` (tests harness), and
+  `config:` `base:` `ir:` `target:` `jit:` `ll:` `t:` (tests harness), and
   `(prefix (llvm raw) LLVM)` — no colon, so layer-0 call sites reconstruct the
   exact C names (`LLVMBuildAdd`) and read side by side with the headers.
 - `(chezscheme)` / `(rnrs)` are imported unprefixed; that is the only exception.

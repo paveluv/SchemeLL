@@ -38,8 +38,8 @@
     AddFunction GetNamedFunction
     GetParam CountParams
     GetFirstFunction GetNextFunction
-    GetValueName2 IsDeclaration
-    SetLinkage SetFunctionCallConv
+    GetValueName2 SetValueName2 IsDeclaration
+    SetLinkage SetFunctionCallConv SetAlignment
     ;; Core: constants
     ConstInt ConstReal ConstNull ConstPointerNull GetUndef
     ;; Core: basic blocks
@@ -50,7 +50,7 @@
     BuildSDiv BuildUDiv BuildSRem BuildURem
     BuildAnd BuildOr BuildXor
     BuildShl BuildLShr BuildAShr
-    BuildFAdd BuildFSub BuildFMul BuildFDiv
+    BuildFAdd BuildFSub BuildFMul BuildFDiv BuildFRem
     BuildNeg BuildFNeg BuildNot
     BuildICmp BuildFCmp BuildSelect
     BuildPhi AddIncoming
@@ -168,12 +168,16 @@
     (foreign-procedure "LLVMGetNextFunction" (void*) void*))
   (define GetValueName2                ; (value, size_t* out-len) -> const char* (borrowed)
     (foreign-procedure "LLVMGetValueName2" (void* void*) void*))
+  (define SetValueName2                ; (value, name, byte-length)
+    (foreign-procedure "LLVMSetValueName2" (void* string size_t) void))
   (define IsDeclaration
     (foreign-procedure "LLVMIsDeclaration" (void*) int))
   (define SetLinkage
     (foreign-procedure "LLVMSetLinkage" (void* int) void))
   (define SetFunctionCallConv
     (foreign-procedure "LLVMSetFunctionCallConv" (void* unsigned-int) void))
+  (define SetAlignment                 ; (load/store/alloca/global, bytes)
+    (foreign-procedure "LLVMSetAlignment" (void* unsigned-int) void))
 
   ;; --- Core: constants ----------------------------------------------------
   (define ConstInt                     ; (type, value, sign-extend?)
@@ -239,6 +243,8 @@
     (foreign-procedure "LLVMBuildFMul" (void* void* void* string) void*))
   (define BuildFDiv
     (foreign-procedure "LLVMBuildFDiv" (void* void* void* string) void*))
+  (define BuildFRem
+    (foreign-procedure "LLVMBuildFRem" (void* void* void* string) void*))
   (define BuildNeg
     (foreign-procedure "LLVMBuildNeg" (void* void* string) void*))
   (define BuildFNeg

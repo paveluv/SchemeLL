@@ -15,7 +15,7 @@ format:
 
 # Compile libraries to Chez object files (llvm/*.so -- not ELF, gitignored)
 build:
-	echo '(compile-imported-libraries #t)(import (prefix (llvm jit) jit:) (prefix (llvm target) target:) (prefix (llvm ir) ir:))' | $(CHEZ) -q --libdirs $(LIBDIRS)
+	echo '(compile-imported-libraries #t)(import (prefix (llscheme ll) ll:) (prefix (llvm target) target:))' | $(CHEZ) -q --libdirs $(LIBDIRS)
 
 clean:
 	find llvm llscheme tests -name '*.so' -delete 2>/dev/null; \

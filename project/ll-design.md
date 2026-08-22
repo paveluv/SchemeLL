@@ -1,6 +1,12 @@
 # Design proposal: (llscheme ll) — LLVM IR as s-expressions
 
-Status: PROPOSAL, not implemented. First layer of the llscheme DSL tower:
+Status: first slice IMPLEMENTED in `llscheme/ll.sls` (2026-08-21); this
+document is the grammar reference. Not yet supported (rejected with clear
+errors, see "Open questions"): instruction flags (nsw/nuw/inbounds/...),
+vector/array/struct types, module-level globals, alloca element counts,
+raw value injection, and non-phi references to textually-later values.
+
+First layer of the llscheme DSL tower:
 a notation for LLVM IR that is ordinary Scheme data/syntax, sitting directly
 on top of (llvm ir).
 
@@ -26,6 +32,8 @@ into ll line by line (great for learning and debugging). The rewrites:
    emitting branches, and plain grep all match labels with simple symbol
    equality. DECIDED 2026-08-21.
 5. phi's `[ 0, %entry ]` becomes `[0 %entry]` (Chez reads brackets as parens).
+   Note: scheme-format normalizes brackets in quoted data to parens, so in
+   committed sources phi pairs appear as `(0 %entry)`; both read the same.
 6. Trailing attributes become trailing groups: `, align 8` → `(align 8)`.
    Instruction flags stay in position as bare symbols: `icmp ne`, `add nsw`,
    `getelementptr inbounds` → `(icmp ne ...)`, `(add nsw ...)`, ...

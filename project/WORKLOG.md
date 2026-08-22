@@ -39,6 +39,13 @@ Newest entries first. Format: date, Done / Decided / Next.
   instructions, data-interpreter core + thin quasiquoting macro (not
   per-opcode macros). Awaiting review before implementation.
 
+- Implemented `(llscheme ll)` per the design doc: data interpreter with
+  module/function two-pass build (forward calls, forward labels), phi fixups,
+  align attributes, `build`/`jit`/`dump` entry points. @fact runs live.
+  Added `LLVMSetAlignment`/`LLVMSetValueName2`/`LLVMBuildFRem` down-stack.
+  MVP limits (rejected loudly): instruction flags, aggregates, globals,
+  alloca counts, non-phi forward value refs.
+
 ### Next
 - Expose Scheme procedures to JIT'd code as absolute symbols
   (`LLVMOrcAbsoluteSymbols` + `foreign-callable` + `lock-object`) — enables two-way

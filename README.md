@@ -13,6 +13,29 @@ What works today:
   derived automatically from the function's LLVM type. No files touched.
 - **`(llvm target)`** — object file / assembly emission, to disk or to a
   bytevector; new-pass-manager optimization via `run-module-passes!`.
+- **`(llscheme ll)`** — LLVM IR as s-expressions: textual IR transliterated
+  into plain Scheme data (see `project/ll-design.md`), interpreted into real
+  IR. Since programs are lists, quasiquote is the metaprogramming layer.
+
+```scheme
+(import (prefix (llscheme ll) ll:) (prefix (llvm jit) jit:))
+
+(define fact-prog
+  '((define i64 (@fact (i64 %n))
+      (= %isbase (icmp slt i64 %n 2))
+      (br i1 %isbase (label %base) (label %rec))
+      (label %base)
+      (ret i64 1)
+      (label %rec)
+      (= %n1 (sub i64 %n 1))
+      (= %f (call i64 @fact (i64 %n1)))
+      (= %r (mul i64 %n %f))
+      (ret i64 %r))))
+
+(define fact (jit:function (ll:jit fact-prog) "fact"))
+(fact 20)                ; => 2432902008176640000
+(display (ll:dump fact-prog))   ; the same program as textual LLVM IR
+```
 
 ```scheme
 (import (prefix (llvm ir) ir:)
