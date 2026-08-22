@@ -31,10 +31,17 @@ Newest entries first. Format: date, Done / Decided / Next.
   bitmask enums (LLVMFastMath* 7/7, LLVMGEPFlag* 3/3). tail/musttail/notail
   still rejected.
 
+- Step 3 done: 14 opcodes off the ledger (56+11=67/67). switch, indirectbr
+  + blockaddress, unreachable, freeze, va_arg, addrspacecast, vector ops
+  (+ (< N x TY >) type and (mask ...) groups), aggregate ops (+ array/struct
+  types), full atomics (fence, all 17 atomicrmw ops, cmpxchg weak, atomic
+  load/store with orderings), undef operands, (ptr addrspace N). Two new
+  axes: atomic orderings 6+1=7/7, atomicrmw ops 17/17. Remaining ledger:
+  9 exception-handling opcodes + UserOp1/2.
+
 ### Next (coverage plan order)
-- Step 3: switch, unreachable, indirectbr, freeze, va_arg, addrspacecast,
-  vector/aggregate ops, atomics — shrink the exclusion ledger.
-- Step 4: globals, constant expressions, aggregate types in type grammar.
+- Step 4: module-level globals, constant expressions.
+- Step 5: exception handling (the last 9 ledger opcodes).
 - Step 6: ll:disassemble + LLVM test-corpus round-trip (level 3).
 
 ## 2026-08-21 — project start

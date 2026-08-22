@@ -6,8 +6,10 @@ Status: Levels 1+2 IMPLEMENTED (2026-08-22): `tests/test-coverage.ss` +
 opcodes 42 implemented + 25 excluded = 67/67; icmp 10/10; fcmp 16/16.
 Step 2 (instruction flags) done 2026-08-22: fast-math flags 7/7 and gep
 no-wrap flags 3/3 as new bitmask-enum axes; nsw/nuw/exact/disjoint/nneg/
-volatile proven by golden round-trips. Level 3 (corpus round-trip via
-ll:disassemble) still to do. "100% coverage" is meaningless without a
+volatile proven by golden round-trips. Step 3 done 2026-08-22: opcodes
+56+11=67/67 (only exception handling and UserOp1/2 remain excluded);
+atomic orderings 6+1=7/7 and atomicrmw ops 17/17 as new enum axes.
+Level 3 (corpus round-trip via ll:disassemble) still to do. "100% coverage" is meaningless without a
 machine-checkable oracle and an explicit scope. This plan defines both, and
 three verification levels that turn coverage from a claim into a test that
 fails.

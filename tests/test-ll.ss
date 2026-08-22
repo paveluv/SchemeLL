@@ -138,6 +138,88 @@
                 (contains? s "sdiv exact") (contains? s "load volatile")
                 (contains? s "getelementptr inbounds"))))
 
+(t:section "ll: step-3 instructions execute")
+
+(define sw-prog
+  '((define i64 (@classify (i64 %x))
+      (label %entry
+        (switch i64 %x (label %other)
+          ((i64 0) (label %zero))
+          ((i64 1) (label %one))))
+      (label %zero (ret i64 100))
+      (label %one (ret i64 200))
+      (label %other (ret i64 300)))))
+(define classify (jit:function (ll:jit sw-prog) "classify"))
+(t:check "switch: case 0" (= (classify 0) 100))
+(t:check "switch: case 1" (= (classify 1) 200))
+(t:check "switch: default" (= (classify 7) 300))
+
+(define atomic-prog
+  '((define i64 (@bump (i64 %v))
+      (label %entry
+        (= %p (alloca i64))
+        (store (i64 %v) (ptr %p))
+        (= %old (atomicrmw add (ptr %p) (i64 5) seq_cst))
+        (= %new (load atomic i64 (ptr %p) acquire (align 8)))
+        (= %r (add i64 %old %new))
+        (ret i64 %r)))))
+(t:check "atomicrmw + atomic load"
+         (= ((jit:function (ll:jit atomic-prog) "bump") 10) 25))
+
+(define vec-prog
+  '((define i32 (@splat3 (i32 %x))
+      (label %entry
+        (= %v (insertelement ((< 4 x i32 >) undef) (i32 %x) (i64 0)))
+        (= %s (shufflevector ((< 4 x i32 >) %v) ((< 4 x i32 >) undef)
+                             (mask 0 0 0 0)))
+        (= %e (extractelement ((< 4 x i32 >) %s) (i64 3)))
+        (ret i32 %e)))))
+(t:check "vector splat/extract"
+         (= ((jit:function (ll:jit vec-prog) "splat3") 7) 7))
+
+(define agg-prog
+  '((define i64 (@through (i64 %x))
+      (label %entry
+        (= %a (insertvalue ((struct i64 i1) undef) (i64 %x) 0))
+        (= %f (extractvalue ((struct i64 i1) %a) 0))
+        (ret i64 %f)))))
+(t:check "aggregate insert/extract"
+         (= ((jit:function (ll:jit agg-prog) "through") 42) 42))
+
+(t:check-exn "unknown atomic ordering"
+             (ll:dump '((define i64 (@f (ptr %p))
+                          (label %entry
+                            (= %v (atomicrmw add (ptr %p) (i64 1) sequential))
+                            (ret i64 %v))))))
+(t:check-exn "unknown atomicrmw op"
+             (ll:dump '((define i64 (@f (ptr %p))
+                          (label %entry
+                            (= %v (atomicrmw frob (ptr %p) (i64 1) seq_cst))
+                            (ret i64 %v))))))
+(t:check-exn "weak on non-cmpxchg"
+             (ll:dump '((define i64 (@f (i64 %x))
+                          (label %entry
+                            (= %y (add weak i64 %x 1))
+                            (ret i64 %y))))))
+(t:check-exn "ordering without atomic flag"
+             (ll:dump '((define i64 (@f (ptr %p))
+                          (label %entry
+                            (= %v (load i64 (ptr %p) seq_cst))
+                            (ret i64 %v))))))
+(t:check-exn "atomic flag without ordering"
+             (ll:dump '((define i64 (@f (ptr %p))
+                          (label %entry
+                            (= %v (load atomic i64 (ptr %p) (align 8)))
+                            (ret i64 %v))))))
+(t:check-exn "blockaddress of another function"
+             (ll:dump '((define i64 (@g (i64 %x))
+                          (label %entry (ret i64 %x))
+                          (label %tgt (ret i64 0)))
+                        (define i64 (@f (i64 %x))
+                          (label %entry
+                            (= %a (ptrtoint ptr (blockaddress @g %tgt) to i64))
+                            (ret i64 %a))))))
+
 (t:section "ll: declare -- cross-module calls in one jit")
 
 (define jc (jit:make-context))

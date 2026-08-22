@@ -30,7 +30,7 @@
     Int32TypeInContext Int64TypeInContext IntTypeInContext
     FloatTypeInContext DoubleTypeInContext
     PointerTypeInContext
-    FunctionType StructTypeInContext ArrayType2
+    FunctionType StructTypeInContext ArrayType2 VectorType
     GetTypeKind GetIntTypeWidth
     GetReturnType CountParamTypes GetParamTypes IsFunctionVarArg
     PrintTypeToString TypeOf GlobalGetValueType
@@ -50,10 +50,12 @@
     GEPGetNoWrapFlags
     ;; Core: constants
     ConstInt ConstReal ConstNull ConstPointerNull GetUndef
+    ConstVector BlockAddress
     ;; Core: basic blocks
     AppendBasicBlockInContext GetInsertBlock PositionBuilderAtEnd
     ;; Core: instruction building
     BuildRet BuildRetVoid BuildBr BuildCondBr
+    BuildSwitch AddCase BuildIndirectBr AddDestination BuildUnreachable
     BuildAdd BuildSub BuildMul
     BuildSDiv BuildUDiv BuildSRem BuildURem
     BuildAnd BuildOr BuildXor
@@ -67,7 +69,13 @@
     BuildTrunc BuildZExt BuildSExt
     BuildSIToFP BuildUIToFP BuildFPToSI BuildFPToUI
     BuildFPTrunc BuildFPExt
-    BuildPtrToInt BuildIntToPtr BuildBitCast
+    BuildPtrToInt BuildIntToPtr BuildBitCast BuildAddrSpaceCast
+    BuildFreeze BuildVAArg
+    BuildExtractElement BuildInsertElement BuildShuffleVector
+    BuildExtractValue BuildInsertValue
+    BuildFence BuildAtomicRMW BuildAtomicCmpXchg
+    SetOrdering GetOrdering SetWeak GetWeak
+    GetAtomicRMWBinOp GetCmpXchgSuccessOrdering GetCmpXchgFailureOrdering
     ;; Analysis
     VerifyModule VerifyFunction
     ;; Error.h
@@ -144,6 +152,8 @@
     (foreign-procedure "LLVMStructTypeInContext" (void* void* unsigned-int int) void*))
   (define ArrayType2                   ; (elem-type, count)
     (foreign-procedure "LLVMArrayType2" (void* unsigned-64) void*))
+  (define VectorType                   ; (elem-type, count)
+    (foreign-procedure "LLVMVectorType" (void* unsigned-int) void*))
   (define GetTypeKind
     (foreign-procedure "LLVMGetTypeKind" (void*) int))
   (define GetIntTypeWidth
@@ -250,6 +260,10 @@
     (foreign-procedure "LLVMConstPointerNull" (void*) void*))
   (define GetUndef
     (foreign-procedure "LLVMGetUndef" (void*) void*))
+  (define ConstVector                  ; (scalar-constant-array, count)
+    (foreign-procedure "LLVMConstVector" (void* unsigned-int) void*))
+  (define BlockAddress                 ; (function, basic-block)
+    (foreign-procedure "LLVMBlockAddress" (void* void*) void*))
 
   ;; --- Core: basic blocks --------------------------------------------------
   (define AppendBasicBlockInContext
@@ -268,6 +282,16 @@
     (foreign-procedure "LLVMBuildBr" (void* void*) void*))
   (define BuildCondBr
     (foreign-procedure "LLVMBuildCondBr" (void* void* void* void*) void*))
+  (define BuildSwitch                  ; (builder, value, else-block, ncases-hint)
+    (foreign-procedure "LLVMBuildSwitch" (void* void* void* unsigned-int) void*))
+  (define AddCase                      ; (switch, on-const, dest-block)
+    (foreign-procedure "LLVMAddCase" (void* void* void*) void))
+  (define BuildIndirectBr              ; (builder, address, ndests-hint)
+    (foreign-procedure "LLVMBuildIndirectBr" (void* void* unsigned-int) void*))
+  (define AddDestination               ; (indirectbr, dest-block)
+    (foreign-procedure "LLVMAddDestination" (void* void*) void))
+  (define BuildUnreachable
+    (foreign-procedure "LLVMBuildUnreachable" (void*) void*))
 
   (define BuildAdd
     (foreign-procedure "LLVMBuildAdd" (void* void* void* string) void*))
@@ -360,6 +384,44 @@
     (foreign-procedure "LLVMBuildIntToPtr" (void* void* void* string) void*))
   (define BuildBitCast
     (foreign-procedure "LLVMBuildBitCast" (void* void* void* string) void*))
+  (define BuildAddrSpaceCast
+    (foreign-procedure "LLVMBuildAddrSpaceCast" (void* void* void* string) void*))
+  (define BuildFreeze
+    (foreign-procedure "LLVMBuildFreeze" (void* void* string) void*))
+  (define BuildVAArg                   ; (builder, va-list-ptr, type, name)
+    (foreign-procedure "LLVMBuildVAArg" (void* void* void* string) void*))
+  (define BuildExtractElement          ; (builder, vector, index, name)
+    (foreign-procedure "LLVMBuildExtractElement" (void* void* void* string) void*))
+  (define BuildInsertElement           ; (builder, vector, element, index, name)
+    (foreign-procedure "LLVMBuildInsertElement" (void* void* void* void* string) void*))
+  (define BuildShuffleVector           ; (builder, v1, v2, const-mask, name)
+    (foreign-procedure "LLVMBuildShuffleVector" (void* void* void* void* string) void*))
+  (define BuildExtractValue            ; (builder, aggregate, index, name)
+    (foreign-procedure "LLVMBuildExtractValue" (void* void* unsigned-int string) void*))
+  (define BuildInsertValue             ; (builder, aggregate, element, index, name)
+    (foreign-procedure "LLVMBuildInsertValue" (void* void* void* unsigned-int string) void*))
+  ;; atomics; ordering and rmw-op ints match the enums in Core.h. The
+  ;; builders below take no name parameter -- name via SetValueName2.
+  (define BuildFence                   ; (builder, ordering, single-thread?, name)
+    (foreign-procedure "LLVMBuildFence" (void* int int string) void*))
+  (define BuildAtomicRMW               ; (builder, rmw-op, ptr, value, ordering, single-thread?)
+    (foreign-procedure "LLVMBuildAtomicRMW" (void* int void* void* int int) void*))
+  (define BuildAtomicCmpXchg          ; (builder, ptr, cmp, new, succ-ord, fail-ord, single-thread?)
+    (foreign-procedure "LLVMBuildAtomicCmpXchg" (void* void* void* void* int int int) void*))
+  (define SetOrdering                  ; load/store (and other memory insts)
+    (foreign-procedure "LLVMSetOrdering" (void* int) void))
+  (define GetOrdering
+    (foreign-procedure "LLVMGetOrdering" (void*) int))
+  (define SetWeak                      ; cmpxchg only
+    (foreign-procedure "LLVMSetWeak" (void* int) void))
+  (define GetWeak
+    (foreign-procedure "LLVMGetWeak" (void*) int))
+  (define GetAtomicRMWBinOp
+    (foreign-procedure "LLVMGetAtomicRMWBinOp" (void*) int))
+  (define GetCmpXchgSuccessOrdering
+    (foreign-procedure "LLVMGetCmpXchgSuccessOrdering" (void*) int))
+  (define GetCmpXchgFailureOrdering
+    (foreign-procedure "LLVMGetCmpXchgFailureOrdering" (void*) int))
 
   ;; --- Analysis.h -----------------------------------------------------------
   ;; action: 0 = abort-process, 1 = print-message, 2 = return-status

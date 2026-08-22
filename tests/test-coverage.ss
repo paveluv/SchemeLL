@@ -21,6 +21,8 @@
 (define real-pred-oracle (o:enum-alist "Core.h" "LLVMRealPredicate"))
 (define fmf-oracle (o:bitmask-alist "Core.h" "LLVMFastMath"))
 (define gep-flag-oracle (o:bitmask-alist "Core.h" "LLVMGEPFlag"))
+(define ordering-oracle (o:enum-alist "Core.h" "LLVMAtomicOrdering"))
+(define rmw-oracle (o:enum-alist "Core.h" "LLVMAtomicRMWBinOp"))
 
 (define exclusions
   (call-with-input-file "project/coverage-exclusions.ss" read))
@@ -38,6 +40,10 @@
 (define icmp-opcode (cdr (assq 'LLVMICmp opcode-oracle)))
 (define fcmp-opcode (cdr (assq 'LLVMFCmp opcode-oracle)))
 (define gep-opcode (cdr (assq 'LLVMGetElementPtr opcode-oracle)))
+(define load-opcode (cdr (assq 'LLVMLoad opcode-oracle)))
+(define store-opcode (cdr (assq 'LLVMStore opcode-oracle)))
+(define rmw-opcode (cdr (assq 'LLVMAtomicRMW opcode-oracle)))
+(define cmpxchg-opcode (cdr (assq 'LLVMAtomicCmpXchg opcode-oracle)))
 
 ;; ---- observation ------------------------------------------------------------
 
@@ -46,6 +52,8 @@
 (define observed-real-preds (make-eqv-hashtable))
 (define observed-fmf (make-eqv-hashtable))
 (define observed-gep-flags (make-eqv-hashtable))
+(define observed-orderings (make-eqv-hashtable))
+(define observed-rmw-ops (make-eqv-hashtable))
 
 (define (observe-bits! table mask)
   (for-each (lambda (bit)
@@ -68,6 +76,17 @@
                   (hashtable-set! observed-real-preds (ir:fcmp-predicate ins) #t))
                 (when (= op gep-opcode)
                   (observe-bits! observed-gep-flags (ir:gep-no-wrap-flags ins)))
+                (when (or (= op load-opcode) (= op store-opcode))
+                  (let ([o (ir:instruction-ordering ins)])
+                    (unless (zero? o)
+                      (hashtable-set! observed-orderings o #t))))
+                (when (= op rmw-opcode)
+                  (hashtable-set! observed-rmw-ops (ir:atomicrmw-binop ins) #t))
+                (when (= op cmpxchg-opcode)
+                  (hashtable-set! observed-orderings
+                                  (ir:cmpxchg-success-ordering ins) #t)
+                  (hashtable-set! observed-orderings
+                                  (ir:cmpxchg-failure-ordering ins) #t))
                 (when (ir:can-use-fast-math-flags? ins)
                   (observe-bits! observed-fmf (ir:fast-math-flags ins)))))
             (ir:block-instructions bb)))
@@ -430,6 +449,181 @@ entry:
 }
 ")
 
+(check-entry! "control2"
+  '((define i64 (@control (i64 %x))
+      (label %entry
+        (= %fz (freeze i64 %x))
+        (switch i64 %fz (label %other)
+          ((i64 0) (label %zero))
+          ((i64 1) (label %one))))
+      (label %zero
+        (ret i64 100))
+      (label %one
+        (ret i64 200))
+      (label %other
+        (indirectbr (ptr (blockaddress @control %zero))
+          (label %zero) (label %one)))
+      (label %dead
+        (unreachable))))
+  "define i64 @control(i64 %x) {
+entry:
+  %fz = freeze i64 %x
+  switch i64 %fz, label %other [
+    i64 0, label %zero
+    i64 1, label %one
+  ]
+
+zero:
+  ret i64 100
+
+one:
+  ret i64 200
+
+other:
+  indirectbr ptr blockaddress(@control, %zero), [label %zero, label %one]
+
+dead:
+  unreachable
+}
+")
+
+(check-entry! "vaarg"
+  '((define i64 (@nextva (ptr %ap))
+      (label %entry
+        (= %v (va_arg (ptr %ap) i64))
+        (ret i64 %v))))
+  "define i64 @nextva(ptr %ap) {
+entry:
+  %v = va_arg ptr %ap, i64
+  ret i64 %v
+}
+")
+
+(check-entry! "addrspace"
+  '((define (ptr addrspace 1) (@ascast (ptr %p))
+      (label %entry
+        (= %q (addrspacecast ptr %p to (ptr addrspace 1)))
+        (ret (ptr addrspace 1) %q))))
+  "define ptr addrspace(1) @ascast(ptr %p) {
+entry:
+  %q = addrspacecast ptr %p to ptr addrspace(1)
+  ret ptr addrspace(1) %q
+}
+")
+
+(check-entry! "vectors"
+  '((define i32 (@vec (i32 %x))
+      (label %entry
+        (= %v (insertelement ((< 4 x i32 >) undef) (i32 %x) (i64 0)))
+        (= %s (shufflevector ((< 4 x i32 >) %v) ((< 4 x i32 >) undef)
+                             (mask 0 5 1 4)))
+        (= %e (extractelement ((< 4 x i32 >) %s) (i64 3)))
+        (ret i32 %e))))
+  "define i32 @vec(i32 %x) {
+entry:
+  %v = insertelement <4 x i32> undef, i32 %x, i64 0
+  %s = shufflevector <4 x i32> %v, <4 x i32> undef, <4 x i32> <i32 0, i32 5, i32 1, i32 4>
+  %e = extractelement <4 x i32> %s, i64 3
+  ret i32 %e
+}
+")
+
+(check-entry! "aggregates"
+  '((define i64 (@agg (i64 %x) (i32 %y))
+      (label %entry
+        (= %a (insertvalue ((struct i64 i32) undef) (i64 %x) 0))
+        (= %b (insertvalue ((struct i64 i32) %a) (i32 %y) 1))
+        (= %f (extractvalue ((struct i64 i32) %b) 0))
+        (= %arr (insertvalue ((2 x i64) undef) (i64 %f) 1))
+        (= %g (extractvalue ((2 x i64) %arr) 1))
+        (ret i64 %g))))
+  "define i64 @agg(i64 %x, i32 %y) {
+entry:
+  %a = insertvalue { i64, i32 } undef, i64 %x, 0
+  %b = insertvalue { i64, i32 } %a, i32 %y, 1
+  %f = extractvalue { i64, i32 } %b, 0
+  %arr = insertvalue [2 x i64] undef, i64 %f, 1
+  %g = extractvalue [2 x i64] %arr, 1
+  ret i64 %g
+}
+")
+
+(check-entry! "atomics"
+  '((define i64 (@atomics (ptr %p) (i64 %v))
+      (label %entry
+        (fence seq_cst)
+        (fence acquire)
+        (store atomic (i64 %v) (ptr %p) release (align 8))
+        (store atomic (i64 %v) (ptr %p) monotonic (align 8))
+        (store atomic (i64 %v) (ptr %p) seq_cst (align 8))
+        (= %l1 (load atomic i64 (ptr %p) unordered (align 8)))
+        (= %l2 (load atomic i64 (ptr %p) acquire (align 8)))
+        (= %old (atomicrmw volatile add (ptr %p) (i64 %v) seq_cst))
+        (= %pair (cmpxchg weak (ptr %p) (i64 %l1) (i64 %old) acq_rel monotonic))
+        (= %val (extractvalue ((struct i64 i1) %pair) 0))
+        (= %r (add i64 %l2 %val))
+        (ret i64 %r))))
+  "define i64 @atomics(ptr %p, i64 %v) {
+entry:
+  fence seq_cst
+  fence acquire
+  store atomic i64 %v, ptr %p release, align 8
+  store atomic i64 %v, ptr %p monotonic, align 8
+  store atomic i64 %v, ptr %p seq_cst, align 8
+  %l1 = load atomic i64, ptr %p unordered, align 8
+  %l2 = load atomic i64, ptr %p acquire, align 8
+  %old = atomicrmw volatile add ptr %p, i64 %v seq_cst, align 8
+  %pair = cmpxchg weak ptr %p, i64 %l1, i64 %old acq_rel monotonic, align 8
+  %val = extractvalue { i64, i1 } %pair, 0
+  %r = add i64 %l2, %val
+  ret i64 %r
+}
+")
+
+(check-entry! "rmw-ops"
+  '((define void (@rmws (ptr %p) (i64 %v) (ptr %q) (double %d))
+      (label %entry
+        (= %r0 (atomicrmw xchg (ptr %p) (i64 %v) monotonic))
+        (= %r1 (atomicrmw add (ptr %p) (i64 %v) monotonic))
+        (= %r2 (atomicrmw sub (ptr %p) (i64 %v) monotonic))
+        (= %r3 (atomicrmw and (ptr %p) (i64 %v) monotonic))
+        (= %r4 (atomicrmw nand (ptr %p) (i64 %v) monotonic))
+        (= %r5 (atomicrmw or (ptr %p) (i64 %v) monotonic))
+        (= %r6 (atomicrmw xor (ptr %p) (i64 %v) monotonic))
+        (= %r7 (atomicrmw max (ptr %p) (i64 %v) monotonic))
+        (= %r8 (atomicrmw min (ptr %p) (i64 %v) monotonic))
+        (= %r9 (atomicrmw umax (ptr %p) (i64 %v) monotonic))
+        (= %r10 (atomicrmw umin (ptr %p) (i64 %v) monotonic))
+        (= %r11 (atomicrmw fadd (ptr %q) (double %d) monotonic))
+        (= %r12 (atomicrmw fsub (ptr %q) (double %d) monotonic))
+        (= %r13 (atomicrmw fmax (ptr %q) (double %d) monotonic))
+        (= %r14 (atomicrmw fmin (ptr %q) (double %d) monotonic))
+        (= %r15 (atomicrmw uinc_wrap (ptr %p) (i64 %v) monotonic))
+        (= %r16 (atomicrmw udec_wrap (ptr %p) (i64 %v) monotonic))
+        (ret void))))
+  "define void @rmws(ptr %p, i64 %v, ptr %q, double %d) {
+entry:
+  %r0 = atomicrmw xchg ptr %p, i64 %v monotonic, align 8
+  %r1 = atomicrmw add ptr %p, i64 %v monotonic, align 8
+  %r2 = atomicrmw sub ptr %p, i64 %v monotonic, align 8
+  %r3 = atomicrmw and ptr %p, i64 %v monotonic, align 8
+  %r4 = atomicrmw nand ptr %p, i64 %v monotonic, align 8
+  %r5 = atomicrmw or ptr %p, i64 %v monotonic, align 8
+  %r6 = atomicrmw xor ptr %p, i64 %v monotonic, align 8
+  %r7 = atomicrmw max ptr %p, i64 %v monotonic, align 8
+  %r8 = atomicrmw min ptr %p, i64 %v monotonic, align 8
+  %r9 = atomicrmw umax ptr %p, i64 %v monotonic, align 8
+  %r10 = atomicrmw umin ptr %p, i64 %v monotonic, align 8
+  %r11 = atomicrmw fadd ptr %q, double %d monotonic, align 8
+  %r12 = atomicrmw fsub ptr %q, double %d monotonic, align 8
+  %r13 = atomicrmw fmax ptr %q, double %d monotonic, align 8
+  %r14 = atomicrmw fmin ptr %q, double %d monotonic, align 8
+  %r15 = atomicrmw uinc_wrap ptr %p, i64 %v monotonic, align 8
+  %r16 = atomicrmw udec_wrap ptr %p, i64 %v monotonic, align 8
+  ret void
+}
+")
+
 ;; ---- the ledger check (level 1) -----------------------------------------------------
 
 (t:section "coverage: observed + excluded = oracle (level 1)")
@@ -468,6 +662,8 @@ entry:
 (check-axis! "fcmp predicates" 'real-predicate real-pred-oracle observed-real-preds)
 (check-axis! "fast-math flags" 'fast-math fmf-oracle observed-fmf)
 (check-axis! "gep flags" 'gep-flag gep-flag-oracle observed-gep-flags)
+(check-axis! "atomic orderings" 'ordering ordering-oracle observed-orderings)
+(check-axis! "atomicrmw ops" 'rmw-binop rmw-oracle observed-rmw-ops)
 
 (t:check "oracle extraction sane: LLVMRet = 1"
          (= (cdr (assq 'LLVMRet opcode-oracle)) 1))

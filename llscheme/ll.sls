@@ -51,17 +51,36 @@
            (let ([n (string->number (substring s 1 (string-length s)))])
              (and (fixnum? n) (positive? n) n)))))
 
+  ;; iN, float, double, ptr, void; (ptr addrspace N); (N x TY) arrays
+  ;; (write [N x TY], IR-style); (< N x TY >) vectors; (struct TY ...)
   (define (resolve-type ctx t)
-    (unless (symbol? t) (ll-error "invalid type" t))
-    (case t
-      [(ptr) (ir:pointer-type ctx)]
-      [(float) (ir:float-type ctx)]
-      [(double) (ir:double-type ctx)]
-      [(void) (ir:void-type ctx)]
-      [else
-       (let ([bits (int-bits t)])
-         (unless bits (ll-error "unknown type" t))
-         (ir:int-type ctx bits))]))
+    (cond
+      [(symbol? t)
+       (case t
+         [(ptr) (ir:pointer-type ctx)]
+         [(float) (ir:float-type ctx)]
+         [(double) (ir:double-type ctx)]
+         [(void) (ir:void-type ctx)]
+         [else
+          (let ([bits (int-bits t)])
+            (unless bits (ll-error "unknown type" t))
+            (ir:int-type ctx bits))])]
+      [(pair? t)
+       (cond
+         [(eq? (car t) 'struct)
+          (ir:struct-type ctx (map (lambda (e) (resolve-type ctx e)) (cdr t)))]
+         [(and (eq? (car t) 'ptr) (= (length t) 3) (eq? (cadr t) 'addrspace)
+               (fixnum? (caddr t)) (fx>= (caddr t) 0))
+          (ir:pointer-type ctx (caddr t))]
+         [(and (= (length t) 3) (fixnum? (car t)) (positive? (car t))
+               (eq? (cadr t) 'x))
+          (ir:array-type (resolve-type ctx (caddr t)) (car t))]
+         [(and (= (length t) 5) (eq? (car t) '<) (fixnum? (cadr t))
+               (positive? (cadr t)) (eq? (caddr t) 'x)
+               (eq? (car (cddddr t)) '>))
+          (ir:vector-type (resolve-type ctx (cadddr t)) (cadr t))]
+         [else (ll-error "invalid type" t)])]
+      [else (ll-error "invalid type" t)]))
 
   ;; ---- per-function build state ------------------------------------------------
 
@@ -74,6 +93,9 @@
   ;; (then literals must come as a (type value) group).
   (define (resolve-operand st ty form)
     (cond
+      [(eq? form 'undef)
+       (unless ty (ll-error "undef needs a type annotation" form))
+       (ir:undef-value ty)]
       [(local-name? form)
        (or (hashtable-ref (fstate-locals st) form #f)
            (ll-error "unbound local (only phi may reference later definitions)"
@@ -81,6 +103,17 @@
       [(global-name? form)
        (or (hashtable-ref (fstate-globals st) form #f)
            (ll-error "unbound global" form (fstate-fname st)))]
+      [(and (pair? form) (eq? (car form) 'blockaddress))
+       ;; (blockaddress @function %label) -- a ptr constant
+       (unless (and (= (length form) 3) (global-name? (cadr form))
+                    (local-name? (caddr form)))
+         (ll-error "expected (blockaddress @function %label)" form))
+       (unless (eq? (cadr form) (fstate-fname st))
+         (ll-error "blockaddress currently supports only the enclosing function"
+                   form (fstate-fname st)))
+       (ir:block-address
+         (hashtable-ref (fstate-globals st) (cadr form) #f)
+         (block-by-name st (caddr form)))]
       [(and (integer? form) (exact? form))
        (unless ty (ll-error "integer literal needs a type annotation" form))
        (ir:const-int ty form)]
@@ -144,7 +177,33 @@
       (fptosi . ,ir:build-fp->si) (fptoui . ,ir:build-fp->ui)
       (sitofp . ,ir:build-si->fp) (uitofp . ,ir:build-ui->fp)
       (ptrtoint . ,ir:build-ptr->int) (inttoptr . ,ir:build-int->ptr)
-      (bitcast . ,ir:build-bitcast)))
+      (bitcast . ,ir:build-bitcast) (addrspacecast . ,ir:build-addrspacecast)))
+
+  ;; LLVMAtomicOrdering; cross-checked against the headers by the coverage
+  ;; tests. NotAtomic (0) is the absence of an ordering, not writable.
+  (define atomic-orderings
+    '((unordered . 1) (monotonic . 2) (acquire . 4) (release . 5)
+      (acq_rel . 6) (seq_cst . 7)))
+
+  (define (ordering-int sym form)
+    (cond
+      [(and (symbol? sym) (assq sym atomic-orderings)) => cdr]
+      [else (ll-error "unknown atomic ordering" sym form)]))
+
+  ;; trailing [ordering] before the attribute groups of atomic load/store
+  (define (split-ordering rest form)
+    (if (and (pair? rest) (symbol? (car rest)))
+        (cond
+          [(assq (car rest) atomic-orderings) =>
+           (lambda (p) (values (cdr p) (cdr rest)))]
+          [else (ll-error "unknown ordering or attribute" (car rest) form)])
+        (values #f rest)))
+
+  ;; LLVMAtomicRMWBinOp; cross-checked by the coverage tests
+  (define rmw-ops
+    '((xchg . 0) (add . 1) (sub . 2) (and . 3) (nand . 4) (or . 5) (xor . 6)
+      (max . 7) (min . 8) (umax . 9) (umin . 10) (fadd . 11) (fsub . 12)
+      (fmax . 13) (fmin . 14) (uinc_wrap . 15) (udec_wrap . 16)))
 
   ;; ---- instruction flags -----------------------------------------------------
   ;; Flags sit where IR writes them: between the opcode and the type (for
@@ -167,7 +226,7 @@
   (define exact-flag-ops '(udiv sdiv lshr ashr))
 
   (define flag-symbols
-    '(nsw nuw exact disjoint nneg volatile inbounds nusw
+    '(nsw nuw exact disjoint nneg volatile atomic weak inbounds nusw
        reassoc nnan ninf nsz arcp contract afn fast))
 
   ;; call-position flags we do not support yet -- reject loudly rather
@@ -199,8 +258,13 @@
                       (ir:set-disjoint! v) mask]
                      [(nneg) (require-flag-op op '(zext) flag form)
                       (ir:set-nneg! v) mask]
-                     [(volatile) (require-flag-op op '(load store) flag form)
+                     [(volatile)
+                      (require-flag-op op '(load store atomicrmw cmpxchg) flag form)
                       (ir:set-volatile! v) mask]
+                     [(atomic) ; ordering applied by the load/store handler
+                      (require-flag-op op '(load store) flag form) mask]
+                     [(weak) (require-flag-op op '(cmpxchg) flag form)
+                      (ir:set-weak! v) mask]
                      [(inbounds nusw)
                       (ll-error "flag is only valid on getelementptr" flag form)]
                      [else (bitwise-ior mask (cdr (assq flag fmf-bits)))]))
@@ -218,6 +282,15 @@
                    [else (ll-error "flag is not valid on getelementptr" flag form)]))
                0 flags))
 
+  ;; atomic load/store: the `atomic` flag and a trailing ordering symbol
+  ;; must come together
+  (define (set-atomic-ordering! v flags ord form)
+    (cond
+      [(and (memq 'atomic flags) ord) (ir:set-ordering! v ord)]
+      [(memq 'atomic flags)
+       (ll-error "atomic load/store requires an ordering" form)]
+      [ord (ll-error "an ordering requires the atomic flag" form)]))
+
   ;; apply post-hoc flags; getelementptr consumed its flags at construction
   (define (finish-op! op flags form v)
     (unless (or (null? flags) (eq? op 'getelementptr))
@@ -225,10 +298,10 @@
     v)
 
   ;; instructions with no bindable result
-  (define no-result-ops '(store br ret))
+  (define no-result-ops '(store br ret switch indirectbr unreachable fence))
 
   ;; instructions that may (and must) end a block
-  (define terminator-ops '(ret br))
+  (define terminator-ops '(ret br switch indirectbr unreachable))
 
   ;; trailing attribute groups, e.g. (align 8)
   (define (apply-attrs! v attrs form)
@@ -325,18 +398,22 @@
                                    avals name)))]
                [(load)
                 (arity>= 2 "(load type (ptr p) ...)")
-                (let ([v (ir:build-load b (resolve-type ctx (car args))
-                                        (resolve-operand st #f (cadr args))
-                                        name)])
-                  (apply-attrs! v (cddr args) form)
-                  v)]
+                (let-values ([(ord attrs) (split-ordering (cddr args) form)])
+                  (let ([v (ir:build-load b (resolve-type ctx (car args))
+                                          (resolve-operand st #f (cadr args))
+                                          name)])
+                    (set-atomic-ordering! v flags ord form)
+                    (apply-attrs! v attrs form)
+                    v))]
                [(store)
                 (arity>= 2 "(store (type v) (ptr p) ...)")
-                (let ([s (ir:build-store b
-                                         (resolve-operand st #f (car args))
-                                         (resolve-operand st #f (cadr args)))])
-                  (apply-attrs! s (cddr args) form)
-                  s)]
+                (let-values ([(ord attrs) (split-ordering (cddr args) form)])
+                  (let ([s (ir:build-store b
+                                           (resolve-operand st #f (car args))
+                                           (resolve-operand st #f (cadr args)))])
+                    (set-atomic-ordering! s flags ord form)
+                    (apply-attrs! s attrs form)
+                    s))]
                [(alloca)
                 (arity>= 1 "(alloca type ...)")
                 (let ([v (ir:build-alloca b (resolve-type ctx (car args)) name)])
@@ -349,6 +426,103 @@
                                     (map (lambda (g) (resolve-operand st #f g)) (cddr args))
                                     (gep-flags-mask flags form)
                                     name)]
+               [(freeze)
+                (arity 2 "(freeze type value)")
+                (ir:build-freeze b
+                  (resolve-operand st (resolve-type ctx (car args)) (cadr args))
+                  name)]
+               [(va_arg)
+                (arity 2 "(va_arg (ptr va-list) type)")
+                (ir:build-va-arg b (resolve-operand st #f (car args))
+                                 (resolve-type ctx (cadr args)) name)]
+               [(extractelement)
+                (arity 2 "(extractelement (vec-type v) (int-type i))")
+                (ir:build-extractelement b
+                  (resolve-operand st #f (car args))
+                  (resolve-operand st #f (cadr args)) name)]
+               [(insertelement)
+                (arity 3 "(insertelement (vec-type v) (elt-type e) (int-type i))")
+                (ir:build-insertelement b
+                  (resolve-operand st #f (car args))
+                  (resolve-operand st #f (cadr args))
+                  (resolve-operand st #f (caddr args)) name)]
+               [(shufflevector)
+                (arity 3 "(shufflevector (vec-type a) (vec-type b) (mask i ...))")
+                (let ([m (caddr args)])
+                  (unless (and (pair? m) (eq? (car m) 'mask) (pair? (cdr m))
+                               (for-all fixnum? (cdr m)))
+                    (ll-error "shufflevector mask must be (mask int ...)" m form))
+                  (let ([i32 (resolve-type ctx 'i32)])
+                    (ir:build-shufflevector b
+                      (resolve-operand st #f (car args))
+                      (resolve-operand st #f (cadr args))
+                      (ir:const-vector
+                        (map (lambda (i) (ir:const-int i32 i)) (cdr m)))
+                      name)))]
+               [(extractvalue)
+                (arity 2 "(extractvalue (agg-type v) index)")
+                (unless (fixnum? (cadr args))
+                  (ll-error "extractvalue index must be a bare integer" form))
+                (ir:build-extractvalue b (resolve-operand st #f (car args))
+                                       (cadr args) name)]
+               [(insertvalue)
+                (arity 3 "(insertvalue (agg-type v) (elt-type e) index)")
+                (unless (fixnum? (caddr args))
+                  (ll-error "insertvalue index must be a bare integer" form))
+                (ir:build-insertvalue b
+                  (resolve-operand st #f (car args))
+                  (resolve-operand st #f (cadr args))
+                  (caddr args) name)]
+               [(fence)
+                (arity 1 "(fence ordering)")
+                (ir:build-fence b (ordering-int (car args) form))]
+               [(atomicrmw)
+                (arity 4 "(atomicrmw op (ptr p) (type v) ordering)")
+                (let ([rmw (assq (car args) rmw-ops)])
+                  (unless rmw
+                    (ll-error "unknown atomicrmw operation" (car args) form))
+                  (ir:build-atomicrmw b (cdr rmw)
+                                      (resolve-operand st #f (cadr args))
+                                      (resolve-operand st #f (caddr args))
+                                      (ordering-int (cadddr args) form)
+                                      name))]
+               [(cmpxchg)
+                (arity 5 "(cmpxchg (ptr p) (type cmp) (type new) succ-ord fail-ord)")
+                (ir:build-cmpxchg b
+                                  (resolve-operand st #f (car args))
+                                  (resolve-operand st #f (cadr args))
+                                  (resolve-operand st #f (caddr args))
+                                  (ordering-int (cadddr args) form)
+                                  (ordering-int (car (cddddr args)) form)
+                                  name)]
+               [(switch)
+                (arity>= 3 "(switch type value (label %else) ((type c) (label %l)) ...)")
+                (let* ([ty (resolve-type ctx (car args))]
+                       [v (resolve-operand st ty (cadr args))]
+                       [cases (cdddr args)]
+                       [sw (ir:build-switch b v (block-ref st (caddr args))
+                                            (length cases))])
+                  (for-each
+                    (lambda (c)
+                      (unless (and (pair? c) (pair? (cdr c)) (null? (cddr c)))
+                        (ll-error "switch case must be ((type const) (label %l))"
+                                  c form))
+                      (ir:add-case! sw (resolve-operand st ty (car c))
+                                    (block-ref st (cadr c))))
+                    cases)
+                  sw)]
+               [(indirectbr)
+                (arity>= 2 "(indirectbr (ptr address) (label %l) ...)")
+                (let ([ibr (ir:build-indirect-br b
+                             (resolve-operand st #f (car args))
+                             (length (cdr args)))])
+                  (for-each
+                    (lambda (d) (ir:add-destination! ibr (block-ref st d)))
+                    (cdr args))
+                  ibr)]
+               [(unreachable)
+                (arity 0 "(unreachable)")
+                (ir:build-unreachable b)]
                [(br)
                 (cond
                   [(= (length args) 1)         ; (br (label %x))

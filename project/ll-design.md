@@ -4,10 +4,18 @@ Status: first slice IMPLEMENTED in `llscheme/ll.sls` (2026-08-21); this
 document is the grammar reference. Instruction flags supported since
 2026-08-22 (nsw/nuw/exact/disjoint/nneg/volatile, fast-math flags,
 getelementptr inbounds/nusw/nuw) — written in IR position between opcode
-and type (for fcmp, before the predicate), validated per opcode. Not yet
-supported (rejected with clear errors): tail-call markers,
-vector/array/struct types, module-level globals, alloca element counts,
-raw value injection, and non-phi references to textually-later values.
+and type (for fcmp, before the predicate), validated per opcode.
+Coverage step 3 (2026-08-22) added: switch, indirectbr (+ blockaddress
+constants), unreachable, freeze, va_arg, addrspacecast; vectors
+(insert/extract-element, shufflevector with a `(mask i ...)` group);
+aggregates (insert/extractvalue with bare integer indices); full atomics
+(fence, atomicrmw with all 17 ops, cmpxchg with weak, atomic load/store
+with ordering after the operands); `undef` operands; and type grammar for
+`(N x TY)` arrays (write `[N x TY]`), `(< N x TY >)` vectors,
+`(struct TY ...)`, and `(ptr addrspace N)`. Not yet supported (rejected
+with clear errors): exception handling, tail-call markers, module-level
+globals, alloca element counts, raw value injection, and non-phi
+references to textually-later values.
 
 First layer of the llscheme DSL tower:
 a notation for LLVM IR that is ordinary Scheme data/syntax, sitting directly

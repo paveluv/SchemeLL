@@ -23,6 +23,7 @@
     ;; types
     void-type int-type int1-type int8-type int16-type int32-type int64-type
     float-type double-type pointer-type function-type struct-type array-type
+    vector-type
     type-kind type-int-width type-return-type type-param-types type-vararg?
     type->string
     ;; functions / values
@@ -33,11 +34,18 @@
     set-nsw! set-nuw! set-exact! set-nneg! set-disjoint! set-volatile!
     set-fast-math-flags! fast-math-flags can-use-fast-math-flags?
     gep-no-wrap-flags
-    const-int const-real const-null undef-value
+    const-int const-real const-null undef-value const-vector block-address
     ;; basic blocks / positioning
     append-block position-at-end! insert-block
     ;; instructions
     build-ret build-ret-void build-br build-cond-br
+    build-switch add-case! build-indirect-br add-destination!
+    build-unreachable build-freeze build-va-arg
+    build-extractelement build-insertelement build-shufflevector
+    build-extractvalue build-insertvalue
+    build-fence build-atomicrmw build-cmpxchg
+    set-ordering! instruction-ordering set-weak!
+    atomicrmw-binop cmpxchg-success-ordering cmpxchg-failure-ordering
     build-add build-sub build-mul build-sdiv build-udiv build-srem build-urem
     build-and build-or build-xor build-shl build-lshr build-ashr
     build-fadd build-fsub build-fmul build-fdiv build-frem
@@ -47,7 +55,8 @@
     build-call build-alloca build-load build-store build-gep build-gep/flags
     build-trunc build-zext build-sext
     build-si->fp build-ui->fp build-fp->si build-fp->ui
-    build-fptrunc build-fpext build-ptr->int build-int->ptr build-bitcast)
+    build-fptrunc build-fpext build-ptr->int build-int->ptr build-bitcast
+    build-addrspacecast)
   (import (chezscheme) (prefix (llvm raw) LLVM) (prefix (llvm base) base:))
 
   ;; ---- contexts -----------------------------------------------------------
@@ -230,6 +239,8 @@
 
   (define (array-type elem-type count) (LLVMArrayType2 elem-type count))
 
+  (define (vector-type elem-type count) (LLVMVectorType elem-type count))
+
   ;; Index order matches the LLVMTypeKind enum in llvm-c-19/Core.h.
   (define type-kinds
     '#(void half float double x86-fp80 fp128 ppc-fp128 label integer function
@@ -311,6 +322,14 @@
   (define (const-null ty) (LLVMConstNull ty))
   (define (undef-value ty) (LLVMGetUndef ty))
 
+  ;; scalars: a list of constant values, all of the same type
+  (define (const-vector scalars)
+    (base:call-with-pointer-array scalars
+      (lambda (arr n) (LLVMConstVector arr n))))
+
+  ;; the address of a (non-entry) basic block, as a ptr constant
+  (define (block-address fn block) (LLVMBlockAddress fn block))
+
   ;; ---- basic blocks ------------------------------------------------------------
 
   (define (append-block ctx fn name)
@@ -328,6 +347,71 @@
   (define (build-br b block) (LLVMBuildBr (builder-live-ptr b) block))
   (define (build-cond-br b cond then-block else-block)
     (LLVMBuildCondBr (builder-live-ptr b) cond then-block else-block))
+
+  (define (build-switch b v else-block ncases)
+    (LLVMBuildSwitch (builder-live-ptr b) v else-block ncases))
+  (define (add-case! switch on-const dest-block)
+    (LLVMAddCase switch on-const dest-block))
+  (define (build-indirect-br b addr ndests)
+    (LLVMBuildIndirectBr (builder-live-ptr b) addr ndests))
+  (define (add-destination! ibr dest-block)
+    (LLVMAddDestination ibr dest-block))
+  (define (build-unreachable b) (LLVMBuildUnreachable (builder-live-ptr b)))
+
+  (define build-freeze
+    (case-lambda
+      [(b v) (build-freeze b v "")]
+      [(b v nm) (LLVMBuildFreeze (builder-live-ptr b) v nm)]))
+
+  (define build-va-arg
+    (case-lambda
+      [(b va-list ty) (build-va-arg b va-list ty "")]
+      [(b va-list ty nm) (LLVMBuildVAArg (builder-live-ptr b) va-list ty nm)]))
+
+  (define build-extractelement
+    (case-lambda
+      [(b vec idx) (build-extractelement b vec idx "")]
+      [(b vec idx nm) (LLVMBuildExtractElement (builder-live-ptr b) vec idx nm)]))
+  (define build-insertelement
+    (case-lambda
+      [(b vec elt idx) (build-insertelement b vec elt idx "")]
+      [(b vec elt idx nm)
+       (LLVMBuildInsertElement (builder-live-ptr b) vec elt idx nm)]))
+  (define build-shufflevector          ; mask: a constant vector of i32
+    (case-lambda
+      [(b v1 v2 mask) (build-shufflevector b v1 v2 mask "")]
+      [(b v1 v2 mask nm)
+       (LLVMBuildShuffleVector (builder-live-ptr b) v1 v2 mask nm)]))
+  (define build-extractvalue
+    (case-lambda
+      [(b agg idx) (build-extractvalue b agg idx "")]
+      [(b agg idx nm) (LLVMBuildExtractValue (builder-live-ptr b) agg idx nm)]))
+  (define build-insertvalue
+    (case-lambda
+      [(b agg elt idx) (build-insertvalue b agg elt idx "")]
+      [(b agg elt idx nm)
+       (LLVMBuildInsertValue (builder-live-ptr b) agg elt idx nm)]))
+
+  ;; atomics; ordering/rmw-op arguments are the C enum ints. The C builders
+  ;; take no name, so we name the result afterwards.
+  (define (build-fence b ordering)
+    (LLVMBuildFence (builder-live-ptr b) ordering 0 ""))
+  (define (build-atomicrmw b rmw-op ptr val ordering name)
+    (let ([v (LLVMBuildAtomicRMW (builder-live-ptr b) rmw-op ptr val ordering 0)])
+      (unless (string=? name "") (set-value-name! v name))
+      v))
+  (define (build-cmpxchg b ptr cmp new succ-ord fail-ord name)
+    (let ([v (LLVMBuildAtomicCmpXchg (builder-live-ptr b) ptr cmp new
+                                     succ-ord fail-ord 0)])
+      (unless (string=? name "") (set-value-name! v name))
+      v))
+
+  (define (set-ordering! v ordering) (LLVMSetOrdering v ordering))
+  (define (instruction-ordering v) (LLVMGetOrdering v))
+  (define (set-weak! v) (LLVMSetWeak v 1))
+  (define (atomicrmw-binop v) (LLVMGetAtomicRMWBinOp v))
+  (define (cmpxchg-success-ordering v) (LLVMGetCmpXchgSuccessOrdering v))
+  (define (cmpxchg-failure-ordering v) (LLVMGetCmpXchgFailureOrdering v))
 
   (define-syntax define-binop
     (syntax-rules ()
@@ -472,4 +556,5 @@
   (define-cast build-fpext LLVMBuildFPExt)
   (define-cast build-ptr->int LLVMBuildPtrToInt)
   (define-cast build-int->ptr LLVMBuildIntToPtr)
-  (define-cast build-bitcast LLVMBuildBitCast))
+  (define-cast build-bitcast LLVMBuildBitCast)
+  (define-cast build-addrspacecast LLVMBuildAddrSpaceCast))
