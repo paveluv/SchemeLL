@@ -87,13 +87,18 @@ Newest entries first. Format: date, Done / Decided / Next.
   (addrspace N) is also the reusable attribute form for future
   address-spaced globals, parallel to (align N).
 
+- Step 5.5 done (pre-corpus blockers): varargs (trailing `variadic`
+  marker + (fn ...) call-site types; va_start/va_arg proven through the
+  JIT), tail/musttail/notail as call flags (new tail-call-kind axis 4/4),
+  alloca element counts, and non-phi forward references (freeze-of-undef
+  placeholders in a scratch block, RAUW-patched and erased at end of
+  function — LLVM's printer emits non-dominance block orders, so the
+  corpus needs this). 145 checks.
+
 ### Next (coverage plan order)
-- Step 5.5 (pre-corpus blockers): varargs (declare/define/call-site fn
-  type), tail-call markers, alloca element counts, non-phi forward
-  references via placeholder + LLVMSetOperand patching.
 - Step 6: ll:disassemble + LLVM test-corpus round-trip (level 3).
-- Smaller leftovers: tail-call markers, alloca counts, scalable vectors,
-  raw value injection.
+- Smaller leftovers: scalable vectors, raw value injection (the reserved
+  (ptr N) shape), constant expressions on demand, address-spaced globals.
 
 ## 2026-08-21 — project start
 

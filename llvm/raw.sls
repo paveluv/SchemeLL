@@ -43,6 +43,8 @@
     GetInstructionOpcode GetICmpPredicate GetFCmpPredicate
     GetValueName2 SetValueName2 IsDeclaration
     SetLinkage SetFunctionCallConv SetAlignment
+    SetTailCallKind GetTailCallKind
+    ReplaceAllUsesWith InstructionEraseFromParent DeleteBasicBlock
     ;; instruction flags (setters + getters)
     SetNSW GetNSW SetNUW GetNUW SetExact GetExact SetNNeg GetNNeg
     SetIsDisjoint GetIsDisjoint SetVolatile GetVolatile
@@ -75,7 +77,8 @@
     BuildICmp BuildFCmp BuildSelect
     BuildPhi AddIncoming
     BuildCall2
-    BuildAlloca BuildLoad2 BuildStore BuildGEP2 BuildGEPWithNoWrapFlags
+    BuildAlloca BuildArrayAlloca BuildLoad2 BuildStore
+    BuildGEP2 BuildGEPWithNoWrapFlags
     BuildTrunc BuildZExt BuildSExt
     BuildSIToFP BuildUIToFP BuildFPToSI BuildFPToUI
     BuildFPTrunc BuildFPExt
@@ -258,6 +261,16 @@
     (foreign-procedure "LLVMCanValueUseFastMathFlags" (void*) int))
   (define GEPGetNoWrapFlags            ; LLVMGEPNoWrapFlags bitmask
     (foreign-procedure "LLVMGEPGetNoWrapFlags" (void*) unsigned-int))
+  (define SetTailCallKind              ; LLVMTailCallKind: 0 none, 1 tail, 2 musttail, 3 notail
+    (foreign-procedure "LLVMSetTailCallKind" (void* int) void))
+  (define GetTailCallKind
+    (foreign-procedure "LLVMGetTailCallKind" (void*) int))
+  (define ReplaceAllUsesWith           ; (old-value, new-value)
+    (foreign-procedure "LLVMReplaceAllUsesWith" (void* void*) void))
+  (define InstructionEraseFromParent
+    (foreign-procedure "LLVMInstructionEraseFromParent" (void*) void))
+  (define DeleteBasicBlock
+    (foreign-procedure "LLVMDeleteBasicBlock" (void*) void))
 
   ;; --- Core: constants ----------------------------------------------------
   (define ConstInt                     ; (type, value, sign-extend?)
@@ -422,6 +435,8 @@
     (foreign-procedure "LLVMBuildCall2" (void* void* void* void* unsigned-int string) void*))
   (define BuildAlloca
     (foreign-procedure "LLVMBuildAlloca" (void* void* string) void*))
+  (define BuildArrayAlloca             ; (builder, elem-type, count-value, name)
+    (foreign-procedure "LLVMBuildArrayAlloca" (void* void* void* string) void*))
   (define BuildLoad2                   ; (builder, elem-type, ptr, name)
     (foreign-procedure "LLVMBuildLoad2" (void* void* void* string) void*))
   (define BuildStore

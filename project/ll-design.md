@@ -32,10 +32,20 @@ label unwind destination), callbr with a required inline-asm callee
 also work in call), and an optional `(personality ptr @fn)` clause
 between a define's signature and its first block. Every LLVMOpcode is
 now implemented except UserOp1/2 (permanently excluded — never valid
-in IR). Not yet supported (rejected with clear errors): tail-call
-markers, constant expressions (opaque pointers made the common ones
-unnecessary; add on demand), alloca element counts, raw value
-injection, and non-phi references to textually-later values.
+in IR). Step 5.5 (2026-08-22, pre-corpus blockers): varargs — a
+trailing `variadic` marker in define/declare signatures (never spelled
+`...`, which is ellipsis in nanopass patterns) and `(fn RET ARG ...
+variadic?)` function types in the call/invoke/callbr type slot, as IR
+requires for vararg call sites; tail-call markers as leading call
+flags (`(call tail ...)` — IR's `tail call` normalized head-first like
+global linkage); alloca element counts `(alloca i64 (i64 %n))`; and
+non-phi forward references — LLVM's own printer emits blocks in
+non-dominance order, so unresolved `%names` in typed positions become
+freeze-of-undef placeholders in a scratch block, patched via
+ReplaceAllUsesWith and erased at end of function. Not yet supported
+(rejected with clear errors): constant expressions (opaque pointers
+made the common ones unnecessary; add on demand) and raw value
+injection (the reserved `(ptr N)` operand shape).
 
 First layer of the llscheme DSL tower:
 a notation for LLVM IR that is ordinary Scheme data/syntax, sitting directly

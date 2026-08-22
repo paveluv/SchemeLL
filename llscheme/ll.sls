@@ -51,8 +51,16 @@
            (let ([n (string->number (substring s 1 (string-length s)))])
              (and (fixnum? n) (positive? n) n)))))
 
+  ;; strip an optional trailing `variadic` marker (never spelled `...`,
+  ;; which would collide with ellipsis in nanopass/syntax-rules patterns)
+  (define (split-variadic lst)
+    (if (and (pair? lst) (eq? (car (last-pair lst)) 'variadic))
+        (values (reverse (cdr (reverse lst))) #t)
+        (values lst #f)))
+
   ;; iN, float, double, ptr, void; (ptr (addrspace N));
-  ;; (array N TY); (vector N TY); (struct TY ...)
+  ;; (array N TY); (vector N TY); (struct TY ...);
+  ;; (fn RET ARG ... variadic?) function types
   (define (resolve-type ctx t)
     (cond
       [(symbol? t)
@@ -84,13 +92,22 @@
          [(and (eq? (car t) 'vector) (= (length t) 3)
                (fixnum? (cadr t)) (positive? (cadr t)))
           (ir:vector-type (resolve-type ctx (caddr t)) (cadr t))]
+         [(eq? (car t) 'fn)
+          (let-values ([(parts variadic?) (split-variadic (cdr t))])
+            (unless (pair? parts)
+              (ll-error "expected (fn ret-type arg-type ... variadic?)" t))
+            (ir:function-type
+              (resolve-type ctx (car parts))
+              (map (lambda (a) (resolve-type ctx a)) (cdr parts))
+              variadic?))]
          [else (ll-error "invalid type" t)])]
       [else (ll-error "invalid type" t)]))
 
   ;; ---- per-function build state ------------------------------------------------
 
   (define-record-type fstate
-    (fields ctx builder globals locals blocks fname (mutable phis)))
+    (fields ctx builder globals locals blocks fname fn
+            (mutable phis) (mutable scratch) pending))
 
   ;; ---- operands ------------------------------------------------------------------
 
@@ -103,7 +120,13 @@
        (ir:undef-value ty)]
       [(local-name? form)
        (or (hashtable-ref (fstate-locals st) form #f)
-           (ll-error "unbound local (only phi may reference later definitions)"
+           ;; not defined yet: legal when the defining block only appears
+           ;; textually later (dominance is what matters, and LLVM's own
+           ;; printer emits such IR) -- create a placeholder to patch at
+           ;; end of function. Needs a type; untyped positions cannot
+           ;; forward-reference.
+           (and ty (forward-placeholder st ty form))
+           (ll-error "unbound local in an untyped position (cannot forward-reference)"
                      form (fstate-fname st)))]
       [(global-name? form)
        (or (hashtable-ref (fstate-globals st) form #f)
@@ -132,6 +155,38 @@
        ;; typed operand group: (type value)
        (resolve-operand st (resolve-type (fstate-ctx st) (car form)) (cadr form))]
       [else (ll-error "invalid operand" form (fstate-fname st))]))
+
+  ;; a unique, typed, erasable stand-in for a not-yet-defined %name:
+  ;; a freeze-of-undef instruction in a scratch block that is deleted
+  ;; after fixup-forwards! rewires every use to the real value
+  (define (forward-placeholder st ty name)
+    (or (hashtable-ref (fstate-pending st) name #f)
+        (let ([b (fstate-builder st)])
+          (let ([cur (ir:insert-block b)]
+                [scratch (or (fstate-scratch st)
+                             (let ([sb (ir:append-block (fstate-ctx st)
+                                                        (fstate-fn st)
+                                                        "llscheme.fwd")])
+                               (fstate-scratch-set! st sb)
+                               sb))])
+            (ir:position-at-end! b scratch)
+            (let ([ph (ir:build-freeze b (ir:undef-value ty) "")])
+              (ir:position-at-end! b cur)
+              (hashtable-set! (fstate-pending st) name ph)
+              ph)))))
+
+  (define (fixup-forwards! st)
+    (let-values ([(names phs) (hashtable-entries (fstate-pending st))])
+      (vector-for-each
+        (lambda (name ph)
+          (let ([real (hashtable-ref (fstate-locals st) name #f)])
+            (unless real
+              (ll-error "unbound local" name (fstate-fname st)))
+            (ir:replace-all-uses! ph real)
+            (ir:erase-instruction! ph)))
+        names phs))
+    (when (fstate-scratch st)
+      (ir:delete-block! (fstate-scratch st))))
 
   ;; ---- blocks -----------------------------------------------------------------------
 
@@ -222,17 +277,27 @@
                          (and (memq 'alignstack (cdddr form)) #t)))
         (resolve-operand st #f form)))
 
-  ;; typed argument groups of call/invoke/callbr -> (values fn-type arg-values)
-  (define (call-signature st ctx retty groups form)
+  ;; the type slot of call/invoke/callbr holds either the result type (the
+  ;; call-site function type is then built from the argument groups) or a
+  ;; full (fn ...) type -- required for vararg calls, as in IR's
+  ;; `call i32 (ptr, ...) @printf(...)`.
+  ;; -> (values fn-type result-type arg-values)
+  (define (callsite-signature st ctx ty-form groups form)
     (for-each
       (lambda (g)
         (unless (and (pair? g) (pair? (cdr g)) (null? (cddr g)))
           (ll-error "call argument must be (type value)" g form)))
       groups)
-    (let* ([atys (map (lambda (g) (resolve-type ctx (car g))) groups)]
-           [avals (map (lambda (g ty) (resolve-operand st ty (cadr g)))
-                       groups atys)])
-      (values (ir:function-type retty atys) avals)))
+    (let ([avals (map (lambda (g)
+                        (resolve-operand st (resolve-type ctx (car g)) (cadr g)))
+                      groups)])
+      (if (and (pair? ty-form) (eq? (car ty-form) 'fn))
+          (let ([fnty (resolve-type ctx ty-form)])
+            (values fnty (ir:type-return-type fnty) avals))
+          (let ([retty (resolve-type ctx ty-form)])
+            (values (ir:function-type
+                      retty (map (lambda (g) (resolve-type ctx (car g))) groups))
+                    retty avals)))))
 
   ;; `within` parent of catchswitch/catchpad/cleanuppad: none | %pad
   (define (parent-pad st ctx form)
@@ -276,11 +341,8 @@
 
   (define flag-symbols
     '(nsw nuw exact disjoint nneg volatile atomic weak inbounds nusw
+       tail musttail notail
        reassoc nnan ninf nsz arcp contract afn fast))
-
-  ;; call-position flags we do not support yet -- reject loudly rather
-  ;; than silently changing semantics
-  (define unsupported-flags '(tail musttail notail))
 
   ;; split leading flag symbols from the rest of an instruction's arguments
   (define (span-flags rest)
@@ -314,6 +376,12 @@
                       (require-flag-op op '(load store) flag form) mask]
                      [(weak) (require-flag-op op '(cmpxchg) flag form)
                       (ir:set-weak! v) mask]
+                     [(tail) (require-flag-op op '(call) flag form)
+                      (ir:set-tail-call-kind! v 1) mask]
+                     [(musttail) (require-flag-op op '(call) flag form)
+                      (ir:set-tail-call-kind! v 2) mask]
+                     [(notail) (require-flag-op op '(call) flag form)
+                      (ir:set-tail-call-kind! v 3) mask]
                      [(inbounds nusw)
                       (ll-error "flag is only valid on getelementptr" flag form)]
                      [else (bitwise-ior mask (cdr (assq flag fmf-bits)))]))
@@ -386,8 +454,6 @@
         (define (arity>= n shape)
           (unless (>= (length args) n)
             (ll-error (string-append "expected " shape) form (fstate-fname st))))
-        (when (and (pair? args) (memq (car args) unsupported-flags))
-          (ll-error "instruction flag not yet supported" (car args) form))
         (finish-op! op flags form
           (cond
             [(assq op binops) =>
@@ -439,31 +505,31 @@
                 ;; (call type (callee (type arg) ...)) -- callee grouped with
                 ;; its arguments, as in IR's own @f(args)
                 (arity 2 "(call type (callee (type arg) ...))")
-                (let ([retty (resolve-type ctx (car args))]
-                      [app (cadr args)])
+                (let ([app (cadr args)])
                   (unless (pair? app)
                     (ll-error "call expects an application group (callee args...)"
                               form))
-                  (when (and (eq? (ir:type-kind retty) 'void)
-                          (not (string=? name "")))
-                    (ll-error "cannot bind the result of a void call" form))
-                  (let-values ([(fnty avals)
-                                (call-signature st ctx retty (cdr app) form)])
+                  (let-values ([(fnty retty avals)
+                                (callsite-signature st ctx (car args)
+                                                    (cdr app) form)])
+                    (when (and (eq? (ir:type-kind retty) 'void)
+                            (not (string=? name "")))
+                      (ll-error "cannot bind the result of a void call" form))
                     (ir:build-call b fnty (resolve-callee st fnty (car app))
                                    avals name)))]
                [(invoke)
                 ;; (invoke type (callee args...) (label %ok) (label %pad))
                 (arity 4 "(invoke type (callee args...) (label %ok) (label %pad))")
-                (let ([retty (resolve-type ctx (car args))]
-                      [app (cadr args)])
+                (let ([app (cadr args)])
                   (unless (pair? app)
                     (ll-error "invoke expects an application group (callee args...)"
                               form))
-                  (when (and (eq? (ir:type-kind retty) 'void)
-                          (not (string=? name "")))
-                    (ll-error "cannot bind the result of a void invoke" form))
-                  (let-values ([(fnty avals)
-                                (call-signature st ctx retty (cdr app) form)])
+                  (let-values ([(fnty retty avals)
+                                (callsite-signature st ctx (car args)
+                                                    (cdr app) form)])
+                    (when (and (eq? (ir:type-kind retty) 'void)
+                            (not (string=? name "")))
+                      (ll-error "cannot bind the result of a void invoke" form))
                     (ir:build-invoke b fnty
                                      (resolve-callee st fnty (car app))
                                      avals
@@ -474,8 +540,7 @@
                 ;; (callbr type ((asm ...) args...)
                 ;;         (label %fallthrough) ((label %indirect) ...))
                 (arity 4 "(callbr type ((asm ...) args...) (label %fall) ((label %i) ...))")
-                (let ([retty (resolve-type ctx (car args))]
-                      [app (cadr args)])
+                (let ([app (cadr args)])
                   (unless (and (pair? app) (pair? (car app))
                                (eq? (caar app) 'asm))
                     (ll-error "callbr requires an inline-asm callee (LLVM restriction)"
@@ -483,8 +548,9 @@
                   (unless (list? (cadddr args))
                     (ll-error "callbr expects a list of indirect (label %x) targets"
                               form))
-                  (let-values ([(fnty avals)
-                                (call-signature st ctx retty (cdr app) form)])
+                  (let-values ([(fnty retty avals)
+                                (callsite-signature st ctx (car args)
+                                                    (cdr app) form)])
                     (ir:build-callbr b fnty
                                      (resolve-callee st fnty (car app))
                                      (block-ref st (caddr args))
@@ -569,9 +635,19 @@
                     (apply-attrs! s attrs form)
                     s))]
                [(alloca)
-                (arity>= 1 "(alloca type ...)")
-                (let ([v (ir:build-alloca b (resolve-type ctx (car args)) name)])
-                  (apply-attrs! v (cdr args) form)
+                ;; (alloca type (count-type count)? (align n)?)
+                (arity>= 1 "(alloca type (count-type count)? (align n)?)")
+                (let* ([ty (resolve-type ctx (car args))]
+                       [rest (cdr args)]
+                       [count (and (pair? rest) (pair? (car rest))
+                                   (not (eq? (caar rest) 'align))
+                                   (car rest))]
+                       [attrs (if count (cdr rest) rest)]
+                       [v (if count
+                              (ir:build-array-alloca
+                                b ty (resolve-operand st #f count) name)
+                              (ir:build-alloca b ty name))])
+                  (apply-attrs! v attrs form)
                   v)]
                [(getelementptr)
                 (arity>= 2 "(getelementptr type (ptr p) (type index) ...)")
@@ -836,8 +912,8 @@
           (declare-function! ctx m globals item kind))))
 
   (define (declare-function! ctx m globals item kind)
-    (let-values ([(retty-form fname rest) (item-signature item)])
-      (begin
+    (let-values ([(retty-form fname rest0) (item-signature item)])
+      (let-values ([(rest variadic?) (split-variadic rest0)])
         (when (hashtable-ref globals fname #f)
           (ll-error "duplicate global name" fname))
         (let* ([retty (resolve-type ctx retty-form)]
@@ -850,7 +926,8 @@
                        [(declare) (map (lambda (t) (resolve-type ctx t)) rest)])])
           (hashtable-set! globals fname
                           (ir:add-function m (strip-sigil fname)
-                                           (ir:function-type retty ptys)))))))
+                                           (ir:function-type retty ptys
+                                                             variadic?)))))))
 
   ;; pass 2: set global initializers/linkage; emit the body of each define
   (define (emit-item! ctx m globals item)
@@ -887,29 +964,32 @@
           (when (null? body)
             (ll-error "function body is empty" fname))
           (let ([st (make-fstate ctx builder globals (make-eq-hashtable)
-                                 (make-eq-hashtable) fname '())])
-            ;; bind and name the parameters
-            (let loop ([ps params] [i 0])
-              (unless (null? ps)
-                (let ([pname (cadr (car ps))]
-                      [pv (ir:function-param f i)])
-                  (when (hashtable-ref (fstate-locals st) pname #f)
-                    (ll-error "duplicate parameter name" pname fname))
-                  (ir:set-value-name! pv (strip-sigil pname))
-                  (hashtable-set! (fstate-locals st) pname pv)
-                  (loop (cdr ps) (+ i 1)))))
-            ;; every body form is a block group; the first is the entry
-            ;; block. Create all blocks before emitting, so branches and
-            ;; phi incoming may reference blocks defined later.
-            (for-each (lambda (g) (check-block-group g fname)) body)
-            (for-each (lambda (g) (add-block! st f (cadr g))) body)
-            (for-each
-              (lambda (g)
-                (ir:position-at-end! builder (block-by-name st (cadr g)))
-                (for-each (lambda (fm) (emit-insn! st fm)) (cddr g)))
-              body)
-            (fixup-phis! st)
-            (ir:builder-dispose! builder))))))
+                                 (make-eq-hashtable) fname f '() #f
+                                 (make-eq-hashtable))])
+            ;; bind and name the parameters (skipping a variadic marker)
+            (let-values ([(params variadic?) (split-variadic params)])
+              (let loop ([ps params] [i 0])
+                (unless (null? ps)
+                  (let ([pname (cadr (car ps))]
+                        [pv (ir:function-param f i)])
+                    (when (hashtable-ref (fstate-locals st) pname #f)
+                      (ll-error "duplicate parameter name" pname fname))
+                    (ir:set-value-name! pv (strip-sigil pname))
+                    (hashtable-set! (fstate-locals st) pname pv)
+                    (loop (cdr ps) (+ i 1)))))
+              ;; every body form is a block group; the first is the entry
+              ;; block. Create all blocks before emitting, so branches and
+              ;; phi incoming may reference blocks defined later.
+              (for-each (lambda (g) (check-block-group g fname)) body)
+              (for-each (lambda (g) (add-block! st f (cadr g))) body)
+              (for-each
+                (lambda (g)
+                  (ir:position-at-end! builder (block-by-name st (cadr g)))
+                  (for-each (lambda (fm) (emit-insn! st fm)) (cddr g)))
+                body)
+              (fixup-phis! st)
+              (fixup-forwards! st)
+              (ir:builder-dispose! builder)))))))
 
   ;; ---- entry points --------------------------------------------------------------------------
 

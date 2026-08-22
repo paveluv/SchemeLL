@@ -24,6 +24,7 @@
 (define ordering-oracle (o:enum-alist "Core.h" "LLVMAtomicOrdering"))
 (define rmw-oracle (o:enum-alist "Core.h" "LLVMAtomicRMWBinOp"))
 (define linkage-oracle (o:enum-alist "Core.h" "LLVMLinkage"))
+(define tailkind-oracle (o:enum-alist "Core.h" "LLVMTailCallKind"))
 
 (define exclusions
   (call-with-input-file "project/coverage-exclusions.ss" read))
@@ -44,6 +45,7 @@
 (define load-opcode (cdr (assq 'LLVMLoad opcode-oracle)))
 (define store-opcode (cdr (assq 'LLVMStore opcode-oracle)))
 (define rmw-opcode (cdr (assq 'LLVMAtomicRMW opcode-oracle)))
+(define call-opcode (cdr (assq 'LLVMCall opcode-oracle)))
 (define cmpxchg-opcode (cdr (assq 'LLVMAtomicCmpXchg opcode-oracle)))
 
 ;; ---- observation ------------------------------------------------------------
@@ -56,6 +58,7 @@
 (define observed-orderings (make-eqv-hashtable))
 (define observed-rmw-ops (make-eqv-hashtable))
 (define observed-linkages (make-eqv-hashtable))
+(define observed-tail-kinds (make-eqv-hashtable))
 
 (define (observe-bits! table mask)
   (for-each (lambda (bit)
@@ -86,6 +89,9 @@
                   (let ([o (ir:instruction-ordering ins)])
                     (unless (zero? o)
                       (hashtable-set! observed-orderings o #t))))
+                (when (= op call-opcode)
+                  (hashtable-set! observed-tail-kinds
+                                  (ir:tail-call-kind ins) #t))
                 (when (= op rmw-opcode)
                   (hashtable-set! observed-rmw-ops (ir:atomicrmw-binop ins) #t))
                 (when (= op cmpxchg-opcode)
@@ -232,6 +238,7 @@ entry:
   '((define i64 (@mem (i64 %x))
       (label %entry
         (= %p (alloca i64 (align 8)))
+        (= %arr (alloca i64 (i64 4) (align 8)))
         (store (i64 %x) (ptr %p) (align 8))
         (= %q (getelementptr i64 (ptr %p) (i64 0)))
         (= %v (load i64 (ptr %q) (align 8)))
@@ -239,6 +246,7 @@ entry:
   "define i64 @mem(i64 %x) {
 entry:
   %p = alloca i64, align 8
+  %arr = alloca i64, i64 4, align 8
   store i64 %x, ptr %p, align 8
   %q = getelementptr i64, ptr %p, i64 0
   %v = load i64, ptr %q, align 8
@@ -814,6 +822,90 @@ alt:
 }
 ")
 
+(check-entry! "tailcalls"
+  '((declare i64 (@ext i64))
+    (define i64 (@t1 (i64 %x))
+      (label %entry
+        (= %r (call tail i64 (@ext (i64 %x))))
+        (ret i64 %r)))
+    (define i64 (@t2 (i64 %x))
+      (label %entry
+        (= %r (call musttail i64 (@ext (i64 %x))))
+        (ret i64 %r)))
+    (define i64 (@t3 (i64 %x))
+      (label %entry
+        (= %r (call notail i64 (@ext (i64 %x))))
+        (ret i64 %r))))
+  "declare i64 @ext(i64)
+
+define i64 @t1(i64 %x) {
+entry:
+  %r = tail call i64 @ext(i64 %x)
+  ret i64 %r
+}
+
+define i64 @t2(i64 %x) {
+entry:
+  %r = musttail call i64 @ext(i64 %x)
+  ret i64 %r
+}
+
+define i64 @t3(i64 %x) {
+entry:
+  %r = notail call i64 @ext(i64 %x)
+  ret i64 %r
+}
+")
+
+(check-entry! "varargs"
+  '((declare i32 (@printf ptr variadic))
+    (define i64 (@sum2 (i64 %n) variadic)
+      (label %entry
+        (ret i64 %n)))
+    (define i32 (@log (ptr %fmt) (i64 %x))
+      (label %entry
+        (= %r (call (fn i32 ptr variadic) (@printf (ptr %fmt) (i64 %x))))
+        (= %s (call (fn i64 i64 variadic) (@sum2 (i64 1) (i64 %x))))
+        (ret i32 %r))))
+  "declare i32 @printf(ptr, ...)
+
+define i64 @sum2(i64 %n, ...) {
+entry:
+  ret i64 %n
+}
+
+define i32 @log(ptr %fmt, i64 %x) {
+entry:
+  %r = call i32 (ptr, ...) @printf(ptr %fmt, i64 %x)
+  %s = call i64 (i64, ...) @sum2(i64 1, i64 %x)
+  ret i32 %r
+}
+")
+
+(check-entry! "rotated"
+  '((define i64 (@rotated (i64 %x))
+      (label %entry
+        (br (label %compute)))
+      (label %use
+        (= %r (add i64 %v 1))
+        (ret i64 %r))
+      (label %compute
+        (= %v (mul i64 %x 2))
+        (br (label %use)))))
+  "define i64 @rotated(i64 %x) {
+entry:
+  br label %compute
+
+use:
+  %r = add i64 %v, 1
+  ret i64 %r
+
+compute:
+  %v = mul i64 %x, 2
+  br label %use
+}
+")
+
 ;; ---- the ledger check (level 1) -----------------------------------------------------
 
 (t:section "coverage: observed + excluded = oracle (level 1)")
@@ -855,6 +947,7 @@ alt:
 (check-axis! "atomic orderings" 'ordering ordering-oracle observed-orderings)
 (check-axis! "atomicrmw ops" 'rmw-binop rmw-oracle observed-rmw-ops)
 (check-axis! "linkages" 'linkage linkage-oracle observed-linkages)
+(check-axis! "tail-call kinds" 'tail-kind tailkind-oracle observed-tail-kinds)
 
 (t:check "oracle extraction sane: LLVMRet = 1"
          (= (cdr (assq 'LLVMRet opcode-oracle)) 1))

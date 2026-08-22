@@ -61,7 +61,10 @@
     build-neg build-fneg build-not
     build-icmp build-fcmp build-select
     build-phi phi-add-incoming!
-    build-call build-alloca build-load build-store build-gep build-gep/flags
+    build-call build-alloca build-array-alloca build-load build-store
+    build-gep build-gep/flags
+    set-tail-call-kind! tail-call-kind
+    replace-all-uses! erase-instruction! delete-block!
     build-trunc build-zext build-sext
     build-si->fp build-ui->fp build-fp->si build-fp->ui
     build-fptrunc build-fpext build-ptr->int build-int->ptr build-bitcast
@@ -604,6 +607,20 @@
     (case-lambda
       [(b ty) (build-alloca b ty "")]
       [(b ty nm) (LLVMBuildAlloca (builder-live-ptr b) ty nm)]))
+
+  (define build-array-alloca
+    (case-lambda
+      [(b ty count) (build-array-alloca b ty count "")]
+      [(b ty count nm) (LLVMBuildArrayAlloca (builder-live-ptr b) ty count nm)]))
+
+  ;; LLVMTailCallKind ints: 0 none, 1 tail, 2 musttail, 3 notail
+  (define (set-tail-call-kind! call-inst kind) (LLVMSetTailCallKind call-inst kind))
+  (define (tail-call-kind call-inst) (LLVMGetTailCallKind call-inst))
+
+  ;; surgery used for forward-reference patching
+  (define (replace-all-uses! old new) (LLVMReplaceAllUsesWith old new))
+  (define (erase-instruction! inst) (LLVMInstructionEraseFromParent inst))
+  (define (delete-block! bb) (LLVMDeleteBasicBlock bb))
 
   (define build-load
     (case-lambda

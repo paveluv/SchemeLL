@@ -266,6 +266,75 @@
                             (catchret from %cp to (label %ok)))
                           (label %ok (ret void))))))
 
+(t:section "ll: step 5.5 -- varargs, tail, alloca counts, forward refs")
+
+(define va-prog
+  '((declare void (@llvm.va_start.p0 ptr))
+    (declare void (@llvm.va_end.p0 ptr))
+    (define i64 (@sumva (i64 %n) variadic)
+      (label %entry
+        (= %ap (alloca (array 3 ptr) (align 16)))
+        (call void (@llvm.va_start.p0 (ptr %ap)))
+        (= %a (va_arg (ptr %ap) i64))
+        (= %b (va_arg (ptr %ap) i64))
+        (call void (@llvm.va_end.p0 (ptr %ap)))
+        (= %r (add i64 %a %b))
+        (ret i64 %r)))
+    (define i64 (@use-va)
+      (label %entry
+        (= %r (call (fn i64 i64 variadic)
+                    (@sumva (i64 2) (i64 30) (i64 12))))
+        (ret i64 %r)))))
+
+(t:check "varargs end to end: va_start/va_arg through the jit"
+         (= ((jit:function (ll:jit va-prog) "use-va")) 42))
+(t:check "vararg declare and call-site fn type print correctly"
+         (let ([s (ll:dump va-prog)])
+           (and (contains? s "define i64 @sumva(i64 %n, ...)")
+                (contains? s "call i64 (i64, ...) @sumva(i64 2, i64 30, i64 12)"))))
+
+(define tail-prog
+  '((define i64 (@leaf (i64 %x))
+      (label %entry
+        (= %r (mul i64 %x 3))
+        (ret i64 %r)))
+    (define i64 (@via-tail (i64 %x))
+      (label %entry
+        (= %r (call tail i64 (@leaf (i64 %x))))
+        (ret i64 %r)))))
+(t:check "tail call executes" (= ((jit:function (ll:jit tail-prog) "via-tail") 7) 21))
+(t:check "tail marker prints" (contains? (ll:dump tail-prog) "tail call i64 @leaf"))
+
+(define count-prog
+  '((define i64 (@third (i64 %x))
+      (label %entry
+        (= %buf (alloca i64 (i64 4) (align 8)))
+        (= %slot (getelementptr i64 (ptr %buf) (i64 2)))
+        (store (i64 %x) (ptr %slot))
+        (= %v (load i64 (ptr %slot)))
+        (ret i64 %v)))))
+(t:check "alloca with element count"
+         (= ((jit:function (ll:jit count-prog) "third") 9) 9))
+(t:check "alloca count prints" (contains? (ll:dump count-prog) "alloca i64, i64 4"))
+
+(define rotated-prog
+  '((define i64 (@rotated (i64 %x))
+      (label %entry
+        (br (label %compute)))
+      (label %use
+        (= %r (add i64 %v 1))
+        (ret i64 %r))
+      (label %compute
+        (= %v (mul i64 %x 2))
+        (br (label %use))))))
+(t:check "forward reference across rotated blocks"
+         (= ((jit:function (ll:jit rotated-prog) "rotated") 5) 11))
+(t:check "no scratch block leaks into the output"
+         (not (contains? (ll:dump rotated-prog) "llscheme.fwd")))
+(t:check-exn "genuinely unbound local still raises"
+             (ll:dump '((define i64 (@f (i64 %x))
+                          (label %entry (ret i64 %nope))))))
+
 (t:section "ll: globals")
 
 (define counter-prog
@@ -378,11 +447,10 @@
                           (label %entry
                             (= %y (add inbounds i64 %x 1))
                             (ret i64 %y))))))
-(t:check-exn "tail still unsupported"
-             (ll:dump '((declare i64 (@g i64))
-                        (define i64 (@f (i64 %x))
+(t:check-exn "tail flag on a non-call"
+             (ll:dump '((define i64 (@f (i64 %x))
                           (label %entry
-                            (= %y (call tail i64 (@g (i64 %x))))
+                            (= %y (add tail i64 %x 1))
                             (ret i64 %y))))))
 (t:check-exn "unknown type"
              (ll:dump '((define i64 (@f (i37x %x))

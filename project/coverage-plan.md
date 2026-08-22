@@ -13,7 +13,9 @@ Step 4 done 2026-08-22: module-level globals; linkage axis 11 + 6
 obsolete = 17/17; constant expressions deferred (opaque pointers made
 the common ones unnecessary). Step 5 done 2026-08-22: exception
 handling — the opcode axis is COMPLETE at 65 implemented + UserOp1/2
-permanently excluded = 67/67. Level 3 (corpus round-trip via
+permanently excluded = 67/67. Step 5.5 done 2026-08-22 (pre-corpus
+blockers): varargs, tail markers (tail-call-kind axis 4/4), alloca
+counts, non-phi forward references. Level 3 (corpus round-trip via
 ll:disassemble) is the remaining phase. "100% coverage" is meaningless without a
 machine-checkable oracle and an explicit scope. This plan defines both, and
 three verification levels that turn coverage from a claim into a test that
