@@ -79,6 +79,14 @@ Newest entries first. Format: date, Done / Decided / Next.
   workaround makes keywords fields that every pass must thread. Golden IR
   untouched.
 
+- Address-space syntax revised after review: (ptr (addrspace N)), not
+  (ptr N). The bare-number shape collides with typed operand groups —
+  (ptr 1) in operand position naturally means "address 1 as a pointer
+  value" (future inttoptr sugar / raw address injection), so that shape
+  is reserved and rejected in type position with a pointed error.
+  (addrspace N) is also the reusable attribute form for future
+  address-spaced globals, parallel to (align N).
+
 ### Next (coverage plan order)
 - Step 5.5 (pre-corpus blockers): varargs (declare/define/call-site fn
   type), tail-call markers, alloca element counts, non-phi forward

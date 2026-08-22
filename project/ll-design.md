@@ -12,7 +12,7 @@ aggregates (insert/extractvalue with bare integer indices); full atomics
 (fence, atomicrmw with all 17 ops, cmpxchg with weak, atomic load/store
 with ordering after the operands); `undef` operands; and type grammar for
 `(array N TY)`, `(vector N TY)`, `(struct TY ...)`, and
-`(ptr N)` for address spaces. (DECIDED 2026-08-22: named heads for aggregate
+`(ptr (addrspace N))`. (DECIDED 2026-08-22: named heads for aggregate
 types rather than IR-positional `[N x TY]`/`<N x TY>` transliteration —
 uniform with `struct`, easier to read, and far easier to pattern-match
 in the future nanopass layers.) Step 4 (2026-08-22) added
@@ -122,7 +122,7 @@ line:
      keyword operand `caller`: `(catchswitch none ((label %h)) caller)`,
      `(catchpad %cs (args))`, `(catchret %cp (label %ok))`,
      `(cleanupret %clp caller)`;
-   - `ptr addrspace(1)` → `(ptr 1)`;
+   - `ptr addrspace(1)` → `(ptr (addrspace 1))` — the shape `(ptr 1)` is reserved: as an operand group it will mean an inttoptr address constant;
    - global linkage moves after the kind head (the head must name the
      form): `@x = private constant i64 42` →
      `(= @x (constant private i64 42))`.

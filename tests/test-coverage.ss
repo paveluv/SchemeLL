@@ -506,10 +506,10 @@ entry:
 ")
 
 (check-entry! "addrspace"
-  '((define (ptr 1) (@ascast (ptr %p))
+  '((define (ptr (addrspace 1)) (@ascast (ptr %p))
       (label %entry
-        (= %q (addrspacecast ptr %p (ptr 1)))
-        (ret (ptr 1) %q))))
+        (= %q (addrspacecast ptr %p (ptr (addrspace 1))))
+        (ret (ptr (addrspace 1)) %q))))
   "define ptr addrspace(1) @ascast(ptr %p) {
 entry:
   %q = addrspacecast ptr %p to ptr addrspace(1)

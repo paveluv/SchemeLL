@@ -51,7 +51,7 @@
            (let ([n (string->number (substring s 1 (string-length s)))])
              (and (fixnum? n) (positive? n) n)))))
 
-  ;; iN, float, double, ptr, void; (ptr N) for address space N;
+  ;; iN, float, double, ptr, void; (ptr (addrspace N));
   ;; (array N TY); (vector N TY); (struct TY ...)
   (define (resolve-type ctx t)
     (cond
@@ -70,8 +70,14 @@
          [(eq? (car t) 'struct)
           (ir:struct-type ctx (map (lambda (e) (resolve-type ctx e)) (cdr t)))]
          [(and (eq? (car t) 'ptr) (= (length t) 2)
-               (fixnum? (cadr t)) (fx>= (cadr t) 0))
-          (ir:pointer-type ctx (cadr t))]
+               (pair? (cadr t)) (eq? (caadr t) 'addrspace)
+               (= (length (cadr t)) 2) (fixnum? (cadr (cadr t)))
+               (fx>= (cadr (cadr t)) 0))
+          (ir:pointer-type ctx (cadr (cadr t)))]
+         [(and (eq? (car t) 'ptr) (= (length t) 2) (fixnum? (cadr t)))
+          ;; reserved: (ptr N) in operand position will mean an
+          ;; inttoptr'd address constant some day
+          (ll-error "expected (ptr (addrspace N))" t)]
          [(and (eq? (car t) 'array) (= (length t) 3)
                (fixnum? (cadr t)) (positive? (cadr t)))
           (ir:array-type (resolve-type ctx (caddr t)) (cadr t))]
