@@ -1,0 +1,10 @@
+# Local reference material (LLVM sources, docs, etc.) -- see project/RULES.md
+reference/
+
+# Chez compiled objects (note: .so here is Chez object code, not ELF)
+*.so
+*.wpo
+
+# Test/example build artifacts
+*.o
+tests/tmp/
