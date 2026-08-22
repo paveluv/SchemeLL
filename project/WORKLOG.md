@@ -59,6 +59,13 @@ Newest entries first. Format: date, Done / Decided / Next.
   callbr) handled in the block-terminator check. Invoke's normal path
   proven through the JIT.
 
+- Naming DECIDED (working code name): the future structured nanopass layer
+  is "medl" — (llscheme medl), prefix medl:. MEDium Language, pronounced
+  like "medal"; only known collision is an obscure academic MEDL (MaC
+  runtime verification, ~2000). ll keeps its name (the .ll resonance).
+  Rejected along the way: lol/mel (2026-08-22 discussion), M (MUMPS,
+  Power Query), lowl/midl (MIDL = Microsoft IDL).
+
 ### Next (coverage plan order)
 - Step 6: ll:disassemble + LLVM test-corpus round-trip (level 3).
 - Smaller leftovers: tail-call markers, alloca counts, scalable vectors,

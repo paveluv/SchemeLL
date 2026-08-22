@@ -1,7 +1,7 @@
 # llscheme
 
 LLVM bindings for Chez Scheme, plus (eventually) a Scheme-embedded,
-statically-typed DSL compiled through LLVM.
+statically-typed DSL compiled through LLVM (working name: medl).
 
 What works today:
 
