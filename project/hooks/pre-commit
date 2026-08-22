@@ -1,0 +1,24 @@
+#!/bin/sh
+# pre-commit: keep Scheme sources formatted (see project/RULES.md).
+# Install once per clone:  git config core.hooksPath project/hooks
+
+FORMAT="$HOME/.e/tools/scheme-format"
+
+files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(sls|ss)$')
+[ -z "$files" ] && exit 0
+
+if [ ! -x "$FORMAT" ]; then
+    echo "pre-commit: $FORMAT not found or not executable; cannot format" >&2
+    exit 1
+fi
+
+changed=$("$FORMAT" -i $files) || exit 1
+
+if [ -n "$changed" ]; then
+    echo "pre-commit: scheme-format reformatted:" >&2
+    echo "$changed" >&2
+    echo "review the changes, git add them, and commit again." >&2
+    exit 1
+fi
+
+exit 0

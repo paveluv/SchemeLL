@@ -78,6 +78,16 @@ A dangling pointer takes down the whole Chez session, so:
   generated procedure is alive. Unreachable jits are disposed lazily by a guardian.
 - Dispose order: builders before modules before contexts.
 
+## Formatting
+
+- All Scheme sources (`*.sls`, `*.ss`) are formatted with
+  `~/.e/tools/scheme-format` (`-i` for in-place). `make format` formats every
+  tracked Scheme file.
+- Formatting is enforced pre-commit: the hook in `project/hooks/pre-commit`
+  formats the staged Scheme files and aborts the commit if anything changed
+  (review, `git add`, commit again).
+- One-time setup per clone: `git config core.hooksPath project/hooks`.
+
 ## Procedures
 
 - Run tests: `make test` (runs `scheme --libdirs . --script tests/run.ss`).

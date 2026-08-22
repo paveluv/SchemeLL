@@ -18,68 +18,68 @@
 ;;; so grepping for a C name still finds this file. No logic in this file.
 (library (llvm raw)
   (export
-   ;; Core: context / module / builder lifecycle
-   ContextCreate ContextDispose
-   ModuleCreateWithNameInContext DisposeModule
-   SetTarget SetDataLayout
-   PrintModuleToString DisposeMessage
-   CreateBuilderInContext DisposeBuilder
-   ;; Core: types
-   VoidTypeInContext
-   Int1TypeInContext Int8TypeInContext Int16TypeInContext
-   Int32TypeInContext Int64TypeInContext IntTypeInContext
-   FloatTypeInContext DoubleTypeInContext
-   PointerTypeInContext
-   FunctionType StructTypeInContext ArrayType2
-   GetTypeKind GetIntTypeWidth
-   GetReturnType CountParamTypes GetParamTypes IsFunctionVarArg
-   PrintTypeToString TypeOf GlobalGetValueType
-   ;; Core: functions and values
-   AddFunction GetNamedFunction
-   GetParam CountParams
-   GetFirstFunction GetNextFunction
-   GetValueName2 IsDeclaration
-   SetLinkage SetFunctionCallConv
-   ;; Core: constants
-   ConstInt ConstReal ConstNull ConstPointerNull GetUndef
-   ;; Core: basic blocks
-   AppendBasicBlockInContext GetInsertBlock PositionBuilderAtEnd
-   ;; Core: instruction building
-   BuildRet BuildRetVoid BuildBr BuildCondBr
-   BuildAdd BuildSub BuildMul
-   BuildSDiv BuildUDiv BuildSRem BuildURem
-   BuildAnd BuildOr BuildXor
-   BuildShl BuildLShr BuildAShr
-   BuildFAdd BuildFSub BuildFMul BuildFDiv
-   BuildNeg BuildFNeg BuildNot
-   BuildICmp BuildFCmp BuildSelect
-   BuildPhi AddIncoming
-   BuildCall2
-   BuildAlloca BuildLoad2 BuildStore BuildGEP2
-   BuildTrunc BuildZExt BuildSExt
-   BuildSIToFP BuildUIToFP BuildFPToSI BuildFPToUI
-   BuildFPTrunc BuildFPExt
-   BuildPtrToInt BuildIntToPtr BuildBitCast
-   ;; Analysis
-   VerifyModule VerifyFunction
-   ;; Error.h
-   GetErrorMessage DisposeErrorMessage ConsumeError
-   ;; TargetMachine.h / Target.h
-   GetDefaultTargetTriple GetHostCPUName GetHostCPUFeatures
-   GetTargetFromTriple
-   CreateTargetMachine DisposeTargetMachine
-   TargetMachineEmitToFile TargetMachineEmitToMemoryBuffer
-   CreateTargetDataLayout CopyStringRepOfTargetData DisposeTargetData
-   GetBufferStart GetBufferSize DisposeMemoryBuffer
-   ;; Transforms/PassBuilder.h (new pass manager)
-   RunPasses CreatePassBuilderOptions DisposePassBuilderOptions
-   ;; Orc.h / LLJIT.h
-   OrcCreateNewThreadSafeContext OrcThreadSafeContextGetContext
-   OrcDisposeThreadSafeContext
-   OrcCreateNewThreadSafeModule OrcDisposeThreadSafeModule
-   OrcCreateLLJITBuilder OrcDisposeLLJITBuilder
-   OrcCreateLLJIT OrcDisposeLLJIT
-   OrcLLJITGetMainJITDylib OrcLLJITAddLLVMIRModule OrcLLJITLookup)
+    ;; Core: context / module / builder lifecycle
+    ContextCreate ContextDispose
+    ModuleCreateWithNameInContext DisposeModule
+    SetTarget SetDataLayout
+    PrintModuleToString DisposeMessage
+    CreateBuilderInContext DisposeBuilder
+    ;; Core: types
+    VoidTypeInContext
+    Int1TypeInContext Int8TypeInContext Int16TypeInContext
+    Int32TypeInContext Int64TypeInContext IntTypeInContext
+    FloatTypeInContext DoubleTypeInContext
+    PointerTypeInContext
+    FunctionType StructTypeInContext ArrayType2
+    GetTypeKind GetIntTypeWidth
+    GetReturnType CountParamTypes GetParamTypes IsFunctionVarArg
+    PrintTypeToString TypeOf GlobalGetValueType
+    ;; Core: functions and values
+    AddFunction GetNamedFunction
+    GetParam CountParams
+    GetFirstFunction GetNextFunction
+    GetValueName2 IsDeclaration
+    SetLinkage SetFunctionCallConv
+    ;; Core: constants
+    ConstInt ConstReal ConstNull ConstPointerNull GetUndef
+    ;; Core: basic blocks
+    AppendBasicBlockInContext GetInsertBlock PositionBuilderAtEnd
+    ;; Core: instruction building
+    BuildRet BuildRetVoid BuildBr BuildCondBr
+    BuildAdd BuildSub BuildMul
+    BuildSDiv BuildUDiv BuildSRem BuildURem
+    BuildAnd BuildOr BuildXor
+    BuildShl BuildLShr BuildAShr
+    BuildFAdd BuildFSub BuildFMul BuildFDiv
+    BuildNeg BuildFNeg BuildNot
+    BuildICmp BuildFCmp BuildSelect
+    BuildPhi AddIncoming
+    BuildCall2
+    BuildAlloca BuildLoad2 BuildStore BuildGEP2
+    BuildTrunc BuildZExt BuildSExt
+    BuildSIToFP BuildUIToFP BuildFPToSI BuildFPToUI
+    BuildFPTrunc BuildFPExt
+    BuildPtrToInt BuildIntToPtr BuildBitCast
+    ;; Analysis
+    VerifyModule VerifyFunction
+    ;; Error.h
+    GetErrorMessage DisposeErrorMessage ConsumeError
+    ;; TargetMachine.h / Target.h
+    GetDefaultTargetTriple GetHostCPUName GetHostCPUFeatures
+    GetTargetFromTriple
+    CreateTargetMachine DisposeTargetMachine
+    TargetMachineEmitToFile TargetMachineEmitToMemoryBuffer
+    CreateTargetDataLayout CopyStringRepOfTargetData DisposeTargetData
+    GetBufferStart GetBufferSize DisposeMemoryBuffer
+    ;; Transforms/PassBuilder.h (new pass manager)
+    RunPasses CreatePassBuilderOptions DisposePassBuilderOptions
+    ;; Orc.h / LLJIT.h
+    OrcCreateNewThreadSafeContext OrcThreadSafeContextGetContext
+    OrcDisposeThreadSafeContext
+    OrcCreateNewThreadSafeModule OrcDisposeThreadSafeModule
+    OrcCreateLLJITBuilder OrcDisposeLLJITBuilder
+    OrcCreateLLJIT OrcDisposeLLJIT
+    OrcLLJITGetMainJITDylib OrcLLJITAddLLVMIRModule OrcLLJITLookup)
   (import (chezscheme) (prefix (llvm config) config:))
 
   ;; Must run before any foreign-procedure below is evaluated.

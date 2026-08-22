@@ -8,38 +8,38 @@
 ;;;     they live exactly as long as their context.
 (library (llvm ir)
   (export
-   ;; contexts
-   context? make-context wrap-context context-dispose! context-live-ptr
-   ;; modules
-   module? make-module module-dispose! module-live-ptr module-consume!
-   module-context module->string verify-module
-   set-module-target-triple! set-module-data-layout!
-   run-module-passes!
-   ;; builders
-   builder? make-builder builder-dispose! builder-live-ptr
-   ;; types
-   void-type int-type int1-type int8-type int16-type int32-type int64-type
-   float-type double-type pointer-type function-type struct-type array-type
-   type-kind type-int-width type-return-type type-param-types type-vararg?
-   type->string
-   ;; functions / values
-   add-function named-function function-type-of
-   function-param function-params value-name declaration?
-   const-int const-real const-null undef-value
-   ;; basic blocks / positioning
-   append-block position-at-end! insert-block
-   ;; instructions
-   build-ret build-ret-void build-br build-cond-br
-   build-add build-sub build-mul build-sdiv build-udiv build-srem build-urem
-   build-and build-or build-xor build-shl build-lshr build-ashr
-   build-fadd build-fsub build-fmul build-fdiv
-   build-neg build-fneg build-not
-   build-icmp build-fcmp build-select
-   build-phi phi-add-incoming!
-   build-call build-alloca build-load build-store build-gep
-   build-trunc build-zext build-sext
-   build-si->fp build-ui->fp build-fp->si build-fp->ui
-   build-fptrunc build-fpext build-ptr->int build-int->ptr build-bitcast)
+    ;; contexts
+    context? make-context wrap-context context-dispose! context-live-ptr
+    ;; modules
+    module? make-module module-dispose! module-live-ptr module-consume!
+    module-context module->string verify-module
+    set-module-target-triple! set-module-data-layout!
+    run-module-passes!
+    ;; builders
+    builder? make-builder builder-dispose! builder-live-ptr
+    ;; types
+    void-type int-type int1-type int8-type int16-type int32-type int64-type
+    float-type double-type pointer-type function-type struct-type array-type
+    type-kind type-int-width type-return-type type-param-types type-vararg?
+    type->string
+    ;; functions / values
+    add-function named-function function-type-of
+    function-param function-params value-name declaration?
+    const-int const-real const-null undef-value
+    ;; basic blocks / positioning
+    append-block position-at-end! insert-block
+    ;; instructions
+    build-ret build-ret-void build-br build-cond-br
+    build-add build-sub build-mul build-sdiv build-udiv build-srem build-urem
+    build-and build-or build-xor build-shl build-lshr build-ashr
+    build-fadd build-fsub build-fmul build-fdiv
+    build-neg build-fneg build-not
+    build-icmp build-fcmp build-select
+    build-phi phi-add-incoming!
+    build-call build-alloca build-load build-store build-gep
+    build-trunc build-zext build-sext
+    build-si->fp build-ui->fp build-fp->si build-fp->ui
+    build-fptrunc build-fpext build-ptr->int build-int->ptr build-bitcast)
   (import (chezscheme) (prefix (llvm raw) LLVM) (prefix (llvm base) base:))
 
   ;; ---- contexts -----------------------------------------------------------
@@ -80,7 +80,7 @@
 
   (define (make-module ctx name)
     ($make-module (LLVMModuleCreateWithNameInContext
-                   name (context-live-ptr ctx))
+                    name (context-live-ptr ctx))
                   ctx 'owned))
 
   (define (module-live-ptr m)
@@ -106,8 +106,8 @@
   (define (verify-module m)
     (let-values ([(failed msg-ptr)
                   (base:call-with-out-ptr
-                   (lambda (out)
-                     (LLVMVerifyModule (module-live-ptr m) 2 out)))]) ; 2 = return-status
+                    (lambda (out)
+                      (LLVMVerifyModule (module-live-ptr m) 2 out)))]) ; 2 = return-status
       (let ([msg (base:cstring->string/dispose msg-ptr)])
         (base:check-bool 'ir:verify-module failed msg))))
 
@@ -182,8 +182,8 @@
   ;; Index order matches the LLVMTypeKind enum in llvm-c-19/Core.h.
   (define type-kinds
     '#(void half float double x86-fp80 fp128 ppc-fp128 label integer function
-       struct array pointer vector metadata x86-mmx token scalable-vector
-       bfloat x86-amx target-ext))
+        struct array pointer vector metadata x86-mmx token scalable-vector
+        bfloat x86-amx target-ext))
 
   (define (type-kind t)
     (let ([k (LLVMGetTypeKind t)])

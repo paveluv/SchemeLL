@@ -25,11 +25,11 @@
     (unless native-initialized?
       (let ([target (native-target-name)])
         (for-each
-         (lambda (component)
-           (let ([name (string-append "LLVMInitialize" target component)])
-             (when (foreign-entry? name)
-               ((foreign-procedure name () void)))))
-         '("TargetInfo" "Target" "TargetMC" "AsmPrinter" "AsmParser")))
+          (lambda (component)
+            (let ([name (string-append "LLVMInitialize" target component)])
+              (when (foreign-entry? name)
+                ((foreign-procedure name () void)))))
+          '("TargetInfo" "Target" "TargetMC" "AsmPrinter" "AsmParser")))
       (set! native-initialized? #t)))
 
   (define (default-triple)
@@ -44,8 +44,8 @@
       (foreign-set! 'unsigned-64 target-out 0 0)
       (let-values ([(failed msg-ptr)
                     (base:call-with-out-ptr
-                     (lambda (err-out)
-                       (LLVMGetTargetFromTriple triple target-out err-out)))])
+                      (lambda (err-out)
+                        (LLVMGetTargetFromTriple triple target-out err-out)))])
         (let ([target (foreign-ref 'unsigned-64 target-out 0)])
           (foreign-free target-out)
           (base:check-bool 'target:from-triple failed (base:cstring->string/dispose msg-ptr))
@@ -72,11 +72,11 @@
        (initialize-native!)
        (let ([target (target-from-triple triple)])
          ($make-machine
-          (LLVMCreateTargetMachine target triple cpu features
-                                   (opt-level->int opt-level)
-                                   2   ; reloc: PIC, works for both .o and JIT
-                                   0)  ; code model: default
-          triple 'owned))]))
+           (LLVMCreateTargetMachine target triple cpu features
+                                    (opt-level->int opt-level)
+                                    2   ; reloc: PIC, works for both .o and JIT
+                                    0)  ; code model: default
+           triple 'owned))]))
 
   (define (machine-live-ptr tm)
     (unless (eq? (machine-state tm) 'owned)
@@ -104,10 +104,10 @@
   (define (emit-to-file tm m path file-type)
     (let-values ([(failed msg-ptr)
                   (base:call-with-out-ptr
-                   (lambda (err-out)
-                     (LLVMTargetMachineEmitToFile
-                      (machine-live-ptr tm) (ir:module-live-ptr m)
-                      path file-type err-out)))])
+                    (lambda (err-out)
+                      (LLVMTargetMachineEmitToFile
+                        (machine-live-ptr tm) (ir:module-live-ptr m)
+                        path file-type err-out)))])
       (base:check-bool 'target:emit-to-file failed (base:cstring->string/dispose msg-ptr))))
 
   (define (emit-object-file tm m path) (emit-to-file tm m path 1))
@@ -119,14 +119,14 @@
       (foreign-set! 'unsigned-64 buf-out 0 0)
       (let-values ([(failed msg-ptr)
                     (base:call-with-out-ptr
-                     (lambda (err-out)
-                       (LLVMTargetMachineEmitToMemoryBuffer
-                        (machine-live-ptr tm) (ir:module-live-ptr m)
-                        1 err-out buf-out)))])
+                      (lambda (err-out)
+                        (LLVMTargetMachineEmitToMemoryBuffer
+                          (machine-live-ptr tm) (ir:module-live-ptr m)
+                          1 err-out buf-out)))])
         (let ([buf (foreign-ref 'unsigned-64 buf-out 0)])
           (foreign-free buf-out)
           (base:check-bool 'target:emit-object-bytevector failed
-                      (base:cstring->string/dispose msg-ptr))
+                           (base:cstring->string/dispose msg-ptr))
           (let* ([start (LLVMGetBufferStart buf)]
                  [size (LLVMGetBufferSize buf)]
                  [bv (make-bytevector size)])

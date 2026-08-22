@@ -29,6 +29,10 @@ Newest entries first. Format: date, Done / Decided / Next.
   so call sites read as exact C names. `base:error` is the project error raiser
   (shadows R6RS error inside base).
 
+- Formatting: all Scheme sources go through `~/.e/tools/scheme-format`;
+  enforced by `project/hooks/pre-commit` (`git config core.hooksPath
+  project/hooks`, once per clone). `make format` formats everything.
+
 ### Next
 - Expose Scheme procedures to JIT'd code as absolute symbols
   (`LLVMOrcAbsoluteSymbols` + `foreign-callable` + `lock-object`) — enables two-way

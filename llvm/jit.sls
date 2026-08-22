@@ -88,7 +88,7 @@
     (target:initialize-native!)
     (let-values ([(err ptr)
                   (base:call-with-out-ptr
-                   (lambda (out) (LLVMOrcCreateLLJIT out base:null-ptr)))])
+                    (lambda (out) (LLVMOrcCreateLLJIT out base:null-ptr)))])
       (base:check-error-ref 'jit:make err)
       (let ([j ($make-jit ptr
                           (LLVMOrcLLJITGetMainJITDylib ptr)
@@ -161,15 +161,15 @@
       (let ([tsm (LLVMOrcCreateNewThreadSafeModule mod-ptr tsctx)])
         ;; AddLLVMIRModule consumes tsm even on error
         (base:check-error-ref 'jit:add-module!
-                         (LLVMOrcLLJITAddLLVMIRModule
-                          (jit-live-ptr j) (jit-dylib j) tsm)))))
+                              (LLVMOrcLLJITAddLLVMIRModule
+                                (jit-live-ptr j) (jit-dylib j) tsm)))))
 
   ;; Raw entry-point address of a JIT'd function (triggers compilation).
   (define (lookup-address j name)
     (let-values ([(err addr)
                   (base:call-with-out-ptr
-                   (lambda (out)
-                     (LLVMOrcLLJITLookup (jit-live-ptr j) out name)))])
+                    (lambda (out)
+                      (LLVMOrcLLJITLookup (jit-live-ptr j) out name)))])
       (base:check-error-ref 'jit:lookup-address err)
       addr))
 
