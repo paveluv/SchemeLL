@@ -11,8 +11,10 @@ volatile proven by golden round-trips. Step 3 done 2026-08-22: opcodes
 atomic orderings 6+1=7/7 and atomicrmw ops 17/17 as new enum axes.
 Step 4 done 2026-08-22: module-level globals; linkage axis 11 + 6
 obsolete = 17/17; constant expressions deferred (opaque pointers made
-the common ones unnecessary). Level 3 (corpus round-trip via
-ll:disassemble) still to do. "100% coverage" is meaningless without a
+the common ones unnecessary). Step 5 done 2026-08-22: exception
+handling — the opcode axis is COMPLETE at 65 implemented + UserOp1/2
+permanently excluded = 67/67. Level 3 (corpus round-trip via
+ll:disassemble) is the remaining phase. "100% coverage" is meaningless without a
 machine-checkable oracle and an explicit scope. This plan defines both, and
 three verification levels that turn coverage from a claim into a test that
 fails.

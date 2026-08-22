@@ -151,9 +151,8 @@
       (ll-error "block label must be a %name" g fname))
     (when (null? (cddr g))
       (ll-error "empty block" (cadr g) fname))
-    (let ([final (car (last-pair g))])
-      (unless (and (pair? final) (memq (car final) terminator-ops))
-        (ll-error "block does not end in a terminator" (cadr g) fname))))
+    (unless (terminator-form? (car (last-pair g)))
+      (ll-error "block does not end in a terminator" (cadr g) fname)))
 
   (define (add-block! st f name)
     (when (hashtable-ref (fstate-blocks st) name #f)
@@ -200,6 +199,48 @@
            (lambda (p) (values (cdr p) (cdr rest)))]
           [else (ll-error "unknown ordering or attribute" (car rest) form)])
         (values #f rest)))
+
+  ;; callee of call/invoke/callbr: a function/pointer operand, or inline
+  ;; asm: (asm "template" "constraints" flag ...), flags: sideeffect
+  ;; alignstack. callbr requires an asm callee (LLVM restriction).
+  (define (resolve-callee st fnty form)
+    (if (and (pair? form) (eq? (car form) 'asm))
+        (begin
+          (unless (and (>= (length form) 3) (string? (cadr form))
+                       (string? (caddr form))
+                       (for-all (lambda (f) (memq f '(sideeffect alignstack)))
+                                (cdddr form)))
+            (ll-error "expected (asm \"template\" \"constraints\" flag ...)" form))
+          (ir:inline-asm fnty (cadr form) (caddr form)
+                         (and (memq 'sideeffect (cdddr form)) #t)
+                         (and (memq 'alignstack (cdddr form)) #t)))
+        (resolve-operand st #f form)))
+
+  ;; typed argument groups of call/invoke/callbr -> (values fn-type arg-values)
+  (define (call-signature st ctx retty groups form)
+    (for-each
+      (lambda (g)
+        (unless (and (pair? g) (pair? (cdr g)) (null? (cddr g)))
+          (ll-error "call argument must be (type value)" g form)))
+      groups)
+    (let* ([atys (map (lambda (g) (resolve-type ctx (car g))) groups)]
+           [avals (map (lambda (g ty) (resolve-operand st ty (cadr g)))
+                       groups atys)])
+      (values (ir:function-type retty atys) avals)))
+
+  ;; `within` parent of catchswitch/catchpad/cleanuppad: none | %pad
+  (define (parent-pad st ctx form)
+    (if (eq? form 'none)
+        (ir:const-null (ir:token-type ctx))
+        (resolve-operand st #f form)))
+
+  ;; after `unwind`: `to caller` -> #f, or a (label %x) target
+  (define (unwind-dest st rest form)
+    (cond
+      [(equal? rest '(to caller)) #f]
+      [(and (pair? rest) (null? (cdr rest))) (block-ref st (car rest))]
+      [else (ll-error "expected `unwind to caller` or `unwind (label %x)`"
+                      form (fstate-fname st))]))
 
   ;; LLVMAtomicRMWBinOp; cross-checked by the coverage tests
   (define rmw-ops
@@ -300,10 +341,21 @@
     v)
 
   ;; instructions with no bindable result
-  (define no-result-ops '(store br ret switch indirectbr unreachable fence))
+  (define no-result-ops
+    '(store br ret switch indirectbr unreachable fence
+       resume catchret cleanupret))
 
-  ;; instructions that may (and must) end a block
-  (define terminator-ops '(ret br switch indirectbr unreachable))
+  ;; instructions that may (and must) end a block; invoke and catchswitch
+  ;; are terminators that also bind a result via =
+  (define terminator-ops
+    '(ret br switch indirectbr unreachable
+       invoke resume catchswitch catchret cleanupret callbr))
+
+  (define (terminator-form? f)
+    (and (pair? f)
+         (or (memq (car f) terminator-ops)
+             (and (eq? (car f) '=) (= (length f) 3) (pair? (caddr f))
+                  (memq (car (caddr f)) terminator-ops)))))
 
   ;; trailing attribute groups, e.g. (align 8)
   (define (apply-attrs! v attrs form)
@@ -381,23 +433,132 @@
                   ph)]
                [(call)
                 (arity>= 2 "(call type callee (type arg) ...)")
-                (let ([retty (resolve-type ctx (car args))]
-                      [callee-form (cadr args)]
-                      [groups (cddr args)])
-                  (for-each
-                    (lambda (g)
-                      (unless (and (pair? g) (pair? (cdr g)) (null? (cddr g)))
-                        (ll-error "call argument must be (type value)" g form)))
-                    groups)
+                (let ([retty (resolve-type ctx (car args))])
                   (when (and (eq? (ir:type-kind retty) 'void)
                           (not (string=? name "")))
                     (ll-error "cannot bind the result of a void call" form))
-                  (let* ([atys (map (lambda (g) (resolve-type ctx (car g))) groups)]
-                         [avals (map (lambda (g ty) (resolve-operand st ty (cadr g)))
-                                  groups atys)])
-                    (ir:build-call b (ir:function-type retty atys)
-                                   (resolve-operand st #f callee-form)
+                  (let-values ([(fnty avals)
+                                (call-signature st ctx retty (cddr args) form)])
+                    (ir:build-call b fnty (resolve-callee st fnty (cadr args))
                                    avals name)))]
+               [(invoke)
+                ;; (invoke type callee (type arg) ...
+                ;;         to (label %ok) unwind (label %pad))
+                (arity>= 6 "(invoke type callee args... to (label %ok) unwind (label %pad))")
+                (let ([retty (resolve-type ctx (car args))])
+                  (when (and (eq? (ir:type-kind retty) 'void)
+                          (not (string=? name "")))
+                    (ll-error "cannot bind the result of a void invoke" form))
+                  (let loop ([rest (cddr args)] [groups '()])
+                    (cond
+                      [(null? rest)
+                       (ll-error "invoke expects `to ... unwind ...`" form)]
+                      [(eq? (car rest) 'to)
+                       (unless (and (= (length rest) 4)
+                                    (eq? (caddr rest) 'unwind))
+                         (ll-error "invoke expects `to (label %ok) unwind (label %pad)`"
+                                   form))
+                       (let-values ([(fnty avals)
+                                     (call-signature st ctx retty
+                                                     (reverse groups) form)])
+                         (ir:build-invoke b fnty
+                                          (resolve-callee st fnty (cadr args))
+                                          avals
+                                          (block-ref st (cadr rest))
+                                          (block-ref st (cadddr rest))
+                                          name))]
+                      [else (loop (cdr rest) (cons (car rest) groups))])))]
+               [(callbr)
+                ;; (callbr type (asm ...) (type arg) ...
+                ;;         to (label %fallthrough) ((label %ind) ...))
+                (arity>= 5 "(callbr type (asm ...) args... to (label %fall) ((label %i) ...))")
+                (unless (and (pair? (cadr args)) (eq? (caadr args) 'asm))
+                  (ll-error "callbr requires an inline-asm callee (LLVM restriction)"
+                            form))
+                (let ([retty (resolve-type ctx (car args))])
+                  (let loop ([rest (cddr args)] [groups '()])
+                    (cond
+                      [(null? rest)
+                       (ll-error "callbr expects `to (label %fall) (dests...)`" form)]
+                      [(eq? (car rest) 'to)
+                       (unless (= (length rest) 3)
+                         (ll-error "callbr expects `to (label %fall) ((label %i) ...)`"
+                                   form))
+                       (let-values ([(fnty avals)
+                                     (call-signature st ctx retty
+                                                     (reverse groups) form)])
+                         (ir:build-callbr b fnty
+                                          (resolve-callee st fnty (cadr args))
+                                          (block-ref st (cadr rest))
+                                          (map (lambda (d) (block-ref st d))
+                                               (caddr rest))
+                                          avals name))]
+                      [else (loop (cdr rest) (cons (car rest) groups))])))]
+               [(landingpad)
+                ;; (landingpad type clause ...) where clause is: cleanup |
+                ;; (catch type constant) | (filter type constant)
+                (arity>= 1 "(landingpad type cleanup|(catch ty c)|(filter ty c) ...)")
+                (let ([lp (ir:build-landingpad b (resolve-type ctx (car args))
+                                               (length (cdr args)) name)])
+                  (for-each
+                    (lambda (c)
+                      (cond
+                        [(eq? c 'cleanup) (ir:set-landingpad-cleanup! lp)]
+                        [(and (pair? c) (memq (car c) '(catch filter))
+                              (= (length c) 3))
+                         (ir:add-clause! lp
+                           (resolve-constant ctx (fstate-globals st)
+                                             (resolve-type ctx (cadr c))
+                                             (caddr c)))]
+                        [else (ll-error "invalid landingpad clause" c form)]))
+                    (cdr args))
+                  lp)]
+               [(resume)
+                (arity 2 "(resume type value)")
+                (ir:build-resume b
+                  (resolve-operand st (resolve-type ctx (car args)) (cadr args)))]
+               [(catchswitch)
+                ;; (catchswitch within none|%pad ((label %h) ...)
+                ;;              unwind to caller | unwind (label %x))
+                (arity>= 4 "(catchswitch within parent (handlers) unwind ...)")
+                (unless (and (eq? (car args) 'within) (list? (caddr args))
+                             (eq? (cadddr args) 'unwind))
+                  (ll-error "expected (catchswitch within parent (handlers) unwind ...)"
+                            form))
+                (let* ([handlers (caddr args)]
+                       [cs (ir:build-catchswitch b
+                             (parent-pad st ctx (cadr args))
+                             (unwind-dest st (cddddr args) form)
+                             (length handlers) name)])
+                  (for-each
+                    (lambda (h) (ir:add-handler! cs (block-ref st h)))
+                    handlers)
+                  cs)]
+               [(catchpad cleanuppad)
+                ;; (catchpad within %cs ((type arg) ...))
+                (arity 3 "(catchpad/cleanuppad within parent ((type arg) ...))")
+                (unless (and (eq? (car args) 'within) (list? (caddr args)))
+                  (ll-error "expected (within parent (args))" form))
+                (let ([parent (parent-pad st ctx (cadr args))]
+                      [pargs (map (lambda (g) (resolve-operand st #f g))
+                                  (caddr args))])
+                  (if (eq? op 'catchpad)
+                      (ir:build-catchpad b parent pargs name)
+                      (ir:build-cleanuppad b parent pargs name)))]
+               [(catchret)
+                ;; (catchret from %pad to (label %next))
+                (arity 4 "(catchret from %pad to (label %next))")
+                (unless (and (eq? (car args) 'from) (eq? (caddr args) 'to))
+                  (ll-error "expected (catchret from %pad to (label %next))" form))
+                (ir:build-catchret b (resolve-operand st #f (cadr args))
+                                   (block-ref st (cadddr args)))]
+               [(cleanupret)
+                ;; (cleanupret from %pad unwind to caller | unwind (label %x))
+                (arity>= 3 "(cleanupret from %pad unwind ...)")
+                (unless (and (eq? (car args) 'from) (eq? (caddr args) 'unwind))
+                  (ll-error "expected (cleanupret from %pad unwind ...)" form))
+                (ir:build-cleanupret b (resolve-operand st #f (cadr args))
+                                     (unwind-dest st (cdddr args) form))]
                [(load)
                 (arity>= 2 "(load type (ptr p) ...)")
                 (let-values ([(ord attrs) (split-ordering (cddr args) form)])
@@ -717,9 +878,21 @@
           (apply-attrs! g attrs item))))
     (when (eq? (item-kind item) 'define)
       (let-values ([(retty-form fname params) (item-signature item)])
-        (let ([f (hashtable-ref globals fname #f)]
-              [body (cdddr item)]
-              [builder (ir:make-builder ctx)])
+        (let* ([f (hashtable-ref globals fname #f)]
+               [full-body (cdddr item)]
+               ;; optional (personality type @fn) before the first block,
+               ;; as in `define ... personality ptr @pers {`
+               [pers? (and (pair? full-body) (pair? (car full-body))
+                           (eq? (caar full-body) 'personality))]
+               [body (if pers? (cdr full-body) full-body)]
+               [builder (ir:make-builder ctx)])
+          (when pers?
+            (let ([p (car full-body)])
+              (unless (and (= (length p) 3) (global-name? (caddr p)))
+                (ll-error "expected (personality type @function)" p fname))
+              (ir:set-personality-fn! f
+                (or (hashtable-ref globals (caddr p) #f)
+                    (ll-error "unbound personality function" (caddr p))))))
           (when (null? body)
             (ll-error "function body is empty" fname))
           (let ([st (make-fstate ctx builder globals (make-eq-hashtable)

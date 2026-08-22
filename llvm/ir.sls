@@ -45,6 +45,11 @@
     build-ret build-ret-void build-br build-cond-br
     build-switch add-case! build-indirect-br add-destination!
     build-unreachable build-freeze build-va-arg
+    build-invoke build-resume build-landingpad add-clause!
+    set-landingpad-cleanup! set-personality-fn!
+    build-catchswitch add-handler! build-catchpad build-cleanuppad
+    build-catchret build-cleanupret
+    build-callbr inline-asm token-type
     build-extractelement build-insertelement build-shufflevector
     build-extractvalue build-insertvalue
     build-fence build-atomicrmw build-cmpxchg
@@ -389,6 +394,63 @@
   (define (add-destination! ibr dest-block)
     (LLVMAddDestination ibr dest-block))
   (define (build-unreachable b) (LLVMBuildUnreachable (builder-live-ptr b)))
+
+  ;; ---- exception handling ---------------------------------------------------
+
+  (define (build-invoke b fn-type fn args then-block unwind-block name)
+    (base:call-with-pointer-array args
+      (lambda (arr n)
+        (LLVMBuildInvoke2 (builder-live-ptr b) fn-type fn arr n
+                          then-block unwind-block name))))
+
+  (define (build-resume b exn) (LLVMBuildResume (builder-live-ptr b) exn))
+
+  (define (build-landingpad b ty nclauses name)
+    (LLVMBuildLandingPad (builder-live-ptr b) ty base:null-ptr nclauses name))
+
+  (define (add-clause! lp clause-const) (LLVMAddClause lp clause-const))
+  (define (set-landingpad-cleanup! lp) (LLVMSetCleanup lp 1))
+  (define (set-personality-fn! f pers) (LLVMSetPersonalityFn f pers))
+
+  ;; unwind-block: #f = `unwind to caller`
+  (define (build-catchswitch b parent-pad unwind-block nhandlers name)
+    (LLVMBuildCatchSwitch (builder-live-ptr b) parent-pad
+                          (or unwind-block base:null-ptr) nhandlers name))
+  (define (add-handler! cs dest-block) (LLVMAddHandler cs dest-block))
+
+  (define (build-catchpad b parent-pad args name)
+    (base:call-with-pointer-array args
+      (lambda (arr n)
+        (LLVMBuildCatchPad (builder-live-ptr b) parent-pad arr n name))))
+  (define (build-cleanuppad b parent-pad args name)
+    (base:call-with-pointer-array args
+      (lambda (arr n)
+        (LLVMBuildCleanupPad (builder-live-ptr b) parent-pad arr n name))))
+
+  (define (build-catchret b catchpad dest-block)
+    (LLVMBuildCatchRet (builder-live-ptr b) catchpad dest-block))
+  (define (build-cleanupret b cleanuppad unwind-block)
+    (LLVMBuildCleanupRet (builder-live-ptr b) cleanuppad
+                         (or unwind-block base:null-ptr)))
+
+  (define (build-callbr b fn-type fn default-block indirect-blocks args name)
+    (base:call-with-pointer-array indirect-blocks
+      (lambda (dests ndests)
+        (base:call-with-pointer-array args
+          (lambda (arr n)
+            (LLVMBuildCallBr (builder-live-ptr b) fn-type fn default-block
+                             dests ndests arr n base:null-ptr 0 name))))))
+
+  ;; a callable inline-asm value of the given function type
+  (define (inline-asm fn-type asm-text constraints side-effects? align-stack?)
+    (LLVMGetInlineAsm fn-type
+                      asm-text (bytevector-length (string->utf8 asm-text))
+                      constraints (bytevector-length (string->utf8 constraints))
+                      (if side-effects? 1 0) (if align-stack? 1 0)
+                      0    ; dialect: AT&T
+                      0))  ; can-throw: no
+
+  (define (token-type ctx) (LLVMTokenTypeInContext (context-live-ptr ctx)))
 
   (define build-freeze
     (case-lambda

@@ -50,9 +50,19 @@ Newest entries first. Format: date, Done / Decided / Next.
   with struct, nanopass-friendly), replacing the IR-positional
   (N x TY) / (< N x TY >) forms.
 
+- Step 5 done: exception handling — the opcode axis is COMPLETE
+  (65 + UserOp1/2 = 67/67). invoke/landingpad/resume (Itanium),
+  catchswitch/catchpad/cleanuppad/catchret/cleanupret (funclets, `within
+  none` via ConstNull of the token type), callbr with required inline-asm
+  callee (minimal (asm ...) support, shared with call), (personality ...)
+  clause on defines. Terminators that bind results (invoke, catchswitch,
+  callbr) handled in the block-terminator check. Invoke's normal path
+  proven through the JIT.
+
 ### Next (coverage plan order)
-- Step 5: exception handling (the last 9 ledger opcodes).
 - Step 6: ll:disassemble + LLVM test-corpus round-trip (level 3).
+- Smaller leftovers: tail-call markers, alloca counts, scalable vectors,
+  raw value injection.
 
 ## 2026-08-21 — project start
 

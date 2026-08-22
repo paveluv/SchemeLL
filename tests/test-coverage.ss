@@ -679,6 +679,142 @@ entry:
 }
 ")
 
+(check-entry! "eh-itanium"
+  '((declare i32 (@pers))
+    (declare void (@may_throw))
+    (declare i32 (@compute i32))
+    (define i32 (@guarded (i32 %x))
+      (personality ptr @pers)
+      (label %entry
+        (= %r (invoke i32 @compute (i32 %x)
+                to (label %ok) unwind (label %lpad))))
+      (label %ok
+        (invoke void @may_throw to (label %done) unwind (label %lpad2)))
+      (label %done
+        (ret i32 %r))
+      (label %lpad
+        (= %lp (landingpad (struct ptr i32) cleanup (catch ptr null)))
+        (resume (struct ptr i32) %lp))
+      (label %lpad2
+        (= %lp2 (landingpad (struct ptr i32)
+                            (filter (array 1 ptr) ((ptr null)))))
+        (ret i32 -1))))
+  "declare i32 @pers()
+
+declare void @may_throw()
+
+declare i32 @compute(i32)
+
+define i32 @guarded(i32 %x) personality ptr @pers {
+entry:
+  %r = invoke i32 @compute(i32 %x)
+          to label %ok unwind label %lpad
+
+ok:
+  invoke void @may_throw()
+          to label %done unwind label %lpad2
+
+done:
+  ret i32 %r
+
+lpad:
+  %lp = landingpad { ptr, i32 }
+          cleanup
+          catch ptr null
+  resume { ptr, i32 } %lp
+
+lpad2:
+  %lp2 = landingpad { ptr, i32 }
+          filter [1 x ptr] [ptr null]
+  ret i32 -1
+}
+")
+
+(check-entry! "eh-windows"
+  '((declare i32 (@wpers))
+    (declare void (@may_throw2))
+    (define void (@wineh)
+      (personality ptr @wpers)
+      (label %entry
+        (invoke void @may_throw2 to (label %ok) unwind (label %cs.bb)))
+      (label %cs.bb
+        (= %cs (catchswitch within none ((label %handler)) unwind to caller)))
+      (label %handler
+        (= %cp (catchpad within %cs ((ptr null) (i32 64) (ptr null))))
+        (catchret from %cp to (label %ok)))
+      (label %ok
+        (ret void)))
+    (define void (@wincleanup)
+      (personality ptr @wpers)
+      (label %entry
+        (invoke void @may_throw2 to (label %ok) unwind (label %cl.bb)))
+      (label %cl.bb
+        (= %clp (cleanuppad within none ()))
+        (cleanupret from %clp unwind to caller))
+      (label %ok
+        (ret void))))
+  "declare i32 @wpers()
+
+declare void @may_throw2()
+
+define void @wineh() personality ptr @wpers {
+entry:
+  invoke void @may_throw2()
+          to label %ok unwind label %cs.bb
+
+cs.bb:
+  %cs = catchswitch within none [label %handler] unwind to caller
+
+handler:
+  %cp = catchpad within %cs [ptr null, i32 64, ptr null]
+  catchret from %cp to label %ok
+
+ok:
+  ret void
+}
+
+define void @wincleanup() personality ptr @wpers {
+entry:
+  invoke void @may_throw2()
+          to label %ok unwind label %cl.bb
+
+cl.bb:
+  %clp = cleanuppad within none []
+  cleanupret from %clp unwind to caller
+
+ok:
+  ret void
+}
+")
+
+(check-entry! "callbr"
+  '((define i32 (@asmgoto (i32 %x))
+      (label %entry
+        (callbr void (asm "" "") to (label %fall) ()))
+      (label %fall
+        (= %r (callbr i32 (asm "" "=r,r,!i" sideeffect) (i32 %x)
+                to (label %out) ((label %alt)))))
+      (label %out
+        (ret i32 %r))
+      (label %alt
+        (ret i32 -1))))
+  "define i32 @asmgoto(i32 %x) {
+entry:
+  callbr void asm \"\", \"\"()
+          to label %fall []
+
+fall:
+  %r = callbr i32 asm sideeffect \"\", \"=r,r,!i\"(i32 %x)
+          to label %out [label %alt]
+
+out:
+  ret i32 %r
+
+alt:
+  ret i32 -1
+}
+")
+
 ;; ---- the ledger check (level 1) -----------------------------------------------------
 
 (t:section "coverage: observed + excluded = oracle (level 1)")

@@ -220,6 +220,53 @@
                             (= %a (ptrtoint ptr (blockaddress @g %tgt) to i64))
                             (ret i64 %a))))))
 
+(t:section "ll: exception handling")
+
+(define inv-prog
+  '((define i32 (@pers)
+      (label %entry (ret i32 0)))
+    (define i64 (@double-it (i64 %x))
+      (label %entry
+        (= %r (add i64 %x %x))
+        (ret i64 %r)))
+    (define i64 (@safe-double (i64 %x))
+      (personality ptr @pers)
+      (label %entry
+        (= %r (invoke i64 @double-it (i64 %x)
+                to (label %ok) unwind (label %lpad))))
+      (label %ok
+        (ret i64 %r))
+      (label %lpad
+        (= %lp (landingpad (struct ptr i32) cleanup))
+        (ret i64 -1)))))
+
+(t:check "invoke: normal path through the jit"
+         (= ((jit:function (ll:jit inv-prog) "safe-double") 21) 42))
+(t:check "personality lands in the IR"
+         (contains? (ll:dump inv-prog) "personality ptr @pers"))
+
+(t:check-exn "unbound personality"
+             (ll:dump '((define i64 (@f (i64 %x))
+                          (personality ptr @nope)
+                          (label %entry (ret i64 %x))))))
+(t:check-exn "invoke without unwind"
+             (ll:dump '((declare void (@g))
+                        (define void (@f)
+                          (label %entry
+                            (invoke void @g to (label %ok)))
+                          (label %ok (ret void))))))
+(t:check-exn "callbr with a non-asm callee"
+             (ll:dump '((declare void (@g))
+                        (define void (@f)
+                          (label %entry
+                            (callbr void @g to (label %ok) ()))
+                          (label %ok (ret void))))))
+(t:check-exn "malformed catchret"
+             (ll:dump '((define void (@f)
+                          (label %entry
+                            (catchret %cp (label %ok)))
+                          (label %ok (ret void))))))
+
 (t:section "ll: globals")
 
 (define counter-prog

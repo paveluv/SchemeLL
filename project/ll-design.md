@@ -22,10 +22,20 @@ attr*))`, mirroring IR word order (`@x = private constant i64 42` →
 undef/zeroinitializer/null, @globals/@functions, `(c "bytes")` /
 `(cz "bytes")` strings, and per-element-typed aggregates
 `((i64 1) (i32 2))`; no initializer = declaration (external/extern_weak
-only). Not yet supported (rejected with clear errors): exception
-handling, tail-call markers, constant expressions (opaque pointers made
-the common ones unnecessary; add on demand), alloca element counts, raw
-value injection, and non-phi references to textually-later values.
+only). Step 5 (2026-08-22) completed the opcode set with exception
+handling: invoke (`(= %r (invoke ty callee args... to (label %ok)
+unwind (label %pad)))`), landingpad with cleanup/catch/filter clauses,
+resume, the funclet family (catchswitch/catchpad/cleanuppad with
+`within none|%pad`, catchret/cleanupret with `unwind to caller` or a
+label target), callbr with a required inline-asm callee
+`(asm "template" "constraints" sideeffect? alignstack?)` (asm callees
+also work in call), and an optional `(personality ptr @fn)` clause
+between a define's signature and its first block. Every LLVMOpcode is
+now implemented except UserOp1/2 (permanently excluded — never valid
+in IR). Not yet supported (rejected with clear errors): tail-call
+markers, constant expressions (opaque pointers made the common ones
+unnecessary; add on demand), alloca element counts, raw value
+injection, and non-phi references to textually-later values.
 
 First layer of the llscheme DSL tower:
 a notation for LLVM IR that is ordinary Scheme data/syntax, sitting directly

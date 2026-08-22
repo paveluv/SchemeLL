@@ -60,6 +60,12 @@
     ;; Core: instruction building
     BuildRet BuildRetVoid BuildBr BuildCondBr
     BuildSwitch AddCase BuildIndirectBr AddDestination BuildUnreachable
+    ;; exception handling
+    BuildInvoke2 BuildResume BuildLandingPad AddClause SetCleanup
+    SetPersonalityFn
+    BuildCatchSwitch AddHandler BuildCatchPad BuildCleanupPad
+    BuildCatchRet BuildCleanupRet
+    BuildCallBr GetInlineAsm TokenTypeInContext
     BuildAdd BuildSub BuildMul
     BuildSDiv BuildUDiv BuildSRem BuildURem
     BuildAnd BuildOr BuildXor
@@ -318,6 +324,46 @@
     (foreign-procedure "LLVMAddDestination" (void* void*) void))
   (define BuildUnreachable
     (foreign-procedure "LLVMBuildUnreachable" (void*) void*))
+
+  ;; exception handling
+  (define BuildInvoke2                 ; (builder, fn-type, fn, arg-array, count, then-bb, unwind-bb, name)
+    (foreign-procedure "LLVMBuildInvoke2"
+                       (void* void* void* void* unsigned-int void* void* string) void*))
+  (define BuildResume
+    (foreign-procedure "LLVMBuildResume" (void* void*) void*))
+  (define BuildLandingPad              ; (builder, type, legacy-pers-fn (pass 0), nclauses-hint, name)
+    (foreign-procedure "LLVMBuildLandingPad"
+                       (void* void* void* unsigned-int string) void*))
+  (define AddClause                    ; catch if pointer-typed constant, filter if array
+    (foreign-procedure "LLVMAddClause" (void* void*) void))
+  (define SetCleanup
+    (foreign-procedure "LLVMSetCleanup" (void* int) void))
+  (define SetPersonalityFn
+    (foreign-procedure "LLVMSetPersonalityFn" (void* void*) void))
+  (define BuildCatchSwitch             ; (builder, parent-pad, unwind-bb (0 = to caller), nhandlers-hint, name)
+    (foreign-procedure "LLVMBuildCatchSwitch"
+                       (void* void* void* unsigned-int string) void*))
+  (define AddHandler
+    (foreign-procedure "LLVMAddHandler" (void* void*) void))
+  (define BuildCatchPad                ; (builder, parent-pad, arg-array, count, name)
+    (foreign-procedure "LLVMBuildCatchPad"
+                       (void* void* void* unsigned-int string) void*))
+  (define BuildCleanupPad
+    (foreign-procedure "LLVMBuildCleanupPad"
+                       (void* void* void* unsigned-int string) void*))
+  (define BuildCatchRet                ; (builder, catchpad, dest-bb)
+    (foreign-procedure "LLVMBuildCatchRet" (void* void* void*) void*))
+  (define BuildCleanupRet              ; (builder, cleanuppad, unwind-bb (0 = to caller))
+    (foreign-procedure "LLVMBuildCleanupRet" (void* void* void*) void*))
+  (define BuildCallBr                  ; (builder, fn-type, fn, default-bb, dest-array, ndests, arg-array, nargs, bundles, nbundles, name)
+    (foreign-procedure "LLVMBuildCallBr"
+                       (void* void* void* void* void* unsigned-int
+                              void* unsigned-int void* unsigned-int string) void*))
+  (define GetInlineAsm                 ; (fn-type, asm, len, constraints, len, side-effects?, align-stack?, dialect, can-throw?)
+    (foreign-procedure "LLVMGetInlineAsm"
+                       (void* string size_t string size_t int int int int) void*))
+  (define TokenTypeInContext           ; ConstNull of this = `none` parent pad
+    (foreign-procedure "LLVMTokenTypeInContext" (void*) void*))
 
   (define BuildAdd
     (foreign-procedure "LLVMBuildAdd" (void* void* void* string) void*))
