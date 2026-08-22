@@ -96,7 +96,7 @@ Newest entries first. Format: date, Done / Decided / Next.
   corpus needs this). 145 checks.
 
 ### Next (coverage plan order)
-- Step 6: ll:disassemble + LLVM test-corpus round-trip (level 3).
+- Step 6: ll:unbuild + LLVM test-corpus round-trip (level 3).
 - Smaller leftovers: scalable vectors, raw value injection (the reserved
   (ptr N) shape), constant expressions on demand, address-spaced globals.
 

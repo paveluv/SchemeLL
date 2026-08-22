@@ -16,7 +16,7 @@ handling — the opcode axis is COMPLETE at 65 implemented + UserOp1/2
 permanently excluded = 67/67. Step 5.5 done 2026-08-22 (pre-corpus
 blockers): varargs, tail markers (tail-call-kind axis 4/4), alloca
 counts, non-phi forward references. Level 3 (corpus round-trip via
-ll:disassemble) is the remaining phase. "100% coverage" is meaningless without a
+ll:unbuild) is the remaining phase. "100% coverage" is meaningless without a
 machine-checkable oracle and an explicit scope. This plan defines both, and
 three verification levels that turn coverage from a claim into a test that
 fails.
@@ -74,20 +74,21 @@ Two mechanisms make "implemented" mean "actually works":
 
 ## Level 3 — corpus round-trip (the endgame)
 
-Implement `ll:disassemble`: walk any LLVM module (e.g. one parsed from
+Implement `ll:unbuild` (named for what it is: the inverse of ll:build;
+LLVM parses, we unbuild): walk any LLVM module (e.g. one parsed from
 disk) via the C API and emit ll data. Then for `.ll` files from LLVM's own
 regression corpus (`reference/llvm-project/llvm/test/`, clone command in
 RULES.md):
 
     A = print(parse(file))                        ; LLVM's canonical form
-    B = print(build(disassemble(parse(file))))    ; through our layer
+    B = print(build(unbuild(parse(file))))    ; through our layer
     assert A == B  (or the file matches an exclusion pattern)
 
 The corpus pass-rate is an *external* coverage metric over thousands of
 real-world IR files — it catches grammar gaps we didn't imagine, not just
 missing opcodes. 100% = every corpus file either round-trips byte-identically
 or matches a documented exclusion (debug metadata, inline asm, ...).
-Disassembly also gives IR→ll transliteration for free (paste clang output,
+Unbuilding also gives IR→ll transliteration for free (paste clang output,
 get ll back).
 
 ## Gap-closing order (current known gaps)
@@ -102,7 +103,7 @@ get ll back).
    the type grammar, aliases.
 5. Exception handling (invoke/landingpad/resume/catch*/cleanup*) — likely
    the initial exclusion list, implemented last.
-6. `ll:disassemble` + corpus harness (`make coverage`).
+6. `ll:unbuild` + corpus harness (`make coverage`).
 
 Separate axis, same method: (llvm raw) completeness vs the 1267 exported
 C symbols — eventually via the header-driven binding generator; tracked by
