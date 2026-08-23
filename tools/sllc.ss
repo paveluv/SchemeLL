@@ -3,7 +3,9 @@
 ;;;
 ;;;   scheme --libdirs . --script tools/sllc.ss prog.sll            -> prog.o
 ;;;   scheme --libdirs . --script tools/sllc.ss --asm prog.sll     -> prog.s
-;;;   scheme --libdirs . --script tools/sllc.ss --print prog.sll   (show IR)
+;;;   scheme --libdirs . --script tools/sllc.ss --render-llvm-ir prog.sll
+;;;     (print the program as textual LLVM IR, via the pure-Scheme
+;;;      renderer -- no LLVM machinery involved)
 ;;;   scheme --libdirs . --script tools/sllc.ss --opt O2 prog.sll  (optimize)
 ;;;   scheme --libdirs . --script tools/sllc.ss --run prog.sll     (JIT @main,
 ;;;                                              exit with its return value)
@@ -14,6 +16,7 @@
 ;;;   -o PATH   set the output path
 (import (chezscheme)
         (prefix (sll) sll:)
+        (prefix (sll render) render:)
         (prefix (llvm ir) ir:)
         (prefix (llvm jit) jit:)
         (prefix (llvm target) target:))
@@ -32,7 +35,8 @@
       [(string=? (car a) "--asm") (set! mode 'asm) (loop (cdr a))]
       [(string=? (car a) "--run") (set! mode 'run) (loop (cdr a))]
       [(string=? (car a) "--exe") (set! mode 'exe) (loop (cdr a))]
-      [(string=? (car a) "--print") (set! mode 'print) (loop (cdr a))]
+      [(string=? (car a) "--render-llvm-ir")
+       (set! mode 'render) (loop (cdr a))]
       [(string=? (car a) "--opt")
        (set! opt-level (cadr a)) (loop (cddr a))]
       [(string=? (car a) "-o")
@@ -40,7 +44,7 @@
       [else (set! in-path (car a)) (loop (cdr a))])))
 
 (unless in-path
-  (printf "usage: sllc [--asm|--run|--exe|--print] [--opt O2] [-o PATH] prog.sll~%")
+  (printf "usage: sllc [--asm|--run|--exe|--render-llvm-ir] [--opt O2] [-o PATH] prog.sll~%")
   (exit 2))
 
 (define (default-out ext)
@@ -187,8 +191,10 @@
 ;; ---- modes -------------------------------------------------------------------
 
 (case mode
-  [(print)
-   (display (ir:module->string m))]
+  [(render)
+   ;; sll -> ll in pure Scheme; sll:build above has already validated
+   ;; and verified the program
+   (display (render:sll->ll prog))]
   [(object)
    (let ([path (default-out ".o")])
      (target:emit-object-file tm m path)
