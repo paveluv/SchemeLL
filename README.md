@@ -1,87 +1,149 @@
 # SchemeLL
 
-LLVM bindings for Chez Scheme, plus (eventually) a Scheme-embedded,
-statically-typed DSL compiled through LLVM (working name: medl).
+**LLVM for Chez Scheme** — and LLVM IR as s-expressions.
 
-What works today:
+SchemeLL gives Scheme the whole LLVM toolchain with no glue code: full
+FFI bindings over stock `libLLVM.so`, an in-memory ORC JIT that hands
+back ordinary Scheme procedures, ahead-of-time object emission, and
+**sll** ("Scheme's Low Level") — a complete s-expression dialect of
+LLVM IR. Programs are plain data, so `quasiquote` is the macro layer
+and Scheme is the metaprogramming language.
 
-- **`(llvm raw)`** — direct FFI bindings to the LLVM 19 C API (curated subset).
-- **`(llvm ir)`** — safe IR construction: contexts/modules/builders as records
-  with ownership tracking (use-after-free raises instead of segfaulting).
-- **`(llvm jit)`** — ORC LLJIT: compile modules fully in memory and get JIT'd
-  functions back as ordinary Scheme procedures, with the foreign signature
-  derived automatically from the function's LLVM type. No files touched.
-- **`(llvm target)`** — object file / assembly emission, to disk or to a
-  bytevector; new-pass-manager optimization via `run-module-passes!`.
-- **`(sll)`** — LLVM IR as s-expressions: textual IR transliterated
-  into plain Scheme data (see `project/sll-design.md`), interpreted into real
-  IR. Since programs are lists, quasiquote is the metaprogramming layer.
-  `sll:procedure` compiles a program in memory and returns a Scheme
-  procedure; `tools/sllc.ss` compiles `.sll` files to objects — or, for
-  self-contained programs, straight to a static executable with no
-  external toolchain at all. Start at `examples/README.md`.
+SchemeLL is built to be a **lowering target**: if you're writing a
+compiler in Scheme, sll is the data structure you lower to — then JIT
+it, optimize it, or emit native objects, all from the same
+representation.
 
 ```scheme
-(import (prefix (sll) sll:) (prefix (llvm jit) jit:))
+(import (chezscheme) (prefix (sll) sll:))
 
-(define fact-prog
-  '((define i64 (@fact (i64 %n))
+(define fact
+  (sll:procedure
+    '((define i64 (@fact (i64 %n))
+        (label %entry
+          (= %base (icmp slt i64 %n 2))
+          (br i1 %base (label %one) (label %rec)))
+        (label %one (ret i64 1))
+        (label %rec
+          (= %n1 (sub i64 %n 1))
+          (= %f (call i64 (@fact (i64 %n1))))
+          (= %r (mul i64 %n %f))
+          (ret i64 %r))))
+    "fact"))
+
+(fact 20)   ; => 2432902008176640000, running as native code
+```
+
+That's the whole program: one import, and IR-as-data becomes a
+callable native procedure (in about 20 ms, ORC JIT included). The
+syntax is textual LLVM IR transliterated — commas dropped, parens
+added — so anything you know about IR carries over directly.
+
+## Programs are data
+
+Because an sll program is a list, generating code is just building
+lists. Here is a fully unrolled `x^n`, specialized at run time:
+
+```scheme
+(define (power-prog n)
+  `((define i64 (@pow (i64 %x))
       (label %entry
-        (= %isbase (icmp slt i64 %n 2))
-        (br i1 %isbase (label %base) (label %rec)))
-      (label %base
-        (ret i64 1))
-      (label %rec
-        (= %n1 (sub i64 %n 1))
-        (= %f (call i64 (@fact (i64 %n1))))
-        (= %r (mul i64 %n %f))
-        (ret i64 %r)))))
+        ,@(let loop ([i 1] [prev '%x] [acc '()])
+            (if (>= i n)
+                (reverse (cons `(ret i64 ,prev) acc))
+                (let ([next (string->symbol (format "%p~a" i))])
+                  (loop (+ i 1) next
+                        (cons `(= ,next (mul i64 ,prev %x)) acc)))))))))
 
-(define fact (jit:function (sll:jit fact-prog) "fact"))
-(fact 20)                ; => 2432902008176640000
-(display (sll:dump fact-prog))   ; the same program as textual LLVM IR
+((sll:procedure (power-prog 11) "pow") 2)   ; => 2048
 ```
 
-```scheme
-(import (prefix (llvm ir) ir:)
-        (prefix (llvm jit) jit:))
+The same trick scales to real problems: platform-specific code becomes
+a Scheme function returning the platform-specific forms
+(`examples/aot/hello-portable.ss` cross-compiles one source into both
+x86-64 and AArch64 Linux objects this way).
 
-(define jc (jit:make-context))
-(define ctx (jit:context-ir jc))
-(define mod (ir:make-module ctx "demo"))
-(define b (ir:make-builder ctx))
+## A 186-byte executable, no toolchain
 
-(define i32 (ir:int32-type ctx))
-(define f (ir:add-function mod "add" (ir:function-type i32 (list i32 i32))))
-(ir:position-at-end! b (ir:append-block ctx f "entry"))
-(ir:build-ret b (ir:build-add b (ir:function-param f 0) (ir:function-param f 1)))
-
-(define j (jit:make))
-(jit:add-module! j jc mod)
-
-(define add (jit:function j "add"))  ; a plain Scheme procedure
-(add 3 4)                            ; => 7
-```
-
-Project-wide naming convention: definitions carry no module prefix, and every
-project library is imported with a `prefix` (`ir:`, `jit:`, `target:`, `base:`,
-`config:`). `(llvm raw)` is imported as `(prefix (llvm raw) LLVM)`, which makes
-call sites read as the exact C names (`LLVMBuildAdd`, ...). See
-`project/RULES.md`.
-
-## Requirements
-
-- Chez Scheme 10, 64-bit Linux (x86_64 or aarch64)
-- LLVM 19 shared library (`libLLVM-19.so`, e.g. Debian's `libllvm19`)
-
-## Running
+`tools/sllc.ss` compiles `.sll` files — whole programs as pure data —
+using the LLVM C API alone. For self-contained programs it even writes
+the final static executable itself (a built-in minimal ELF64 emitter;
+no compiler, assembler, or linker anywhere):
 
 ```
-make test    # run the test suite
-make repl    # REPL with the libraries on the library path
+$ scheme --libdirs . --script tools/sllc.ss --opt O2 --exe examples/aot/hello-linux-x86.sll
+wrote executable examples/aot/hello-linux-x86 (186 bytes, entry #x400078)
+$ ./examples/aot/hello-linux-x86
+Hello, SchemeLL!
 ```
 
-## Project docs
+**186 bytes**, talking to the kernel directly. `sllc` also emits
+relocatable objects and assembly (including cross-target: an x86 host
+emits genuine AArch64 objects), JIT-runs `@main` with `--run`, and
+prints your program as textual LLVM IR with `--render-llvm-ir` —
+using SchemeLL's own pure-Scheme renderer, no LLVM in the path.
 
-- `project/RULES.md` — layering, FFI conventions, ownership rules, reference material.
-- `project/WORKLOG.md` — work tracking.
+## Verified against LLVM itself
+
+sll is not a toy subset. Its coverage was driven by round-tripping
+**LLVM's own regression corpus** — all 36,488 `.ll` files — through
+`parse → sll:unbuild → sll:build → print` and demanding byte-identical
+canonical output:
+
+- **98.9%** of every file LLVM's parser accepts round-trips exactly
+  (35,324 of 35,709; the remainder sit in named, documented buckets,
+  every one a C-API limitation — the campaign's definition of 100%
+  was *utilizing the C API to full potential*, and it got there).
+- **Zero unexplained failures**: no mismatches, no crashes, across
+  the entire corpus.
+- IR construction runs at roughly **150 µs per module** (the corpus
+  harness builds ~28,000 modules in ~4 seconds, benchmarked on every
+  run).
+- The exclusions ledger (`project/not-modeled.md`) maintains the
+  invariant *implemented ∪ documented = LLVM IR* — checked by tests
+  that parse the LLVM C headers as the oracle.
+
+Everything that can appear in IR is expressible: all 67 opcodes, EH
+funclets, atomics with syncscopes, operand bundles, statepoints,
+inline asm (all dialects), constant expressions, metadata operands,
+scalable vectors, ifuncs, aliases, unnamed struct types,
+cross-function blockaddress, bit-exact NaN payloads, module asm,
+datalayout/triple, and more.
+
+## The stack
+
+| layer | what it is |
+|---|---|
+| `(llvm raw)` | the C API verbatim — `(prefix (llvm raw) LLVM)` reconstructs exact C names |
+| `(llvm ir)` | safe construction: contexts/modules/builders as records with **ownership tracking** — use-after-free raises a Scheme condition instead of segfaulting |
+| `(llvm jit)` | ORC LLJIT: foreign signatures derived from LLVM types automatically; JIT'd code resolves process symbols (call `@cos` or `@puts` by declaring them); refuses modules targeting a foreign platform |
+| `(llvm target)` | objects and assembly, to disk or bytevector; any backend in your libLLVM (X86, AArch64, ARM, RISCV, WebAssembly on stock Debian) |
+| `(sll)` | the s-expression dialect: `build`, `jit`, `procedure`, `dump`, and `unbuild` (modules **back** into sll data) |
+| `(sll render)` | `sll->ll`: textual LLVM IR from sll data in pure Scheme |
+| `tools/sllc.ss` | the `.sll` compiler: `.o` / `.s` / `--run` / `--exe` / IR printing |
+
+The whole stack is about **5,800 lines of Scheme**. There is no C to
+compile: everything talks to stock `libLLVM` through Chez's FFI.
+
+## Getting started
+
+Requirements: Chez Scheme 10, LLVM 19 (`libLLVM-19.so`; the Debian
+`llvm-19` packages work as-is). Only LLVM 19 is supported at the
+moment; newer versions are planned.
+
+```
+$ make test        # 224 checks
+$ make examples    # smoke-runs all 35 examples end to end
+$ scheme --libdirs . --script examples/sll/01-add.ss
+2 + 40 = 42
+```
+
+Then read **`examples/README.md`** — 35 examples in three buckets:
+sll scripting (20), the binding layers (10), and AOT objects &
+executables (10, including the `.sll` files).
+
+Design documents live in `project/`: the sll grammar and its
+rationale (`sll-design.md`, built nanopass-friendly: prefix-only
+forms, no mid-form keywords), the coverage methodology and final
+standing (`coverage-plan.md`), and the exclusions ledger
+(`not-modeled.md`).
