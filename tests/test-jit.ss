@@ -98,3 +98,16 @@
 (t:check "explicit jit:dispose!" (begin (jit:dispose! j) #t))
 (t:check-exn "calling a procedure from a disposed jit raises" (add 1 2))
 (t:check-exn "lookup on a disposed jit raises" (jit:lookup-address j "add"))
+
+(t:section "jit: host-platform guard")
+
+;; a module declaring a foreign target must be refused: the JIT
+;; compiles for THIS machine
+(let* ([jc (jit:make-context)]
+       [ctx (jit:context-ir jc)]
+       [m (ir:make-module ctx "foreign")]
+       [j (jit:make)])
+  (ir:set-module-target-triple! m "aarch64-unknown-linux-gnu")
+  (t:check-exn "jit refuses a foreign-triple module"
+               (jit:add-module! j jc m))
+  (jit:context-dispose! jc))

@@ -76,8 +76,34 @@
 (define m (sll:build ctx (path-last in-path) prog))
 (ir:verify-module m)
 
-(target:initialize-native!)
-(define tm (target:make-machine))
+;; a (triple "...") item in the program selects the target; without
+;; one, the host is the target. The declared triple is honored (cross
+;; object/assembly emission), never clobbered by the host's.
+(define declared-triple
+  (let ([item (assq 'triple prog)]) (and item (cadr item))))
+
+(define (triple->backend t)
+  (let* ([arch (let loop ([i 0])
+                 (cond
+                   [(= i (string-length t)) t]
+                   [(char=? (string-ref t i) #\-) (substring t 0 i)]
+                   [else (loop (+ i 1))]))])
+    (cond
+      [(member arch '("x86_64" "i386" "i686")) "X86"]
+      [(member arch '("aarch64" "arm64")) "AArch64"]
+      [(member arch '("arm" "armv7" "thumbv7")) "ARM"]
+      [(member arch '("riscv32" "riscv64")) "RISCV"]
+      [(member arch '("wasm32" "wasm64")) "WebAssembly"]
+      [else #f])))
+
+(define tm
+  (if declared-triple
+      (let ([backend (triple->backend declared-triple)])
+        (unless (and backend (target:initialize-target! backend))
+          (error 'sllc "no backend available for the declared triple"
+                 declared-triple))
+        (target:make-machine declared-triple "generic" "" 'default))
+      (begin (target:initialize-native!) (target:make-machine))))
 (target:configure-module! m tm)
 (when opt-level
   (ir:run-module-passes! m (string-append "default<" opt-level ">")))

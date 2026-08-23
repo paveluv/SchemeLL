@@ -159,11 +159,46 @@
 
   ;; ---- adding modules and looking up code ----------------------------------------
 
+  ;; the arch and OS components of a target triple, for host matching
+  ;; (the vendor field is irrelevant: -pc- and -unknown- are the same
+  ;; machine)
+  (define (triple-arch t)
+    (let loop ([i 0])
+      (cond
+        [(= i (string-length t)) t]
+        [(char=? (string-ref t i) #\-) (substring t 0 i)]
+        [else (loop (+ i 1))])))
+
+  (define os-keywords
+    '("linux" "darwin" "macos" "windows" "freebsd" "netbsd" "openbsd"
+      "solaris" "wasi"))
+
+  (define (triple-os t)
+    (find (lambda (os)
+            (let ([n (string-length t)] [m (string-length os)])
+              (let loop ([i 0])
+                (cond
+                  [(> (+ i m) n) #f]
+                  [(string=? (substring t i (+ i m)) os) #t]
+                  [else (loop (+ i 1))]))))
+          os-keywords))
+
   (define (add-module! j jc m)
     (unless (eqv? (ir:context-live-ptr (ir:module-context m))
                   (ir:context-live-ptr (context-ir jc)))
       (base:error 'jit:add-module!
                   "module was not created in this jit context" m jc))
+    ;; the JIT compiles for THIS machine: a module declaring a foreign
+    ;; target would produce code that cannot run here
+    (let ([mt (base:cstring->string
+                (LLVMGetTarget (ir:module-live-ptr m)))]
+          [host (target:default-triple)])
+      (when (and mt (not (string=? mt "")))
+        (unless (and (string=? (triple-arch mt) (triple-arch host))
+                     (equal? (triple-os mt) (triple-os host)))
+          (base:error 'jit:add-module!
+            "module targets a different platform than this JIT's host"
+            mt host))))
     (capture-signatures! j m)
     (let ([mod-ptr (ir:module-live-ptr m)]
           [tsctx (context-live-tsctx jc)])
