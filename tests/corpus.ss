@@ -77,33 +77,6 @@
        (string-append "BUG build-fail: " msg)]
       [else (string-append "BUG error: " msg)])))
 
-;; dso_local has no C API accessor in LLVM 19: normalize it textually
-(define (strip-dso-local l)
-  (let ([m (after-marker l " dso_local ")])
-    (if m
-        (string-append
-          (substring l 0 (- (string-length l) (string-length m) 11))
-          " " m)
-        l)))
-
-;; drop the module identity header lines before comparing; also drop
-;; metadata ("!") and comdat-declaration ("$") lines -- neither is
-;; deletable via the C API, so the comparison excludes them (unbuild
-;; runs with 'ignore-named-metadata)
-(define (ir-body s)
-  (let ([p (open-string-input-port s)] [out (open-output-string)])
-    (let loop ()
-      (let ([l (get-line p)])
-        (unless (eof-object? l)
-          (unless (or (zero? (string-length l))   ; stripped sections leave
-                                                  ; blank separators behind
-                      (memv (string-ref l 0) '(#\; #\! #\$))
-                      (starts-with? l "source_filename"))
-            (put-string out (strip-dso-local l))
-            (put-char out #\newline))
-          (loop))))
-    (get-output-string out)))
-
 ;; ---- the round trip -----------------------------------------------------------
 
 (define (process path)
@@ -122,13 +95,13 @@
                            (set! failures (cons (cons path b) failures))))])
            (set! m (ir:parse-ir ctx path text))
            (n:normalize-module! m)
-           (let ([a (ir-body (ir:module->string m))])
+           (let ([a (n:comparable-ir (ir:module->string m))])
              (let ([prog (ll:unbuild m 'ignore-named-metadata)])
                (set! m2 (ll:build rctx "corpus" prog))
                ;; normalize the rebuild too: LLVM auto-attaches intrinsic
                ;; attributes to declarations it recognizes
                (n:normalize-module! m2)
-               (let ([b (ir-body (ir:module->string m2))])
+               (let ([b (n:comparable-ir (ir:module->string m2))])
                  (if (string=? a b)
                      (bucket! "PASS")
                      (begin

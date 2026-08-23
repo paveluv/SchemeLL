@@ -38,10 +38,10 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 | `dso_local` | undetected; the corpus harness normalizes it textually (no C API accessor in LLVM 19) |
 | alignment on function definitions/declarations (`define ... align 8`) | detected |
 | `unnamed_addr` / `local_unnamed_addr` | undetected |
-| DLL storage class (`dllimport`/`dllexport`) | undetected |
+| DLL storage class (`dllimport`/`dllexport`) | undetected; the corpus normalizer strips it |
 | garbage-collector name (`gc "..."`) | undetected; the corpus normalizer strips it |
 | prefix / prologue data | detected |
-| functions in non-zero program address spaces | undetected |
+| functions in non-zero program address spaces | detected |
 | intrinsic declarations acquiring auto-upgraded attributes | detected (via the attribute check) |
 
 ## Global variables
@@ -52,7 +52,7 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 | sections | detected |
 | visibility | detected |
 | `externally_initialized` | detected |
-| global variable attributes (`@g = global i32 7 #0`) | undetected |
+| global variable attributes (`@g = global i32 7 #0`) | undetected (no C API); normalized textually |
 | `unnamed_addr`, DLL storage, partitions | undetected; unnamed_addr is normalizer-stripped |
 
 ## Instructions
@@ -62,8 +62,11 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 | attached metadata (`!dbg`, `!tbaa`, `!prof`, `!range`, ...) | detected |
 | call-site attributes and call-site calling conventions | undetected |
 | operand bundles (`[ "deopt"(...) ]`) | detected |
-| `syncscope("singlethread")` (and named syncscopes) on atomics | detected |
-| non-default alignment on atomicrmw/cmpxchg (ll rebuilds with the ABI default) | undetected |
+| `syncscope("singlethread")` on atomics | detected |
+| named syncscopes (`syncscope("agent")`, ...) | undetected (no C API in LLVM 19); the harness normalizes them textually |
+| `swifterror` / `inalloca` bits on alloca | undetected (no C API); normalized textually |
+| sanitizer metadata on globals (`no_sanitize_address`, ...) | undetected (no C API); normalized textually |
+| values explicitly named with digit strings (`%"0"`; inexpressible under the anonymity rule) | detected |
 | multi-index extractvalue/insertvalue (chain single-index forms instead) | detected |
 | instructions with all-constant operands (the C-API builder constant-folds them; no non-folding builder exists in the C API) | detected |
 | alloca in a non-zero address space (datalayout-driven; the C-API builder cannot produce them) | detected |
@@ -103,4 +106,5 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 types via `(type %name ...)` items, scalable vectors, function linkage,
 integer constants of any width, aggregate constants as instruction
 operands, poison shuffle-mask lanes, address-spaced globals, anonymous
-all-digit `%N` names.)
+all-digit `%N` names; later rounds: trunc nsw/nuw flags, explicit
+alignment on atomicrmw/cmpxchg, named-struct-typed constants.)

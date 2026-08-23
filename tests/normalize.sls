@@ -6,7 +6,7 @@
 ;;; point thousands of corpus files start testing it.
 ;;; Import as: (prefix (tests normalize) n:)
 (library (tests normalize)
-  (export normalize-module!)
+  (export normalize-module! comparable-ir)
   (import (chezscheme)
           (prefix (llvm base) base:)
           (prefix (llvm raw) LLVM)
@@ -79,6 +79,7 @@
     (LLVMGlobalClearMetadata f)
     (LLVMSetGC f base:null-ptr)
     (LLVMSetComdat f base:null-ptr)
+    (LLVMSetDLLStorageClass f 0)
     (LLVMSetFunctionCallConv f 0)
     (LLVMSetVisibility f 0)
     (LLVMSetSection f "")
@@ -92,10 +93,96 @@
   (define (normalize-global! g)
     (LLVMGlobalClearMetadata g)
     (LLVMSetComdat g base:null-ptr)
+    (LLVMSetDLLStorageClass g 0)
     (LLVMSetVisibility g 0)
     (LLVMSetSection g "")
     (LLVMSetUnnamedAddress g 0)
     (LLVMSetThreadLocal g 0))
+
+  ;; ---- textual canonicalization for the round-trip comparison ---------
+  ;; Some constructs have no C API accessors at all in LLVM 19 and can
+  ;; only be excluded from the comparison textually; each is a row in
+  ;; project/not-modeled.md: dso_local, alloca swifterror/inalloca bits,
+  ;; named syncscopes, global attributes (#N), plus ! metadata and
+  ;; $ comdat declaration lines and blank separators.
+
+  (define (find-sub s sub start)
+    (let ([n (string-length s)] [m (string-length sub)])
+      (let loop ([i start])
+        (cond
+          [(> (+ i m) n) #f]
+          [(string=? (substring s i (+ i m)) sub) i]
+          [else (loop (+ i 1))]))))
+
+  (define (strip-token l tok)   ; remove every " tok " leaving one space
+    (let loop ([l l])
+      (let ([i (find-sub l (string-append " " tok " ") 0)])
+        (if i
+            (loop (string-append (substring l 0 i)
+                                 (substring l (+ i 1 (string-length tok))
+                                            (string-length l))))
+            l))))
+
+  (define (strip-syncscope l)   ; remove ` syncscope("...")`
+    (let ([i (find-sub l " syncscope(\"" 0)])
+      (if i
+          (let ([close (find-sub l "\")" i)])
+            (if close
+                (string-append (substring l 0 i)
+                               (substring l (+ close 2) (string-length l)))
+                l))
+          l)))
+
+  (define (strip-global-attr l)  ; drop a trailing " #N" on @-lines
+    (if (and (> (string-length l) 0) (char=? (string-ref l 0) #\@))
+        (let loop ([i (- (string-length l) 1)])
+          (cond
+            [(and (> i 1) (char-numeric? (string-ref l i))) (loop (- i 1))]
+            [(and (> i 1) (char=? (string-ref l i) #\#)
+                  (char=? (string-ref l (- i 1)) #\space)
+                  (< (+ i 1) (string-length l)))
+             (substring l 0 (- i 1))]
+            [else l]))
+        l))
+
+  (define (strip-comma-token l tok)  ; remove every ", tok"
+    (let loop ([l l])
+      (let ([i (find-sub l (string-append ", " tok) 0)])
+        (if i
+            (loop (string-append
+                    (substring l 0 i)
+                    (substring l (+ i 2 (string-length tok))
+                               (string-length l))))
+            l))))
+
+  (define (canonical-line l)
+    (strip-global-attr
+      (strip-syncscope
+        (strip-comma-token
+          (strip-comma-token
+            (strip-token (strip-token (strip-token l "dso_local")
+                                      "swifterror")
+                         "inalloca")
+            "no_sanitize_address")
+          "no_sanitize_hwaddress"))))
+
+  ;; printed module -> comparable text: drops module-identity lines,
+  ;; ! metadata and $ comdat lines, blank lines; canonicalizes the rest
+  (define (comparable-ir s)
+    (let ([p (open-string-input-port s)] [out (open-output-string)])
+      (let loop ()
+        (let ([l (get-line p)])
+          (unless (eof-object? l)
+            (unless (or (zero? (string-length l))
+                        (memv (string-ref l 0) '(#\; #\! #\$))
+                        (and (>= (string-length l) 12)
+                             (string=? (substring l 0 12) "attributes #"))
+                        (and (>= (string-length l) 15)
+                             (string=? (substring l 0 15) "source_filename")))
+              (put-string out (canonical-line l))
+              (put-char out #\newline))
+            (loop))))
+      (get-output-string out)))
 
   ;; NOT strippable via the C API (LLVM 19): dso_local, comdat,
   ;; externally_initialized, DLL storage, gc names, prefix/prologue data,

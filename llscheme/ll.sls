@@ -394,7 +394,7 @@
   (define gep-flag-bits
     '((inbounds . 3) (nusw . 2) (nuw . 4)))
 
-  (define wrap-flag-ops '(add sub mul shl))
+  (define wrap-flag-ops '(add sub mul shl trunc))
   (define exact-flag-ops '(udiv sdiv lshr ashr))
 
   (define flag-symbols
@@ -425,7 +425,7 @@
                       (ir:set-exact! v) mask]
                      [(disjoint) (require-flag-op op '(or) flag form)
                       (ir:set-disjoint! v) mask]
-                     [(nneg) (require-flag-op op '(zext) flag form)
+                     [(nneg) (require-flag-op op '(zext uitofp) flag form)
                       (ir:set-nneg! v) mask]
                      [(volatile)
                       (require-flag-op op '(load store atomicrmw cmpxchg) flag form)
@@ -772,24 +772,28 @@
                 (arity 1 "(fence ordering)")
                 (ir:build-fence b (ordering-int (car args) form))]
                [(atomicrmw)
-                (arity 4 "(atomicrmw op (ptr p) (type v) ordering)")
+                (arity>= 4 "(atomicrmw op (ptr p) (type v) ordering (align n)?)")
                 (let ([rmw (assq (car args) rmw-ops)])
                   (unless rmw
                     (ll-error "unknown atomicrmw operation" (car args) form))
-                  (ir:build-atomicrmw b (cdr rmw)
-                                      (resolve-operand st #f (cadr args))
-                                      (resolve-operand st #f (caddr args))
-                                      (ordering-int (cadddr args) form)
-                                      name))]
+                  (let ([v (ir:build-atomicrmw b (cdr rmw)
+                                               (resolve-operand st #f (cadr args))
+                                               (resolve-operand st #f (caddr args))
+                                               (ordering-int (cadddr args) form)
+                                               name)])
+                    (apply-attrs! v (cddddr args) form)
+                    v))]
                [(cmpxchg)
-                (arity 5 "(cmpxchg (ptr p) (type cmp) (type new) succ-ord fail-ord)")
-                (ir:build-cmpxchg b
-                                  (resolve-operand st #f (car args))
-                                  (resolve-operand st #f (cadr args))
-                                  (resolve-operand st #f (caddr args))
-                                  (ordering-int (cadddr args) form)
-                                  (ordering-int (car (cddddr args)) form)
-                                  name)]
+                (arity>= 5 "(cmpxchg (ptr p) (type cmp) (type new) succ-ord fail-ord (align n)?)")
+                (let ([v (ir:build-cmpxchg b
+                                           (resolve-operand st #f (car args))
+                                           (resolve-operand st #f (cadr args))
+                                           (resolve-operand st #f (caddr args))
+                                           (ordering-int (cadddr args) form)
+                                           (ordering-int (car (cddddr args)) form)
+                                           name)])
+                  (apply-attrs! v (cdr (cddddr args)) form)
+                  v)]
                [(switch)
                 (arity>= 3 "(switch type value (label %else) ((type c) (label %l)) ...)")
                 (let* ([ty (resolve-type ctx (car args))]
@@ -913,7 +917,10 @@
          (case (ir:type-kind ty)
            [(array) (ir:const-array (resolve-type ctx (caar form)) elts)]
            [(vector) (ir:const-vector elts)]
-           [(struct) (ir:const-struct ctx elts)]
+           [(struct) (if (ir:struct-name ty)
+                         (ir:const-named-struct ty elts)
+                         (ir:const-struct ctx elts
+                                          (ir:packed-struct-type? ty)))]
            [else (ll-error "aggregate initializer for a non-aggregate type"
                            form)]))]
       [else (ll-error "invalid constant initializer" form)]))

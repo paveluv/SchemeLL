@@ -119,10 +119,28 @@ Newest entries first. Format: date, Done / Decided / Next.
   instructions (C-API builder folds both), function alignment,
   alloca addrspace, externally_initialized, prefix/prologue data.
 
+- MISMATCH bucket diagnosed and defeated (rounds 6-7): 2762 -> 25 files
+  (0.07%). Tool: tests/probe-mismatch.ss re-runs failures and groups
+  masked first-diff signatures. Causes found and fixed: blank-line
+  separators from stripped sections; dllimport/dllexport (normalizer:
+  SetDLLStorageClass); swifterror/inalloca alloca bits, named
+  syncscopes, sanitizer metadata, global #N attribute refs + orphaned
+  "attributes #N" lines (no C API -- textual canonicalization,
+  centralized as n:comparable-ir); trunc nsw/nuw and uitofp nneg
+  MODELED (getters/setters work despite header docs); explicit
+  (align n) on atomicrmw/cmpxchg MODELED; packed-struct constants were
+  built unpacked (real build bug); named-struct-typed constants via
+  ConstNamedStruct; detections added: function alignment, function
+  addrspace, digit-string explicit names, non-double NaN payloads.
+  Corpus: 76.9% PASS, 176 suite checks green.
+
 ### Next (coverage burn-down, by corpus statistics)
-- MISMATCH bucket (~1.5k files) diagnosis; constant expressions (~1.2k:
-  gep/ptrtoint/bitcast constexpr grammar); metadata-typed operands
-  (~1.7k); operand bundles; global aliases; unnamed identified structs.
+- BUG build-fail: invalid type (152), global has no assigned name (54),
+  untyped forward refs (2), indirectbr shape (1) -- diagnose next.
+- Then: constant expressions (~1.2k), metadata-typed operands (~1.7k),
+  operand bundles (~321), global aliases (~262), fn alignment (~333,
+  modelable), no-op-cast files (~316, C API limitation), unnamed
+  identified structs (~89).
 - Smaller leftovers: scalable vectors, raw value injection (the reserved
   (ptr N) shape), constant expressions on demand, address-spaced globals.
 

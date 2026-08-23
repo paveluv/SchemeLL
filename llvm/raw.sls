@@ -156,7 +156,7 @@
     SetGC
     GetTypeByName2 IsOpaqueStruct IsLiteralStruct ScalableVectorType
     ConstIntOfStringAndSize PrintValueToString AddGlobalInAddressSpace
-    SetComdat
+    SetComdat SetDLLStorageClass ConstNamedStruct
     ;; IRReader.h + memory buffers from bytes
     ParseIRInContext CreateMemoryBufferWithMemoryRangeCopy
     ;; Transforms/PassBuilder.h (new pass manager)
@@ -789,6 +789,9 @@
     "LLVMAddGlobalInAddressSpace" (void* void* string unsigned-int) void*)
   (define-getter SetComdat          ; void* so NULL can clear it
     "LLVMSetComdat" (void* void*) void)
+  (define-getter SetDLLStorageClass "LLVMSetDLLStorageClass" (void* int) void)
+  (define-getter ConstNamedStruct   ; (named-struct-type, constant-array, count)
+    "LLVMConstNamedStruct" (void* void* unsigned-int) void*)
 
   ;; --- IRReader.h -----------------------------------------------------------------
   (define ParseIRInContext             ; (ctx, membuf, module* out, char** err) -> bool (true = failed); consumes membuf

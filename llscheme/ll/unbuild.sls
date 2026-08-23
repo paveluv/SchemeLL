@@ -165,6 +165,11 @@
   (define (sigil-symbol sigil name)
     (string->symbol (string-append sigil name)))
 
+  (define (all-digits? s)
+    (let loop ([i 0])
+      (or (fx= i (string-length s))
+          (and (char-numeric? (string-ref s i)) (loop (fx+ i 1))))))
+
   (define (void-typed? v) (eq? (ir:type-kind (LLVMTypeOf v)) 'void))
 
   ;; assign %names per function, numbering unnamed slots like LLVM's printer
@@ -173,6 +178,8 @@
       (define (slot!)
         (let ([s (number->string n)]) (set! n (+ n 1)) s))
       (define (add! v given)
+        (when (and (not (string=? given "")) (all-digits? given))
+          (not-modeled "values explicitly named with digit strings"))
         (hashtable-set! tbl v
           (sigil-symbol "%" (if (string=? given "") (slot!) given))))
       (for-each (lambda (p) (add! p (ir:value-name p)))
@@ -234,6 +241,9 @@
          (let-values ([(d lost) (const-double c)])
            (when lost
              (not-modeled "fp constants not exactly representable as double"))
+           (when (and (not (= d d))   ; NaN
+                      (not (eq? (ir:type-kind ty) 'double)))
+             (not-modeled "non-double NaN constants (payload bits not round-trippable via double)"))
            d)]
         [(or (isa? (LLVMIsAFunction c)) (isa? (LLVMIsAGlobalVariable c)))
          (global-sym st c)]     ; globals are ptr constants
@@ -331,7 +341,7 @@
 
   (define (int-flags v op)
     (cond
-      [(memq op '(add sub mul shl)) (wrap-flags v)]
+      [(memq op '(add sub mul shl trunc)) (wrap-flags v)]
       [(memq op '(udiv sdiv lshr ashr))
        (if (nz? (LLVMGetExact v)) '(exact) '())]
       [(eq? op 'or) (if (nz? (LLVMGetIsDisjoint v)) '(disjoint) '())]
@@ -426,7 +436,9 @@
         [(memq op cast-names)
          (when (eqv? (LLVMTypeOf (op0)) ty)
            (not-modeled "no-op casts (the C-API builder folds them away)"))
-         `(,op ,@(if (and (eq? op 'zext) (nz? (LLVMGetNNeg ins))) '(nneg) '())
+         `(,op ,@(if (eq? op 'trunc) (wrap-flags ins) '())
+               ,@(if (and (memq op '(zext uitofp)) (nz? (LLVMGetNNeg ins)))
+                     '(nneg) '())
                ,(unbuild-type (LLVMTypeOf (op0))) ,(operand st (op0))
                ,(unbuild-type ty))]
         [else
@@ -563,7 +575,8 @@
                                     "atomicrmw operation")
                         ,(group st (op0)) ,(group st (op1))
                         ,(enum-name ordering-names
-                                    (ir:instruction-ordering ins) "ordering"))]
+                                    (ir:instruction-ordering ins) "ordering")
+                        ,@(align-attr ins))]
            [(cmpxchg)
             (single-thread-check ins)
             `(cmpxchg ,@(if (nz? (LLVMGetWeak ins)) '(weak) '())
@@ -572,7 +585,8 @@
                       ,(enum-name ordering-names
                                   (ir:cmpxchg-success-ordering ins) "ordering")
                       ,(enum-name ordering-names
-                                  (ir:cmpxchg-failure-ordering ins) "ordering"))]
+                                  (ir:cmpxchg-failure-ordering ins) "ordering")
+                      ,@(align-attr ins))]
            [(va_arg)
             `(va_arg ,(group st (op0)) ,(unbuild-type ty))]
            [(freeze)
@@ -636,6 +650,8 @@
   ;; ---- functions -----------------------------------------------------------------------
 
   (define (check-function-decorations f nparams)
+    (unless (zero? (LLVMGetPointerAddressSpace (LLVMTypeOf f)))
+      (not-modeled "functions in non-zero program address spaces"))
     (unless (zero? (LLVMGetAlignment f))
       (not-modeled "alignment on functions"))
     (when (nz? (LLVMHasPrefixData f)) (not-modeled "function prefix data"))

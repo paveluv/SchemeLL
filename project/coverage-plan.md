@@ -22,14 +22,17 @@ round-trip parse -> unbuild -> build -> byte-identical print; strict
 strictness tests. Step 6b harness DONE
 2026-08-22 (make corpus over LLVM's regression suite, 36488 .ll files);
 burn-down rounds took the pass rate 53.6% -> 63.3% -> 65.9% -> 70.9%
--> 76.0% (27744 PASS), growing the grammar by corpus frequency along
-the way (named/packed struct types, scalable vectors, aggregate
+-> 76.0% -> 76.9% (28k PASS), growing the grammar by corpus frequency
+along the way (named/packed struct types, scalable vectors, aggregate
 constants as operands, any-width integers, poison mask lanes,
-address-spaced globals, function linkage, anonymous %N names). Largest
-remaining buckets: instructions with all-constant operands (C-API
-builder folds them, ~2.3k), metadata-typed operands (~1.7k), constant
-expressions (~1.2k), MISMATCH to be diagnosed (~1.5k), operand bundles,
-global aliases. The burn-down continues by these statistics. "100% coverage" is meaningless without a
+address-spaced globals, function linkage, anonymous %N names, trunc
+nsw/nuw, uitofp nneg, atomicrmw/cmpxchg alignment). The MISMATCH
+bucket is diagnosed and defeated: 2762 -> 25 files (0.07%), probe tool
+in tests/probe-mismatch.ss. Largest remaining buckets: all-constant
+operands (C-API builder folds them, ~2.2k), metadata-typed operands
+(~1.7k), constant expressions (~1.2k), fn alignment (~333), operand
+bundles (~321), no-op casts (~316), aliases (~262). The burn-down
+continues by these statistics. "100% coverage" is meaningless without a
 machine-checkable oracle and an explicit scope. This plan defines both, and
 three verification levels that turn coverage from a claim into a test that
 fails.

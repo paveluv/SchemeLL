@@ -39,7 +39,8 @@
     gep-no-wrap-flags
     const-int const-real const-null undef-value poison-value
     const-vector block-address
-    const-array const-struct const-string
+    const-array const-struct const-named-struct const-string struct-name
+    packed-struct-type?
     ;; module-level globals
     add-global set-initializer! set-global-constant! set-linkage! linkage
     module-globals
@@ -373,10 +374,25 @@
     (base:call-with-pointer-array constants
       (lambda (arr n) (LLVMConstArray2 elem-type arr n))))
 
-  (define (const-struct ctx constants)   ; literal (anonymous) struct constant
+  ;; the name of an identified struct type, #f for literal structs
+  (define (struct-name ty)
+    (let ([s (base:cstring->string (LLVMGetStructName ty))])
+      (and s (not (string=? s "")) s)))
+
+  (define (const-named-struct ty constants)
     (base:call-with-pointer-array constants
-      (lambda (arr n)
-        (LLVMConstStructInContext (context-live-ptr ctx) arr n 0))))
+      (lambda (arr n) (LLVMConstNamedStruct ty arr n))))
+
+  (define const-struct   ; literal (anonymous) struct constant
+    (case-lambda
+      [(ctx constants) (const-struct ctx constants #f)]
+      [(ctx constants packed?)
+       (base:call-with-pointer-array constants
+         (lambda (arr n)
+           (LLVMConstStructInContext (context-live-ptr ctx) arr n
+                                     (if packed? 1 0))))]))
+
+  (define (packed-struct-type? ty) (not (zero? (LLVMIsPackedStruct ty))))
 
   ;; bytes of s as an i8 array constant; null-terminate? adds the final \00
   (define (const-string ctx s null-terminate?)
