@@ -10,4 +10,4 @@ reference/
 tests/tmp/
 examples/aot/*.o
 examples/aot/*.s
-examples/aot/hello
+examples/aot/hello-linux-x86

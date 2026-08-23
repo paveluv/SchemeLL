@@ -1,0 +1,19 @@
+;; hello-libc.sll -- the PORTABLE hello: no inline asm, no syscall
+;; numbers, no ISA anywhere. Runs identically on Linux/x86-64,
+;; Linux/ARM64, and macOS, because @puts is resolved by whatever libc
+;; the process carries:
+;;
+;;   sllc --run examples/aot/hello-libc.sll        (any platform)
+;;   sllc examples/aot/hello-libc.sll              -> .o, link with cc
+;;
+;; (--exe does not apply: linking against libc is the system linker's
+;;  job; the zero-toolchain executable is hello-linux-x86.sll.)
+
+(= @msg (constant (array 16 i8) (cz "Hello, SchemeLL")))
+
+(declare i32 (@puts ptr))
+
+(define i32 (@main)
+  (label %entry
+    (call i32 (@puts (ptr @msg)))
+    (ret i32 0)))

@@ -22,8 +22,8 @@ examples:
 	done
 	@$(CHEZ) --libdirs $(LIBDIRS) --script tools/sllc.ss --run examples/aot/fact.sll; \
 	  test $$? -eq 120 || exit 1
-	@$(CHEZ) --libdirs $(LIBDIRS) --script tools/sllc.ss --opt O2 --exe examples/aot/hello.sll && \
-	  ./examples/aot/hello && rm -f examples/aot/hello
+	@$(CHEZ) --libdirs $(LIBDIRS) --script tools/sllc.ss --opt O2 --exe examples/aot/hello-linux-x86.sll && \
+	  ./examples/aot/hello-linux-x86 && rm -f examples/aot/hello-linux-x86
 	@echo "examples ok"
 
 format:

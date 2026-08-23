@@ -1,7 +1,7 @@
 ;;; (llvm target) -- native target initialization, target machines,
 ;;; object/assembly emission.
 (library (llvm target)
-  (export initialize-native!
+  (export initialize-native! initialize-target!
           default-triple host-cpu-name host-cpu-features
           machine? make-machine machine-dispose!
           machine-live-ptr machine-triple
@@ -21,15 +21,22 @@
 
   (define native-initialized? #f)
 
+  ;; initialize one backend by LLVM's name ("X86", "AArch64", ...);
+  ;; returns #f when this libLLVM was built without it
+  (define (initialize-target! target)
+    (and (foreign-entry? (string-append "LLVMInitialize" target "Target"))
+         (begin
+           (for-each
+             (lambda (component)
+               (let ([name (string-append "LLVMInitialize" target component)])
+                 (when (foreign-entry? name)
+                   ((foreign-procedure name () void)))))
+             '("TargetInfo" "Target" "TargetMC" "AsmPrinter" "AsmParser"))
+           #t)))
+
   (define (initialize-native!)
     (unless native-initialized?
-      (let ([target (native-target-name)])
-        (for-each
-          (lambda (component)
-            (let ([name (string-append "LLVMInitialize" target component)])
-              (when (foreign-entry? name)
-                ((foreign-procedure name () void)))))
-          '("TargetInfo" "Target" "TargetMC" "AsmPrinter" "AsmParser")))
+      (initialize-target! (native-target-name))
       (set! native-initialized? #t)))
 
   (define (default-triple)

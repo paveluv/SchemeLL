@@ -1,10 +1,14 @@
-;; hello.sll -- a complete freestanding program as pure sll data.
+;; hello-linux-x86.sll -- a complete freestanding program as pure sll
+;; data, for one specific kernel ABI: x86-64 Linux.
 ;; No libc: the string is built on the stack and written with raw
 ;; Linux syscalls through inline asm, so the object needs no
-;; relocations and sllc --exe can produce the executable by itself:
+;; relocations and sllc --exe can produce the executable by itself.
+;; The price of zero dependencies is total non-portability -- see
+;; hello-libc.sll (portable) and hello-portable.ss (per-target
+;; generation from one Scheme source):
 ;;
-;;   scheme --libdirs . --script tools/sllc.ss --exe examples/aot/hello.sll
-;;   ./examples/aot/hello        => Hello, SchemeLL!
+;;   scheme --libdirs . --script tools/sllc.ss --exe examples/aot/hello-linux-x86.sll
+;;   ./examples/aot/hello-linux-x86        => Hello, SchemeLL!
 
 (define void (@_start)
   (label %entry
