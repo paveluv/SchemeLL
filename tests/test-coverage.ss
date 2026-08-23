@@ -156,7 +156,7 @@
       ;; render self-test: the same sll data rendered to text in pure
       ;; Scheme and re-parsed by LLVM must print identically
       (let* ([xctx (ir:make-context)]
-             [reparsed (ir:parse-ir xctx name (render:sll->sll prog))]
+             [reparsed (ir:parse-ir xctx name (render:sll->ll prog))]
              [reparsed-text (ir-body (ir:module->string reparsed))])
         (unless (string=? reparsed-text golden-text)
           (printf "~%--- rendered+reparsed (~a) ---~%~a--- golden ---~%~a---~%"
@@ -952,6 +952,10 @@ compute:
 (t:check-exn "unbuild rejects unnamed identified struct types"
              (unbuild-of-ir
                "%0 = type { i64, i64 }\ndefine void @f(ptr %p) {\nentry:\n  %v = load %0, ptr %p\n  ret void\n}"))
+;; regression: render's local `error` once wrapped itself (infinite
+;; recursion) instead of base:error -- this hung rather than raised
+(t:check-exn "render raises (not loops) on unknown items"
+             (render:sll->ll '((bogus-item))))
 (t:check-exn "unbuild rejects module-level inline asm"
              (unbuild-of-ir "module asm \"nop\"\n"))
 (t:check-exn "unbuild rejects calling conventions"
@@ -978,7 +982,7 @@ compute:
           (printf "~%--- rebuilt (~a) ---~%~a--- golden ---~%~a---~%" name b a))
         (t:check (string-append "normalized round-trip: " name)
                  (string=? a b)))
-      (let* ([reparsed (ir:parse-ir xctx name (render:sll->sll prog))])
+      (let* ([reparsed (ir:parse-ir xctx name (render:sll->ll prog))])
         (n:normalize-module! reparsed)
         (let ([b (n:comparable-ir (ir:module->string reparsed))])
           (unless (string=? a b)

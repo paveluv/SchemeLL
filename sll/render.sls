@@ -12,11 +12,12 @@
 ;;; the parser accepts only when the numbering matches its slot counter
 ;;; -- true by construction for sll:unbuild output, the intended input.
 (library (sll render)
-  (export sll->sll)
-  (import (except (chezscheme) error))
+  (export sll->ll)
+  (import (except (chezscheme) error)
+          (prefix (llvm base) base:))
 
   (define (error msg . irritants)
-    (apply error 'render:sll->sll msg irritants))
+    (apply base:error 'render:sll->ll msg irritants))
 
   ;; single-allocation join: the naive string-append fold is quadratic,
   ;; which shows on multi-thousand-instruction modules
@@ -657,7 +658,7 @@
   (define (target-item? item)
     (and (pair? item) (memq (car item) '(datalayout triple))))
 
-  (define (sll->sll prog0)
+  (define (sll->ll prog0)
     ;; the parser rejects `target` lines after any other entity
     (let ([prog (append (filter target-item? prog0)
                         (filter (lambda (i) (not (target-item? i))) prog0))]

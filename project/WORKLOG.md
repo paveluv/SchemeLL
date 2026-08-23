@@ -145,7 +145,7 @@ Newest entries first. Format: date, Done / Decided / Next.
   textual sll->ll backend parsed by LLVM (zero-glue, exact; roadmapped),
   upstream C API patch, C shim (rejected: breaks zero-glue).
 
-- (sll render): sll->llual-IR printer in pure Scheme (no LLVM
+- (sll render): sll->ll printer (textual IR) in pure Scheme (no LLVM
   calls). Purpose: constructing modules through LLVM's parser instead
   of the folding C-API builder, making the STRICT corpus comparison
   possible for all-constant/no-op-cast files -- 2254 files upgraded

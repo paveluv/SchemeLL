@@ -89,7 +89,7 @@
   (guard (e [#t #f])
     (let* ([prog (sll:unbuild m 'ignore-named-metadata 'tolerate-builder-folds)]
            [ctx2 (ir:make-context)]
-           [m2 (ir:parse-ir ctx2 "rendered" (render:sll->sll prog))])
+           [m2 (ir:parse-ir ctx2 "rendered" (render:sll->ll prog))])
       (n:normalize-module! m2)
       (let ([b (n:comparable-ir (ir:module->string m2))])
         (ir:module-dispose! m2)
@@ -140,7 +140,7 @@
 (define (bench-render+parse! path prog build-dt)
   (guard (e [#t (set! bench-failed (cons path bench-failed))])
     (let* ([t0 (now-ns)]
-           [text (render:sll->sll prog)]
+           [text (render:sll->ll prog)]
            [t1 (now-ns)]
            [ctx (ir:make-context)]
            [m (ir:parse-ir ctx "bench" text)]

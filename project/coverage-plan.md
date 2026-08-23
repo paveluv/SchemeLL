@@ -30,7 +30,7 @@ nsw/nuw, uitofp nneg, atomicrmw/cmpxchg alignment). The MISMATCH
 bucket is diagnosed and defeated: 2762 -> 25 files (0.07%), probe tool
 in tests/probe-mismatch.ss. RENDER TIER (2026-08-22): files the
 C-API builder's constant folding excludes from the strict comparison
-get a STRICT second chance through (sll render) -- sll->sll in
+get a STRICT second chance through (sll render) -- sll->ll in
 pure Scheme, constructed via LLVMParseIRInContext (LLVM's parser uses
 the direct instruction constructors and never folds), so the original
 text1 == text2 comparison applies unchanged. A fixpoint check

@@ -25,7 +25,7 @@
                 (n:normalize-module! m)
                 m)]
            [prog (sll:unbuild m 'ignore-named-metadata 'tolerate-builder-folds)]
-           [rendered (render:sll->sll prog)]
+           [rendered (render:sll->ll prog)]
            [insns (let count ([items prog] [n 0])
                     (if (null? items)
                         n
@@ -49,7 +49,7 @@
                          (let ([c (ir:make-context)])
                            (ir:module-dispose! (sll:build c "b" prog))
                            (ir:context-dispose! c))))]
-            [t-render (time-ms (lambda () (render:sll->sll prog)))]
+            [t-render (time-ms (lambda () (render:sll->ll prog)))]
             [t-parse (time-ms
                        (lambda ()
                          (let ([c (ir:make-context)])
