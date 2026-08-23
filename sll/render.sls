@@ -13,9 +13,9 @@
 ;;; -- true by construction for sll:unbuild output, the intended input.
 (library (sll render)
   (export sll->sll)
-  (import (chezscheme))
+  (import (except (chezscheme) error))
 
-  (define (r-error msg . irritants)
+  (define (error msg . irritants)
     (apply error 'render:sll->sll msg irritants))
 
   ;; single-allocation join: the naive string-append fold is quadratic,
@@ -112,8 +112,8 @@
             (format "~a (~a)" (type->text (car parts))
                     (join ", " (append (map type->text (cdr parts))
                                        (if variadic? '("...") '())))))]
-         [else (r-error "cannot render type" t)])]
-      [else (r-error "cannot render type" t)]))
+         [else (error "cannot render type" t)])]
+      [else (error "cannot render type" t)]))
 
   ;; ---- constants and operands -----------------------------------------------------
 
@@ -147,7 +147,7 @@
         [(= expd 2047)
          (if (zero? frac)   ; infinity; NaNs cannot reach here (unbuild)
              (values sign 32767 (bitwise-arithmetic-shift-left 1 (- sig-bits 1)))
-             (r-error "NaN in a non-double float position" x))]
+             (error "NaN in a non-double float position" x))]
         [(and (zero? expd) (zero? frac)) (values sign 0 0)]
         [else
          (let* ([m (if (zero? expd) frac (bitwise-ior frac (expt 2 52)))]
@@ -183,7 +183,7 @@
   ;; env: name-symbol -> 'struct | 'packed-struct | 'opaque, from type items
   (define (named-kind env t)
     (or (and (symbol? t) (hashtable-ref env t #f))
-        (r-error "aggregate constant of unknown named type" t)))
+        (error "aggregate constant of unknown named type" t)))
 
   (define (operand->text env tyf v)
     (cond
@@ -239,7 +239,7 @@
                                                   (group->text env g))
                                                 (cdr rest))))))))]
          [else (aggregate->text env tyf v)])]
-      [else (r-error "cannot render operand" v)]))
+      [else (error "cannot render operand" v)]))
 
   (define (quoted-bytes s nul?)
     (string-append "\"" (escape-bytes (string->utf8 s) nul?) "\""))
@@ -261,7 +261,7 @@
          (if (eq? (named-kind env tyf) 'packed-struct)
              (format "<{ ~a }>" body)
              (format "{ ~a }" body))]
-        [else (r-error "aggregate constant in a non-aggregate position" tyf)])))
+        [else (error "aggregate constant in a non-aggregate position" tyf)])))
 
   ;; ---- instructions -------------------------------------------------------------------
 
@@ -474,8 +474,8 @@
                                "zeroinitializer"]
                               [(for-all (lambda (e) (eq? e 'poison)) mask)
                                "poison"]
-                              [else (r-error "non-splat scalable shuffle mask"
-                                             mask)]))
+                              [else (error "non-splat scalable shuffle mask"
+                                           mask)]))
                     (format "shufflevector ~a, ~a, <~a x i32> <~a>"
                             (g 0) (g 1) (length mask)
                             (join ", " (map (lambda (e) (format "i32 ~a" e))
@@ -527,7 +527,7 @@
                               (map (lambda (g)
                                      (format ", ~a" (group->text env g)))
                                    (cdr args)))))]
-             [else (r-error "cannot render instruction" f)])]))))
+             [else (error "cannot render instruction" f)])]))))
 
   (define (insn->text env f)
     (if (eq? (car f) '=)
@@ -684,6 +684,6 @@
                                 (alias->text env item)
                                 (global->text env item))]
                        [(define declare) (function->text env item)]
-                       [else (r-error "cannot render module item" item)]))
+                       [else (error "cannot render module item" item)]))
                    prog))
         "\n"))))

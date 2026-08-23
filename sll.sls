@@ -20,13 +20,13 @@
 ;;; defined textually before use.
 (library (sll)
   (export build jit dump unbuild)
-  (import (chezscheme)
+  (import (except (chezscheme) error)
           (prefix (llvm base) base:)
           (prefix (llvm ir) ir:)
           (prefix (llvm jit) jit:)
           (sll unbuild))
 
-  (define (sll-error msg . irritants)
+  (define (error msg . irritants)
     (apply base:error 'sll:build msg irritants))
 
   ;; ---- names ---------------------------------------------------------------
@@ -96,9 +96,9 @@
           (if (local-name? t)
               ;; %name: a named struct type from a (type %name ...) item
               (or (ir:named-type ctx (strip-sigil t))
-                  (sll-error "unknown named type" t))
+                  (error "unknown named type" t))
               (let ([bits (int-bits t)])
-                (unless bits (sll-error "unknown type" t))
+                (unless bits (error "unknown type" t))
                 (ir:int-type ctx bits)))])]
       [(pair? t)
        (cond
@@ -117,7 +117,7 @@
          [(and (eq? (car t) 'ptr) (= (length t) 2) (fixnum? (cadr t)))
           ;; reserved: (ptr N) in operand position will mean an
           ;; inttoptr'd address constant some day
-          (sll-error "expected (ptr (addrspace N))" t)]
+          (error "expected (ptr (addrspace N))" t)]
          ;; lengths are uint64 in LLVM ([0 x T] and beyond-fixnum sizes
          ;; are both legal), so exact integers, not fixnums
          [(and (eq? (car t) 'array) (= (length t) 3)
@@ -130,13 +130,13 @@
          [(eq? (car t) 'fn)
           (let-values ([(parts variadic?) (split-variadic (cdr t))])
             (unless (pair? parts)
-              (sll-error "expected (fn ret-type arg-type ... variadic?)" t))
+              (error "expected (fn ret-type arg-type ... variadic?)" t))
             (ir:function-type
               (resolve-type ctx (car parts))
               (map (lambda (a) (resolve-type ctx a)) (cdr parts))
               variadic?))]
-         [else (sll-error "invalid type" t)])]
-      [else (sll-error "invalid type" t)]))
+         [else (error "invalid type" t)])]
+      [else (error "invalid type" t)]))
 
   ;; ---- per-function build state ------------------------------------------------
 
@@ -172,25 +172,25 @@
   ;; metadata operand: (md "string") | (md (element ...)) -> MetadataRef
   (define (resolve-md-ref ctx form)
     (unless (and (pair? form) (eq? (car form) 'md) (= (length form) 2))
-      (sll-error "expected (md \"string\") or (md (element ...))" form))
+      (error "expected (md \"string\") or (md (element ...))" form))
     (let ([x (cadr form)])
       (cond
         [(string? x) (ir:md-string ctx x)]
         [(list? x)
          (ir:md-node ctx (map (lambda (e) (resolve-md-ref ctx e)) x))]
         [else
-         (sll-error "expected (md \"string\") or (md (element ...))" form)])))
+         (error "expected (md \"string\") or (md (element ...))" form)])))
 
   ;; call-site operand bundles: (bundle "tag" (type arg) ...)
   (define (bundle-form? x) (and (pair? x) (eq? (car x) 'bundle)))
   (define (resolve-bundle st bf)
     (unless (and (bundle-form? bf) (>= (length bf) 2) (string? (cadr bf)))
-      (sll-error "expected (bundle \"tag\" (type arg) ...)" bf))
+      (error "expected (bundle \"tag\" (type arg) ...)" bf))
     (ir:create-operand-bundle
       (cadr bf)
       (map (lambda (g)
              (unless (and (pair? g) (= (length g) 2))
-               (sll-error "bundle arguments are (type value) groups" g bf))
+               (error "bundle arguments are (type value) groups" g bf))
              (resolve-operand st (resolve-type (fstate-ctx st) (car g))
                               (cadr g)))
            (cddr bf))))
@@ -200,10 +200,10 @@
   (define (resolve-operand st ty form)
     (cond
       [(eq? form 'undef)
-       (unless ty (sll-error "undef needs a type annotation" form))
+       (unless ty (error "undef needs a type annotation" form))
        (ir:undef-value ty)]
       [(eq? form 'poison)
-       (unless ty (sll-error "poison needs a type annotation" form))
+       (unless ty (error "poison needs a type annotation" form))
        (ir:poison-value ty)]
       [(local-name? form)
        (or (hashtable-ref (fstate-locals st) form #f)
@@ -213,34 +213,34 @@
            ;; end of function. Needs a type; untyped positions cannot
            ;; forward-reference.
            (and ty (forward-placeholder st ty form))
-           (sll-error "unbound local in an untyped position (cannot forward-reference)"
-                      form (fstate-fname st)))]
+           (error "unbound local in an untyped position (cannot forward-reference)"
+                  form (fstate-fname st)))]
       [(global-name? form)
        (or (hashtable-ref (fstate-globals st) form #f)
-           (sll-error "unbound global" form (fstate-fname st)))]
+           (error "unbound global" form (fstate-fname st)))]
       [(and (pair? form) (eq? (car form) 'blockaddress))
        ;; (blockaddress @function %label) -- a ptr constant
        (unless (and (= (length form) 3) (global-name? (cadr form))
                     (local-name? (caddr form)))
-         (sll-error "expected (blockaddress @function %label)" form))
+         (error "expected (blockaddress @function %label)" form))
        (unless (eq? (cadr form) (fstate-fname st))
-         (sll-error "blockaddress currently supports only the enclosing function"
-                    form (fstate-fname st)))
+         (error "blockaddress currently supports only the enclosing function"
+                form (fstate-fname st)))
        (ir:block-address
          (hashtable-ref (fstate-globals st) (cadr form) #f)
          (block-by-name st (caddr form)))]
       [(memq form '(null zeroinitializer none))
-       (unless ty (sll-error "null/zeroinitializer/none needs a type annotation"
-                             form))
+       (unless ty (error "null/zeroinitializer/none needs a type annotation"
+                         form))
        (ir:const-null ty)]
       [(and (integer? form) (exact? form))
-       (unless ty (sll-error "integer literal needs a type annotation" form))
+       (unless ty (error "integer literal needs a type annotation" form))
        (ir:const-int ty form)]
       [(flonum? form)
-       (unless ty (sll-error "float literal needs a type annotation" form))
+       (unless ty (error "float literal needs a type annotation" form))
        (ir:const-real ty form)]
       [(and (pair? form) (memq (car form) '(c cz)))
-       (unless ty (sll-error "string constant needs a type annotation" form))
+       (unless ty (error "string constant needs a type annotation" form))
        (resolve-constant (fstate-ctx st) (fstate-globals st) ty form)]
       [(and (pair? form) (eq? (car form) 'md))
        (ir:metadata-value (fstate-ctx st)
@@ -252,13 +252,13 @@
        (resolve-constant (fstate-ctx st) (fstate-globals st) ty form
                          (lambda (ety ef) (resolve-operand st ety ef)))]
       [(aggregate-literal? form)
-       (unless ty (sll-error "aggregate constant needs a type annotation" form))
+       (unless ty (error "aggregate constant needs a type annotation" form))
        (resolve-constant (fstate-ctx st) (fstate-globals st) ty form
                          (lambda (ety ef) (resolve-operand st ety ef)))]
       [(and (pair? form) (pair? (cdr form)) (null? (cddr form)))
        ;; typed operand group: (type value)
        (resolve-operand st (resolve-type (fstate-ctx st) (car form)) (cadr form))]
-      [else (sll-error "invalid operand" form (fstate-fname st))]))
+      [else (error "invalid operand" form (fstate-fname st))]))
 
   ;; a unique, typed, erasable stand-in for a not-yet-defined %name:
   ;; a freeze-of-undef instruction in a scratch block that is deleted
@@ -290,7 +290,7 @@
         (lambda (name ph)
           (let ([real (hashtable-ref (fstate-locals st) name #f)])
             (unless real
-              (sll-error "unbound local" name (fstate-fname st)))
+              (error "unbound local" name (fstate-fname st)))
             (ir:replace-all-uses! ph real)
             (ir:erase-instruction! ph)))
         names phs))
@@ -302,31 +302,31 @@
   (define (label-form? f) (and (pair? f) (eq? (car f) 'label)))
 
   (define (block-by-name st name)
-    (unless (local-name? name) (sll-error "invalid label name" name))
+    (unless (local-name? name) (error "invalid label name" name))
     (or (hashtable-ref (fstate-blocks st) name #f)
-        (sll-error "unknown label" name (fstate-fname st))))
+        (error "unknown label" name (fstate-fname st))))
 
   (define (block-ref st form)   ; a (label %x) branch target
     (unless (and (label-form? form) (pair? (cdr form)) (null? (cddr form))
                  (local-name? (cadr form)))
-      (sll-error "expected branch target (label %name)" form (fstate-fname st)))
+      (error "expected branch target (label %name)" form (fstate-fname st)))
     (block-by-name st (cadr form)))
 
   ;; block group: (label %name <insn> ... <terminator>)
   (define (check-block-group g fname)
     (unless (label-form? g)
-      (sll-error "instruction outside a block (expected (label %name insn ...))"
-                 g fname))
+      (error "instruction outside a block (expected (label %name insn ...))"
+             g fname))
     (unless (and (pair? (cdr g)) (local-name? (cadr g)))
-      (sll-error "block label must be a %name" g fname))
+      (error "block label must be a %name" g fname))
     (when (null? (cddr g))
-      (sll-error "empty block" (cadr g) fname))
+      (error "empty block" (cadr g) fname))
     (unless (terminator-form? (car (last-pair g)))
-      (sll-error "block does not end in a terminator" (cadr g) fname)))
+      (error "block does not end in a terminator" (cadr g) fname)))
 
   (define (add-block! st f name)
     (when (hashtable-ref (fstate-blocks st) name #f)
-      (sll-error "duplicate label" name (fstate-fname st)))
+      (error "duplicate label" name (fstate-fname st)))
     (hashtable-set! (fstate-blocks st) name
                     (ir:append-block (fstate-ctx st) f (llvm-name name))))
 
@@ -359,7 +359,7 @@
   (define (ordering-int sym form)
     (cond
       [(and (symbol? sym) (assq sym atomic-orderings)) => cdr]
-      [else (sll-error "unknown atomic ordering" sym form)]))
+      [else (error "unknown atomic ordering" sym form)]))
 
   ;; trailing [ordering] before the attribute groups of atomic load/store
   (define (split-ordering rest form)
@@ -367,7 +367,7 @@
         (cond
           [(assq (car rest) atomic-orderings) =>
            (lambda (p) (values (cdr p) (cdr rest)))]
-          [else (sll-error "unknown ordering or attribute" (car rest) form)])
+          [else (error "unknown ordering or attribute" (car rest) form)])
         (values #f rest)))
 
   ;; callee of call/invoke/callbr: a function/pointer operand, or inline
@@ -380,7 +380,7 @@
                        (string? (caddr form))
                        (for-all (lambda (f) (memq f '(sideeffect alignstack)))
                                 (cdddr form)))
-            (sll-error "expected (asm \"template\" \"constraints\" flag ...)" form))
+            (error "expected (asm \"template\" \"constraints\" flag ...)" form))
           (ir:inline-asm fnty (cadr form) (caddr form)
                          (and (memq 'sideeffect (cdddr form)) #t)
                          (and (memq 'alignstack (cdddr form)) #t)))
@@ -397,7 +397,7 @@
     (for-each
       (lambda (g)
         (unless (and (pair? g) (pair? (cdr g)) (null? (cddr g)))
-          (sll-error "call argument must be (type value)" g form)))
+          (error "call argument must be (type value)" g form)))
       groups)
     (let ([avals (map (lambda (g)
                         (resolve-operand st (resolve-type ctx (car g)) (cadr g)))
@@ -422,8 +422,8 @@
     (cond
       [(equal? rest '(caller)) #f]
       [(and (pair? rest) (null? (cdr rest))) (block-ref st (car rest))]
-      [else (sll-error "expected unwind destination: caller or (label %x)"
-                       form (fstate-fname st))]))
+      [else (error "expected unwind destination: caller or (label %x)"
+                   form (fstate-fname st))]))
 
   ;; LLVMAtomicRMWBinOp; cross-checked by the coverage tests
   (define rmw-ops
@@ -465,7 +465,7 @@
 
   (define (require-flag-op op ops flag form)
     (unless (memq op ops)
-      (sll-error "flag is not valid for this opcode" flag form)))
+      (error "flag is not valid for this opcode" flag form)))
 
   (define (apply-flags! op v flags form)
     (let ([fmf (fold-left
@@ -495,12 +495,12 @@
                      [(notail) (require-flag-op op '(call) flag form)
                       (ir:set-tail-call-kind! v 3) mask]
                      [(inbounds nusw)
-                      (sll-error "flag is only valid on getelementptr" flag form)]
+                      (error "flag is only valid on getelementptr" flag form)]
                      [else (bitwise-ior mask (cdr (assq flag fmf-bits)))]))
                  0 flags)])
       (unless (zero? fmf)
         (unless (ir:can-use-fast-math-flags? v)
-          (sll-error "fast-math flags are not valid on this instruction" op form))
+          (error "fast-math flags are not valid on this instruction" op form))
         (ir:set-fast-math-flags! v fmf))))
 
   (define (gep-flags-mask flags form)
@@ -508,7 +508,7 @@
                  (cond
                    [(assq flag gep-flag-bits) =>
                     (lambda (p) (bitwise-ior mask (cdr p)))]
-                   [else (sll-error "flag is not valid on getelementptr" flag form)]))
+                   [else (error "flag is not valid on getelementptr" flag form)]))
                0 flags))
 
   ;; atomic load/store: the `atomic` flag and a trailing ordering symbol
@@ -517,8 +517,8 @@
     (cond
       [(and (memq 'atomic flags) ord) (ir:set-ordering! v ord)]
       [(memq 'atomic flags)
-       (sll-error "atomic load/store requires an ordering" form)]
-      [ord (sll-error "an ordering requires the atomic flag" form)]))
+       (error "atomic load/store requires an ordering" form)]
+      [ord (error "an ordering requires the atomic flag" form)]))
 
   ;; apply post-hoc flags; getelementptr consumed its flags at construction
   (define (finish-op! op flags form v)
@@ -551,7 +551,7 @@
                  (pair? (cdr a)) (null? (cddr a))
                  (fixnum? (cadr a)) (positive? (cadr a)))
             (ir:set-alignment! v (cadr a))
-            (sll-error "unknown attribute" a form)))
+            (error "unknown attribute" a form)))
       attrs))
 
   ;; ---- instruction emission ------------------------------------------------------------
@@ -562,10 +562,10 @@
             [b (fstate-builder st)] [ctx (fstate-ctx st)])
         (define (arity n shape)
           (unless (= (length args) n)
-            (sll-error (string-append "expected " shape) form (fstate-fname st))))
+            (error (string-append "expected " shape) form (fstate-fname st))))
         (define (arity>= n shape)
           (unless (>= (length args) n)
-            (sll-error (string-append "expected " shape) form (fstate-fname st))))
+            (error (string-append "expected " shape) form (fstate-fname st))))
         (finish-op! op flags form
           (cond
             [(assq op binops) =>
@@ -618,14 +618,14 @@
                 (arity>= 2 "(call type (callee (type arg) ...) bundles...)")
                 (let ([app (cadr args)])
                   (unless (pair? app)
-                    (sll-error "call expects an application group (callee args...)"
-                               form))
+                    (error "call expects an application group (callee args...)"
+                           form))
                   (let-values ([(fnty retty avals)
                                 (callsite-signature st ctx (car args)
                                                     (cdr app) form)])
                     (when (and (eq? (ir:type-kind retty) 'void)
                             (not (string=? name "")))
-                      (sll-error "cannot bind the result of a void call" form))
+                      (error "cannot bind the result of a void call" form))
                     (if (null? (cddr args))
                         (ir:build-call b fnty
                                        (resolve-callee st fnty (car app))
@@ -645,16 +645,16 @@
                        [labels (filter (lambda (x) (not (bundle-form? x)))
                                        (cddr args))])
                   (unless (pair? app)
-                    (sll-error "invoke expects an application group (callee args...)"
-                               form))
+                    (error "invoke expects an application group (callee args...)"
+                           form))
                   (unless (= (length labels) 2)
-                    (sll-error "invoke expects (label %ok) (label %pad)" form))
+                    (error "invoke expects (label %ok) (label %pad)" form))
                   (let-values ([(fnty retty avals)
                                 (callsite-signature st ctx (car args)
                                                     (cdr app) form)])
                     (when (and (eq? (ir:type-kind retty) 'void)
                             (not (string=? name "")))
-                      (sll-error "cannot bind the result of a void invoke" form))
+                      (error "cannot bind the result of a void invoke" form))
                     (if (null? bundles)
                         (ir:build-invoke b fnty
                                          (resolve-callee st fnty (car app))
@@ -679,11 +679,11 @@
                 (let ([app (cadr args)])
                   (unless (and (pair? app) (pair? (car app))
                                (eq? (caar app) 'asm))
-                    (sll-error "callbr requires an inline-asm callee (LLVM restriction)"
-                               form))
+                    (error "callbr requires an inline-asm callee (LLVM restriction)"
+                           form))
                   (unless (list? (cadddr args))
-                    (sll-error "callbr expects a list of indirect (label %x) targets"
-                               form))
+                    (error "callbr expects a list of indirect (label %x) targets"
+                           form))
                   (let-values ([(fnty retty avals)
                                 (callsite-signature st ctx (car args)
                                                     (cdr app) form)])
@@ -709,7 +709,7 @@
                            (resolve-constant ctx (fstate-globals st)
                                              (resolve-type ctx (cadr c))
                                              (caddr c)))]
-                        [else (sll-error "invalid landingpad clause" c form)]))
+                        [else (error "invalid landingpad clause" c form)]))
                     (cdr args))
                   lp)]
                [(resume)
@@ -720,8 +720,8 @@
                 ;; (catchswitch none|%pad ((label %h) ...) caller|(label %x))
                 (arity 3 "(catchswitch parent ((label %h) ...) caller|(label %x))")
                 (unless (list? (cadr args))
-                  (sll-error "catchswitch expects a list of (label %h) handlers"
-                             form))
+                  (error "catchswitch expects a list of (label %h) handlers"
+                         form))
                 (let* ([handlers (cadr args)]
                        [cs (ir:build-catchswitch b
                              (parent-pad st ctx (car args))
@@ -735,7 +735,7 @@
                 ;; (catchpad none|%pad ((type arg) ...))
                 (arity 2 "(catchpad/cleanuppad parent ((type arg) ...))")
                 (unless (list? (cadr args))
-                  (sll-error "expected a list of (type arg) pad arguments" form))
+                  (error "expected a list of (type arg) pad arguments" form))
                 (let ([parent (parent-pad st ctx (car args))]
                       [pargs (map (lambda (g) (resolve-operand st #f g))
                                   (cadr args))])
@@ -821,8 +821,8 @@
                                (for-all (lambda (x)
                                           (or (fixnum? x) (eq? x 'poison)))
                                         (cdr m)))
-                    (sll-error "shufflevector mask must be (mask int|poison ...)"
-                               m form))
+                    (error "shufflevector mask must be (mask int|poison ...)"
+                           m form))
                   (let ([i32 (resolve-type ctx 'i32)])
                     (ir:build-shufflevector b
                       (resolve-operand st #f (car args))
@@ -837,13 +837,13 @@
                [(extractvalue)
                 (arity 2 "(extractvalue (agg-type v) index)")
                 (unless (fixnum? (cadr args))
-                  (sll-error "extractvalue index must be a bare integer" form))
+                  (error "extractvalue index must be a bare integer" form))
                 (ir:build-extractvalue b (resolve-operand st #f (car args))
                                        (cadr args) name)]
                [(insertvalue)
                 (arity 3 "(insertvalue (agg-type v) (elt-type e) index)")
                 (unless (fixnum? (caddr args))
-                  (sll-error "insertvalue index must be a bare integer" form))
+                  (error "insertvalue index must be a bare integer" form))
                 (ir:build-insertvalue b
                   (resolve-operand st #f (car args))
                   (resolve-operand st #f (cadr args))
@@ -855,7 +855,7 @@
                 (arity>= 4 "(atomicrmw op (ptr p) (type v) ordering (align n)?)")
                 (let ([rmw (assq (car args) rmw-ops)])
                   (unless rmw
-                    (sll-error "unknown atomicrmw operation" (car args) form))
+                    (error "unknown atomicrmw operation" (car args) form))
                   (let ([v (ir:build-atomicrmw b (cdr rmw)
                                                (resolve-operand st #f (cadr args))
                                                (resolve-operand st #f (caddr args))
@@ -884,8 +884,8 @@
                   (for-each
                     (lambda (c)
                       (unless (and (pair? c) (pair? (cdr c)) (null? (cddr c)))
-                        (sll-error "switch case must be ((type const) (label %l))"
-                                   c form))
+                        (error "switch case must be ((type const) (label %l))"
+                               c form))
                       (ir:add-case! sw (resolve-operand st ty (car c))
                                     (block-ref st (cadr c))))
                     cases)
@@ -913,7 +913,7 @@
                      (ir:build-cond-br b c
                                        (block-ref st (caddr args))
                                        (block-ref st (cadddr args))))]
-                  [else (sll-error "expected (br (label %x)) or (br i1 %c (label %a) (label %b))"
+                  [else (error "expected (br (label %x)) or (br i1 %c (label %a) (label %b))"
                           form (fstate-fname st))])]
                [(ret)
                 (cond
@@ -921,26 +921,26 @@
                   [(= (length args) 2)
                    (ir:build-ret b (resolve-operand st (resolve-type ctx (car args))
                                                     (cadr args)))]
-                  [else (sll-error "expected (ret void) or (ret type value)"
+                  [else (error "expected (ret void) or (ret type value)"
                           form (fstate-fname st))])]
-               [else (sll-error "unknown opcode" op form)])])))))
+               [else (error "unknown opcode" op form)])])))))
 
   (define (emit-insn! st form)
     (cond
       [(not (pair? form))
-       (sll-error "invalid instruction" form (fstate-fname st))]
+       (error "invalid instruction" form (fstate-fname st))]
       [(label-form? form)
-       (sll-error "blocks do not nest: (label ...) inside a block"
-                  form (fstate-fname st))]
+       (error "blocks do not nest: (label ...) inside a block"
+              form (fstate-fname st))]
       [(eq? (car form) '=)
        (unless (and (= (length form) 3) (local-name? (cadr form))
                     (pair? (caddr form)))
-         (sll-error "expected (= %name (op ...))" form (fstate-fname st)))
+         (error "expected (= %name (op ...))" form (fstate-fname st)))
        (let ([lhs (cadr form)] [rhs (caddr form)])
          (when (memq (car rhs) no-result-ops)
-           (sll-error "instruction produces no result to bind" form))
+           (error "instruction produces no result to bind" form))
          (when (hashtable-ref (fstate-locals st) lhs #f)
-           (sll-error "duplicate local name" lhs (fstate-fname st)))
+           (error "duplicate local name" lhs (fstate-fname st)))
          (hashtable-set! (fstate-locals st) lhs
                          (emit-op st rhs (llvm-name lhs))))]
       [else (emit-op st form "")]))
@@ -955,7 +955,7 @@
           (ir:phi-add-incoming! ph
             (map (lambda (pr)
                    (unless (and (pair? pr) (pair? (cdr pr)) (null? (cddr pr)))
-                     (sll-error "phi incoming must be [value %label]" pr form))
+                     (error "phi incoming must be [value %label]" pr form))
                    (cons (resolve-operand st ty (car pr))
                          (block-by-name st (cadr pr))))
                  pairs))))
@@ -985,7 +985,7 @@
           (lambda (ety ef) (resolve-constant ctx globals ety ef))))
     (define (constant-group g)
       (unless (and (pair? g) (pair? (cdr g)) (null? (cddr g)))
-        (sll-error "aggregate element must be (type constant)" g form))
+        (error "aggregate element must be (type constant)" g form))
       (elem-resolve (resolve-type ctx (car g)) (cadr g)))
     (cond
       [(eq? form 'undef) (ir:undef-value ty)]
@@ -993,19 +993,19 @@
       [(memq form '(zeroinitializer null)) (ir:const-null ty)]
       [(global-name? form)
        (or (hashtable-ref globals form #f)
-           (sll-error "unbound global in initializer" form))]
+           (error "unbound global in initializer" form))]
       [(and (integer? form) (exact? form)) (ir:const-int ty form)]
       [(flonum? form) (ir:const-real ty form)]
       [(and (pair? form) (memq (car form) '(c cz)))
        (unless (and (= (length form) 2) (string? (cadr form)))
-         (sll-error "expected (c \"bytes\") or (cz \"bytes\")" form))
+         (error "expected (c \"bytes\") or (cz \"bytes\")" form))
        (ir:const-string ctx (cadr form) (eq? (car form) 'cz))]
       [(and (pair? form)
             (memq (car form) '(trunc ptrtoint inttoptr bitcast
                                 addrspacecast)))
        ;; constexpr cast: (op src-type value dst-type), like instructions
        (unless (= (length form) 4)
-         (sll-error "expected (cast-op src-type constant dst-type)" form))
+         (error "expected (cast-op src-type constant dst-type)" form))
        (ir:const-cast (car form)
                       (elem-resolve (resolve-type ctx (cadr form))
                                     (caddr form))
@@ -1018,12 +1018,12 @@
            [(and (pair? rest) (eq? (car rest) 'nsw)) (loop (cdr rest) nuw #t)]
            [else
             (unless (= (length rest) 3)
-              (sll-error "expected (binop nuw|nsw? type constant constant)"
-                         form))
+              (error "expected (binop nuw|nsw? type constant constant)"
+                     form))
             (when (and (or nuw nsw) (eq? (car form) 'xor))
-              (sll-error "xor carries no wrap flags" form))
+              (error "xor carries no wrap flags" form))
             (when (and nuw nsw)
-              (sll-error "the C API cannot construct nuw+nsw constexprs" form))
+              (error "the C API cannot construct nuw+nsw constexprs" form))
             (let ([ety (resolve-type ctx (car rest))])
               (ir:const-binop (car form) nuw nsw
                               (elem-resolve ety (cadr rest))
@@ -1040,8 +1040,8 @@
             (loop (cdr rest) (bitwise-ior flags 4))]
            [else
             (unless (and (pair? rest) (pair? (cdr rest)))
-              (sll-error "expected (getelementptr flags? src-type groups...)"
-                         form))
+              (error "expected (getelementptr flags? src-type groups...)"
+                     form))
             (let ([groups (map constant-group (cdr rest))])
               (ir:const-gep (resolve-type ctx (car rest))
                             (car groups) (cdr groups) flags))]))]
@@ -1054,9 +1054,9 @@
                          (ir:const-named-struct ty elts)
                          (ir:const-struct ctx elts
                                           (ir:packed-struct-type? ty)))]
-           [else (sll-error "aggregate initializer for a non-aggregate type"
-                            form)]))]
-      [else (sll-error "invalid constant initializer" form)]))
+           [else (error "aggregate initializer for a non-aggregate type"
+                        form)]))]
+      [else (error "invalid constant initializer" form)]))
 
   ;; (= @name (global|constant linkage? type init? attr*)) -- the kind is
   ;; the head, linkage is a modifier after it (like instruction flags);
@@ -1065,11 +1065,11 @@
     ;; -> (values name linkage-int-or-#f constant? type-form init-form attrs)
     (unless (and (= (length item) 3) (global-name? (cadr item))
                  (pair? (caddr item)))
-      (sll-error "expected (= @name (global|constant ...))" item))
+      (error "expected (= @name (global|constant ...))" item))
     (let ([name (cadr item)]
           [rhs (caddr item)])
       (unless (and (memq (car rhs) '(global constant)) (pair? (cdr rhs)))
-        (sll-error "expected (global ...) or (constant ...)" item))
+        (error "expected (global ...) or (constant ...)" item))
       (let* ([constant? (eq? (car rhs) 'constant)]
              [as (let ([x (cadr rhs)])
                    (and (pair? x) (eq? (car x) 'addrspace)
@@ -1084,7 +1084,7 @@
              [init (and (pair? rest) (not (attr? (car rest))) (car rest))]
              [attrs (if init (cdr rest) rest)])
         (unless (for-all attr? attrs)
-          (sll-error "malformed global attributes" attrs item))
+          (error "malformed global attributes" attrs item))
         (values name (and lk (cdr lk)) constant? ty-form init attrs as))))
 
   ;; ---- module items ---------------------------------------------------------------------
@@ -1092,8 +1092,8 @@
   (define (item-kind item)
     (unless (and (pair? item)
                  (memq (car item) '(define declare = type datalayout triple)))
-      (sll-error "unknown module item (expected define, declare, type, datalayout, triple or (= @name ...))"
-                 item))
+      (error "unknown module item (expected define, declare, type, datalayout, triple or (= @name ...))"
+             item))
     (car item))
 
   ;; (type %name (struct ...)|(packed-struct ...)|opaque) -- named struct
@@ -1104,14 +1104,14 @@
                  (or (eq? (caddr item) 'opaque)
                      (and (pair? (caddr item))
                           (memq (car (caddr item)) '(struct packed-struct)))))
-      (sll-error "expected (type %name (struct ...)|opaque)" item)))
+      (error "expected (type %name (struct ...)|opaque)" item)))
 
   (define (create-type-item! ctx item)
     (when (eq? (car item) 'type)
       (check-type-item item)
       (let ([nm (strip-sigil (cadr item))])
         (when (ir:named-type ctx nm)
-          (sll-error "duplicate named type" (cadr item)))
+          (error "duplicate named type" (cadr item)))
         (ir:create-named-struct ctx nm))))
 
   (define (fill-type-item! ctx item)
@@ -1127,21 +1127,21 @@
   ;; -> (values ret-type-form name-sym rest linkage-int-or-#f body)
   (define (item-signature item)
     (unless (>= (length item) 3)
-      (sll-error "malformed module item" item))
+      (error "malformed module item" item))
     (let* ([lk (and (symbol? (cadr item)) (assq (cadr item) linkages))]
            [item (if lk (cdr item) item)])
       (unless (>= (length item) 3)
-        (sll-error "malformed module item" item))
+        (error "malformed module item" item))
       (let ([sig (caddr item)])
         (unless (and (pair? sig) (global-name? (car sig)))
-          (sll-error "function signature must be (@name ...)" item))
+          (error "function signature must be (@name ...)" item))
         (values (cadr item) (car sig) (cdr sig) (and lk (cdr lk))
                 (cdddr item)))))
 
   (define (check-param p item)
     (unless (and (pair? p) (pair? (cdr p)) (null? (cddr p))
                  (local-name? (cadr p)))
-      (sll-error "parameter must be (type %name)" p item)))
+      (error "parameter must be (type %name)" p item)))
 
   ;; pass 1: create every function and global variable up front, so bodies
   ;; and initializers may reference them in any order
@@ -1157,7 +1157,7 @@
           (let-values ([(name lk constant? ty-form init attrs as)
                         (parse-global item)])
             (when (hashtable-ref globals name #f)
-              (sll-error "duplicate global name" name))
+              (error "duplicate global name" name))
             ;; explicit address space always: LLVMAddGlobal would use the
             ;; datalayout's default-globals space (G) instead of 0
             (hashtable-set! globals name
@@ -1169,7 +1169,7 @@
     (let-values ([(retty-form fname rest0 lk body) (item-signature item)])
       (let-values ([(rest variadic?) (split-variadic rest0)])
         (when (hashtable-ref globals fname #f)
-          (sll-error "duplicate global name" fname))
+          (error "duplicate global name" fname))
         (let* ([retty (resolve-type ctx retty-form)]
                [ptys (case kind
                        [(define)
@@ -1190,13 +1190,13 @@
                    (let ([a (car b)])
                      (unless (and (= (length a) 2) (fixnum? (cadr a))
                                   (positive? (cadr a)))
-                       (sll-error "expected (align bytes)" a fname))
+                       (error "expected (align bytes)" a fname))
                      (ir:set-alignment! f (cadr a)))
                    (deco (cdr b))]
                   [(gc)
                    (let ([g (car b)])
                      (unless (and (= (length g) 2) (string? (cadr g)))
-                       (sll-error "expected (gc \"name\")" g fname))
+                       (error "expected (gc \"name\")" g fname))
                      (ir:set-gc! f (cadr g)))
                    (deco (cdr b))]
                   [else (void)])))
@@ -1214,8 +1214,8 @@
                 (resolve-constant ctx globals (resolve-type ctx ty-form) init))
               ;; 0 = external, 12 = extern_weak: declarations
               (unless (memq lk '(0 12))
-                (sll-error "a global without an initializer must be external or extern_weak"
-                           name)))
+                (error "a global without an initializer must be external or extern_weak"
+                       name)))
           (apply-attrs! g attrs item))))
     (when (eq? (item-kind item) 'define)
       (let-values ([(retty-form fname params lk full-body0) (item-signature item)])
@@ -1235,13 +1235,13 @@
           (when pers?
             (let ([p (car full-body)])
               (unless (= (length p) 3)
-                (sll-error "expected (personality type value)" p fname))
+                (error "expected (personality type value)" p fname))
               ;; any constant: @fn, null, undef, integers, constexprs
               (ir:set-personality-fn! f
                 (resolve-constant ctx globals (resolve-type ctx (cadr p))
                                   (caddr p)))))
           (when (null? body)
-            (sll-error "function body is empty" fname))
+            (error "function body is empty" fname))
           (let ([st (make-fstate ctx builder globals (make-eq-hashtable)
                                  (make-eq-hashtable) fname f '() #f
                                  (make-eq-hashtable))])
@@ -1252,7 +1252,7 @@
                   (let ([pname (cadr (car ps))]
                         [pv (ir:function-param f i)])
                     (when (hashtable-ref (fstate-locals st) pname #f)
-                      (sll-error "duplicate parameter name" pname fname))
+                      (error "duplicate parameter name" pname fname))
                     (let ([nm (llvm-name pname)])
                       (unless (string=? nm "") (ir:set-value-name! pv nm)))
                     (hashtable-set! (fstate-locals st) pname pv)
@@ -1287,15 +1287,15 @@
            [rest (if lk (cdr rest) rest)])
       (unless (and (= (length rest) 2) (pair? (cadr rest))
                    (= (length (cadr rest)) 2))
-        (sll-error "expected (= @name (alias linkage? type (ptr aliasee)))"
-                   item))
+        (error "expected (= @name (alias linkage? type (ptr aliasee)))"
+               item))
       (values (cadr item) lk (car rest) (cadr rest))))
 
   (define (create-alias! ctx m globals item)
     (when (alias-item? item)
       (let-values ([(name lk vty-form g) (alias-parts ctx item)])
         (when (hashtable-ref globals name #f)
-          (sll-error "duplicate global name" name))
+          (error "duplicate global name" name))
         (let ([a (ir:add-alias m (resolve-type ctx vty-form)
                                (ir:const-null (ir:pointer-type ctx))
                                (llvm-name name))])

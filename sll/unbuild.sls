@@ -17,16 +17,16 @@
 ;;; pointers, with none of the ownership hazards (llvm ir) exists to fence.
 (library (sll unbuild)
   (export unbuild)
-  (import (chezscheme)
+  (import (except (chezscheme) error)
           (prefix (llvm base) base:)
           (prefix (llvm raw) LLVM)
           (prefix (llvm ir) ir:))
 
-  (define (u-error msg . irritants)
+  (define (error msg . irritants)
     (apply base:error 'sll:unbuild msg irritants))
 
   (define (not-modeled what . irritants)
-    (apply u-error
+    (apply error
            (string-append "not modeled (see project/not-modeled.md): " what)
            irritants))
 
@@ -203,11 +203,11 @@
 
   (define (local-name st v)
     (or (hashtable-ref (ustate-names st) v #f)
-        (u-error "internal: value has no assigned name" v)))
+        (error "internal: value has no assigned name" v)))
 
   (define (global-sym st v)
     (or (hashtable-ref (ustate-gnames st) v #f)
-        (u-error "internal: global has no assigned name" v)))
+        (error "internal: global has no assigned name" v)))
 
   ;; ---- constants -------------------------------------------------------------------
 

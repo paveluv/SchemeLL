@@ -1,5 +1,14 @@
 # Project rules and procedures
 
+## Error raising
+
+`base:error` is the project's raw error raiser. Modules that raise
+their own errors define a LOCAL `error` wrapping it with the module's
+`who` (importing `(except (chezscheme) error)`), e.g. `(sll)` raises
+with who `sll:build`. No pseudo-namespace helper names (`sll-error`,
+`u-error`): the namespace comes from the import site, never from the
+definition -- the same rule as for exports.
+
 ## Terminology
 
 - **ll** refers to LLVM IR itself -- the textual language in `.ll`
