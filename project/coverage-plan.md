@@ -19,8 +19,17 @@ counts, non-phi forward references. Step 6a done 2026-08-22:
 ll:unbuild implemented and self-tested — all 24 golden entries
 round-trip parse -> unbuild -> build -> byte-identical print; strict
 `not modeled` errors per project/not-modeled.md, with six
-strictness tests. Remaining: 6b, the corpus harness with the
-three-tier normalize/exclude/burn-down strategy. "100% coverage" is meaningless without a
+strictness tests. Step 6b harness DONE
+2026-08-22 (make corpus over LLVM's regression suite, 36488 .ll files);
+burn-down rounds took the pass rate 53.6% -> 63.3% -> 65.9% -> 70.9%
+-> 76.0% (27744 PASS), growing the grammar by corpus frequency along
+the way (named/packed struct types, scalable vectors, aggregate
+constants as operands, any-width integers, poison mask lanes,
+address-spaced globals, function linkage, anonymous %N names). Largest
+remaining buckets: instructions with all-constant operands (C-API
+builder folds them, ~2.3k), metadata-typed operands (~1.7k), constant
+expressions (~1.2k), MISMATCH to be diagnosed (~1.5k), operand bundles,
+global aliases. The burn-down continues by these statistics. "100% coverage" is meaningless without a
 machine-checkable oracle and an explicit scope. This plan defines both, and
 three verification levels that turn coverage from a claim into a test that
 fails.

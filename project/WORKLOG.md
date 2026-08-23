@@ -106,9 +106,23 @@ Newest entries first. Format: date, Done / Decided / Next.
   Strict mode raises "not modeled" errors; the complete ledger (detected
   vs undetected) is project/not-modeled.md. 174 checks.
 
-### Next (coverage plan order)
-- Step 6b: the corpus harness (normalize / exclude / burn-down tiers)
-  over reference/llvm-project llvm/test .ll files.
+- Step 6b done (harness + 5 burn-down rounds): make corpus round-trips
+  LLVM's regression suite (36488 files); pass rate 53.6% -> 76.0%.
+  Grammar grown by corpus frequency: named/packed struct types
+  ((type %name ...) items), scalable vectors, aggregate/string constants
+  as operands, any-width integer constants, poison mask lanes,
+  address-spaced globals, function linkage, anonymous all-digit %N names
+  (build leaves them unnamed so LLVM reproduces the numbering).
+  Normalizer (tests/normalize.sls) strips the not-modeled decorations
+  from both sides; dso_local/comdat handled textually (no C API).
+  unbuild gained detections: no-op casts, all-constant-operand
+  instructions (C-API builder folds both), function alignment,
+  alloca addrspace, externally_initialized, prefix/prologue data.
+
+### Next (coverage burn-down, by corpus statistics)
+- MISMATCH bucket (~1.5k files) diagnosis; constant expressions (~1.2k:
+  gep/ptrtoint/bitcast constexpr grammar); metadata-typed operands
+  (~1.7k); operand bundles; global aliases; unnamed identified structs.
 - Smaller leftovers: scalable vectors, raw value injection (the reserved
   (ptr N) shape), constant expressions on demand, address-spaced globals.
 

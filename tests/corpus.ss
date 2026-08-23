@@ -77,15 +77,29 @@
        (string-append "BUG build-fail: " msg)]
       [else (string-append "BUG error: " msg)])))
 
-;; drop the module identity header lines before comparing
+;; dso_local has no C API accessor in LLVM 19: normalize it textually
+(define (strip-dso-local l)
+  (let ([m (after-marker l " dso_local ")])
+    (if m
+        (string-append
+          (substring l 0 (- (string-length l) (string-length m) 11))
+          " " m)
+        l)))
+
+;; drop the module identity header lines before comparing; also drop
+;; metadata ("!") and comdat-declaration ("$") lines -- neither is
+;; deletable via the C API, so the comparison excludes them (unbuild
+;; runs with 'ignore-named-metadata)
 (define (ir-body s)
   (let ([p (open-string-input-port s)] [out (open-output-string)])
     (let loop ()
       (let ([l (get-line p)])
         (unless (eof-object? l)
-          (unless (or (and (> (string-length l) 0) (char=? (string-ref l 0) #\;))
+          (unless (or (zero? (string-length l))   ; stripped sections leave
+                                                  ; blank separators behind
+                      (memv (string-ref l 0) '(#\; #\! #\$))
                       (starts-with? l "source_filename"))
-            (put-string out l)
+            (put-string out (strip-dso-local l))
             (put-char out #\newline))
           (loop))))
     (get-output-string out)))
@@ -99,7 +113,9 @@
       [(not text) (bucket! "unreadable file")]
       [(> (string-length text) 2000000) (bucket! "skipped (> 2MB)")]
       [else
-       (let ([ctx (ir:make-context)] [m #f] [m2 #f])
+       ;; separate contexts: named struct types are context-registered,
+       ;; so rebuilding in the parse context would collide
+       (let ([ctx (ir:make-context)] [rctx (ir:make-context)] [m #f] [m2 #f])
          (guard (e [#t (let ([b (classify e)])
                          (bucket! b)
                          (when (starts-with? b "BUG")
@@ -107,8 +123,8 @@
            (set! m (ir:parse-ir ctx path text))
            (n:normalize-module! m)
            (let ([a (ir-body (ir:module->string m))])
-             (let ([prog (ll:unbuild m)])
-               (set! m2 (ll:build ctx "corpus" prog))
+             (let ([prog (ll:unbuild m 'ignore-named-metadata)])
+               (set! m2 (ll:build rctx "corpus" prog))
                ;; normalize the rebuild too: LLVM auto-attaches intrinsic
                ;; attributes to declarations it recognizes
                (n:normalize-module! m2)
@@ -121,7 +137,8 @@
                          (cons (cons path "MISMATCH") failures))))))))
          (when m2 (guard (e [#t #f]) (ir:module-dispose! m2)))
          (when m (guard (e [#t #f]) (ir:module-dispose! m)))
-         (ir:context-dispose! ctx))])))
+         (ir:context-dispose! ctx)
+         (ir:context-dispose! rctx))])))
 
 ;; ---- run --------------------------------------------------------------------------
 

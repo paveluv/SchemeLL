@@ -78,6 +78,7 @@
   (define (normalize-function! f)
     (LLVMGlobalClearMetadata f)
     (LLVMSetGC f base:null-ptr)
+    (LLVMSetComdat f base:null-ptr)
     (LLVMSetFunctionCallConv f 0)
     (LLVMSetVisibility f 0)
     (LLVMSetSection f "")
@@ -90,6 +91,7 @@
 
   (define (normalize-global! g)
     (LLVMGlobalClearMetadata g)
+    (LLVMSetComdat g base:null-ptr)
     (LLVMSetVisibility g 0)
     (LLVMSetSection g "")
     (LLVMSetUnnamedAddress g 0)

@@ -24,7 +24,7 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 | ifuncs (`@i = ifunc ...`) | detected |
 | named module metadata (`!llvm.module.flags`, `!llvm.ident`, ...) | detected; `(ll:unbuild m 'ignore-named-metadata)` opts out explicitly (the corpus harness does, stripping `!` lines from the comparison) |
 | module-level inline asm (`module asm "..."`) | detected |
-| comdat sections | undetected |
+| comdat sections | undetected; the normalizer clears per-global comdats, declaration lines excluded textually |
 | `source_filename` | ignored by design (module identity, not IR content) |
 
 ## Functions
@@ -35,7 +35,8 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 | non-C calling conventions (`fastcc`, `tailcc`, `coldcc`, ...) | detected |
 | sections (`section "..."`) | detected |
 | visibility (`hidden` / `protected`) | detected |
-| `dso_local` | undetected |
+| `dso_local` | undetected; the corpus harness normalizes it textually (no C API accessor in LLVM 19) |
+| alignment on function definitions/declarations (`define ... align 8`) | detected |
 | `unnamed_addr` / `local_unnamed_addr` | undetected |
 | DLL storage class (`dllimport`/`dllexport`) | undetected |
 | garbage-collector name (`gc "..."`) | undetected; the corpus normalizer strips it |
@@ -67,6 +68,8 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 | instructions with all-constant operands (the C-API builder constant-folds them; no non-folding builder exists in the C API) | detected |
 | alloca in a non-zero address space (datalayout-driven; the C-API builder cannot produce them) | detected |
 | alignments of 2^32 or larger (LLVMGetAlignment truncates; the attribute is omitted) | undetected |
+| no-op casts, e.g. `bitcast ptr %x to ptr` (the C-API builder folds them away even on non-constants) | detected |
+| metadata- and token-typed operands (`metadata !"..."` intrinsic arguments) | detected (as type kinds) |
 
 ## Types
 

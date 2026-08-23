@@ -143,7 +143,7 @@
       [(scalable-vector)
        `(scalable-vector ,(LLVMGetVectorSize ty)
                          ,(unbuild-type (LLVMGetElementType ty)))]
-      [else (not-modeled "type kind" (ir:type-kind ty))]))
+      [else (not-modeled (string-append "type kind: " (symbol->string (ir:type-kind ty))))]))
 
   (define (struct-fields ty)
     (let loop ([i 0])
@@ -424,6 +424,8 @@
          `(,op ,@(int-flags ins op) ,@(fmf-flags ins)
                ,(unbuild-type ty) ,(operand st (op0)) ,(operand st (op1)))]
         [(memq op cast-names)
+         (when (eqv? (LLVMTypeOf (op0)) ty)
+           (not-modeled "no-op casts (the C-API builder folds them away)"))
          `(,op ,@(if (and (eq? op 'zext) (nz? (LLVMGetNNeg ins))) '(nneg) '())
                ,(unbuild-type (LLVMTypeOf (op0))) ,(operand st (op0))
                ,(unbuild-type ty))]
@@ -634,6 +636,8 @@
   ;; ---- functions -----------------------------------------------------------------------
 
   (define (check-function-decorations f nparams)
+    (unless (zero? (LLVMGetAlignment f))
+      (not-modeled "alignment on functions"))
     (when (nz? (LLVMHasPrefixData f)) (not-modeled "function prefix data"))
     (when (nz? (LLVMHasPrologueData f)) (not-modeled "function prologue data"))
     (unless (zero? (LLVMGetFunctionCallConv f))
