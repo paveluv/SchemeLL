@@ -11,6 +11,7 @@
 (import (chezscheme)
         (prefix (tests harness) t:)
         (prefix (tests oracle) o:)
+        (prefix (tests normalize) n:)
         (prefix (llvm ir) ir:)
         (prefix (llscheme ll) ll:)
         (prefix (llscheme ll render) render:))
@@ -958,6 +959,68 @@ compute:
 (t:check-exn "unbuild rejects nuw+nsw constexpr binops (no C constructor)"
              (unbuild-of-ir
                "@g = global i64 0\n@p = global i64 add nuw nsw (i64 ptrtoint (ptr @g to i64), i64 1)"))
+
+;; constructs only expressible alongside intrinsic declarations, which
+;; LLVM decorates with auto-attributes strict unbuild rejects: these
+;; goldens round-trip through the corpus normalizer instead
+(define (check-normalized-entry! name golden)
+  (let* ([pctx (ir:make-context)]
+         [rctx (ir:make-context)]
+         [xctx (ir:make-context)]
+         [parsed (ir:parse-ir pctx name golden)])
+    (n:normalize-module! parsed)
+    (let* ([a (n:comparable-ir (ir:module->string parsed))]
+           [prog (ll:unbuild parsed)]
+           [rebuilt (ll:build rctx name prog)])
+      (n:normalize-module! rebuilt)
+      (let ([b (n:comparable-ir (ir:module->string rebuilt))])
+        (unless (string=? a b)
+          (printf "~%--- rebuilt (~a) ---~%~a--- golden ---~%~a---~%" name b a))
+        (t:check (string-append "normalized round-trip: " name)
+                 (string=? a b)))
+      (let* ([reparsed (ir:parse-ir xctx name (render:ll->text prog))])
+        (n:normalize-module! reparsed)
+        (let ([b (n:comparable-ir (ir:module->string reparsed))])
+          (unless (string=? a b)
+            (printf "~%--- rendered (~a) ---~%~a--- golden ---~%~a---~%"
+                    name b a))
+          (t:check (string-append "normalized render round-trip: " name)
+                   (string=? a b)))
+        (ir:module-dispose! reparsed))
+      (ir:module-dispose! rebuilt))
+    (ir:module-dispose! parsed)
+    (ir:context-dispose! pctx)
+    (ir:context-dispose! rctx)
+    (ir:context-dispose! xctx)))
+
+(check-normalized-entry! "metadata-operands"
+  "declare float @llvm.experimental.constrained.fadd.f32(float, float, metadata, metadata)
+declare i64 @llvm.read_register.i64(metadata)
+declare void @llvm.write_register.i64(metadata, i64)
+declare i1 @llvm.type.test(ptr, metadata)
+
+define float @strict_add(float %a, float %b) {
+entry:
+  %r = call float @llvm.experimental.constrained.fadd.f32(float %a, float %b, metadata !\"round.dynamic\", metadata !\"fpexcept.strict\")
+  ret float %r
+}
+
+define i64 @regs() {
+entry:
+  %v = call i64 @llvm.read_register.i64(metadata !0)
+  call void @llvm.write_register.i64(metadata !1, i64 %v)
+  ret i64 %v
+}
+
+define i1 @check(ptr %p) {
+entry:
+  %ok = call i1 @llvm.type.test(ptr %p, metadata !\"vtable_id\")
+  ret i1 %ok
+}
+
+!0 = !{!\"sp\"}
+!1 = !{!\"fp\"}
+")
 
 (check-entry! "aliases"
   '((= @g (global i64 7))

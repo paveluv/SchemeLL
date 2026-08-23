@@ -90,6 +90,7 @@
          [(x86_fp80) (ir:x86fp80-type ctx)]
          [(ppc_fp128) (ir:ppcfp128-type ctx)]
          [(void) (ir:void-type ctx)]
+         [(metadata) (ir:metadata-type ctx)]
          [else
           (if (local-name? t)
               ;; %name: a named struct type from a (type %name ...) item
@@ -167,6 +168,18 @@
                     (not (type-form? h))
                     (not (local-name? (car h))))))))
 
+  ;; metadata operand: (md "string") | (md (element ...)) -> MetadataRef
+  (define (resolve-md-ref ctx form)
+    (unless (and (pair? form) (eq? (car form) 'md) (= (length form) 2))
+      (ll-error "expected (md \"string\") or (md (element ...))" form))
+    (let ([x (cadr form)])
+      (cond
+        [(string? x) (ir:md-string ctx x)]
+        [(list? x)
+         (ir:md-node ctx (map (lambda (e) (resolve-md-ref ctx e)) x))]
+        [else
+         (ll-error "expected (md \"string\") or (md (element ...))" form)])))
+
   ;; ty types bare literals; #f when the position carries no type of its own
   ;; (then literals must come as a (type value) group).
   (define (resolve-operand st ty form)
@@ -213,6 +226,9 @@
       [(and (pair? form) (memq (car form) '(c cz)))
        (unless ty (ll-error "string constant needs a type annotation" form))
        (resolve-constant (fstate-ctx st) (fstate-globals st) ty form)]
+      [(and (pair? form) (eq? (car form) 'md))
+       (ir:metadata-value (fstate-ctx st)
+                          (resolve-md-ref (fstate-ctx st) form))]
       [(and (pair? form)
             (memq (car form) '(trunc ptrtoint inttoptr bitcast addrspacecast
                                 add sub mul xor getelementptr)))

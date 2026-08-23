@@ -42,6 +42,7 @@
     const-array const-struct const-named-struct const-string struct-name
     const-cast const-binop const-gep
     add-alias alias-aliasee alias-set-aliasee! module-aliases
+    metadata-type md-string md-node metadata-value
     packed-struct-type?
     ;; module-level globals
     add-global set-initializer! set-global-constant! set-linkage! linkage
@@ -380,6 +381,20 @@
   (define (struct-name ty)
     (let ([s (base:cstring->string (LLVMGetStructName ty))])
       (and s (not (string=? s "")) s)))
+
+  ;; ---- metadata operands --------------------------------------------------
+  ;; MetadataRef makers plus the Value wrapper for operand positions
+
+  (define (metadata-type ctx)
+    (LLVMMetadataTypeInContext (context-live-ptr ctx)))
+  (define (md-string ctx s)   ; -> MetadataRef; the length is in BYTES
+    (LLVMMDStringInContext2 (context-live-ptr ctx) s
+                            (bytevector-length (string->utf8 s))))
+  (define (md-node ctx mds)   ; MetadataRefs -> MetadataRef
+    (base:call-with-pointer-array mds
+      (lambda (arr n) (LLVMMDNodeInContext2 (context-live-ptr ctx) arr n))))
+  (define (metadata-value ctx md)   ; MetadataRef -> ValueRef
+    (LLVMMetadataAsValue2 (context-live-ptr ctx) md))
 
   ;; ---- global aliases ---------------------------------------------------
 

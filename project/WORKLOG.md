@@ -222,11 +222,33 @@ Newest entries first. Format: date, Done / Decided / Next.
   verified (87.7%); the fn-alignment (~337) and alias (~262) buckets
   are gone.
 
+- Round 12 (2026-08-23): metadata-typed operands MODELED, the
+  largest bucket (~1.7k files) eliminated. Two-part fix, per the
+  semantic-tier analysis: (1) the bulk was normalizer debris -- 
+  StripModuleDebugInfo removes dbg-intrinsic CALLS but leaves their
+  dead declarations; the normalizer now deletes unused llvm.dbg.*
+  declarations (~1.2k files). (2) The real semantics: metadata type +
+  operand forms (md "string") / (md (element ...)) -- constrained-FP
+  rounding/exception selectors, type.test typeids, read/write_register
+  names. Metadata ids in retained lines are print artifacts:
+  comparable-ir now renames !N (and raw <0x...> pointer forms) densely
+  by first occurrence, so both sides match iff reference STRUCTURE
+  matches -- which also catches identity collapse: LowerTypeTests
+  `distinct !{}` typeids rebuilt uniqued would merge; unbuild now
+  detects same-content-different-identity nodes (no C API for
+  distinct). Also detected: value-as-metadata operands, cyclic scope
+  lists. New normalized-golden entry kind (check-normalized-entry!)
+  for constructs only expressible next to auto-attributed intrinsic
+  declarations. MDString length was passed in characters, not bytes --
+  fixed. Corpus: 31012 + 2659 renderer + 2 fixpoint = 33673 verified
+  (92.3%), +1682 files, the largest single round since the harness
+  was built. Zero bugs, zero mismatches.
+
 ### Next (coverage burn-down, by corpus statistics)
-- Metadata-typed operands (~1.7k, mostly intrinsic calls), operand
-  bundles (~329), token type kind (~289), residual constexpr kinds
-  (~239), alloca addrspace (~196), all-constant folding residue
-  (~125), unnamed identified structs (~116), module asm (~74).
+- Operand bundles (~334), token type kind (~293), residual constexpr
+  kinds (~244), alloca addrspace (~199), unnamed identified structs
+  (~121), all-constant folding residue (~102), NaN payloads (~93),
+  module asm (~74), cross-function blockaddress (~66).
 - Smaller leftovers: scalable vectors, raw value injection (the reserved
   (ptr N) shape), constant expressions on demand, address-spaced globals.
 

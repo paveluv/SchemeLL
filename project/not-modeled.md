@@ -75,7 +75,10 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 | alloca in a non-zero address space (datalayout-driven; the C-API builder cannot produce them) | detected |
 | alignments of 2^32, LLVM's maximum (LLVMGetAlignment truncates to 0; the attribute is omitted) | detected textually by the corpus harness (the C API cannot see it) |
 | no-op casts, e.g. `bitcast ptr %x to ptr` (the C-API builder folds them away even on non-constants) | detected; same `'tolerate-builder-folds` / render-tier treatment |
-| metadata- and token-typed operands (`metadata !"..."` intrinsic arguments) | detected (as type kinds) |
+| token-typed operands | detected (as a type kind) |
+| value-as-metadata operands (`metadata i64 %x`; nearly always debug intrinsics, which the harness strips) | detected |
+| cyclic metadata node operands (`distinct !{!0, ...}` self-references, e.g. noalias scope lists) | detected |
+| distinct metadata operand nodes (no C API to create distinct nodes; rebuilding uniqued would collapse identities, e.g. LowerTypeTests typeids `distinct !{}`) | detected (same content arriving under a second identity) |
 
 ## Types
 

@@ -199,6 +199,41 @@
 
   ;; printed module -> comparable text: drops module-identity lines,
   ;; ! metadata and $ comdat lines, blank lines; canonicalizes the rest
+  ;; metadata ids (!4) are print-order artifacts: the definitions are
+  ;; dropped from the comparison, so ids in retained lines are renamed
+  ;; densely by first occurrence -- both sides get the same canonical
+  ;; names iff their reference STRUCTURE matches
+  (define (canonicalize-md-ids s)
+    (let ([out (open-output-string)] [n (string-length s)]
+          [ids (make-hashtable string-hash string=?)] [k 0])
+      (let loop ([i 0])
+        (if (>= i n)
+            (get-output-string out)
+            (let ([c (string-ref s i)])
+              (if (or (and (char=? c #\!) (< (+ i 1) n)
+                           (char-numeric? (string-ref s (+ i 1))))
+                      ;; unenumerated nodes print as raw pointers <0x...>
+                      (and (char=? c #\<) (< (+ i 2) n)
+                           (char=? (string-ref s (+ i 1)) #\0)
+                           (char=? (string-ref s (+ i 2)) #\x)))
+                  (let scan ([j (+ i 1)])
+                    (if (and (< j n)
+                             (or (char-numeric? (string-ref s j))
+                                 (memv (string-ref s j)
+                                       '(#\a #\b #\c #\d #\e #\f #\x #\>))))
+                        (scan (+ j 1))
+                        (let* ([id (substring s i j)]
+                               [canon (or (hashtable-ref ids id #f)
+                                          (let ([nm (string-append
+                                                      "!c"
+                                                      (number->string k))])
+                                            (set! k (+ k 1))
+                                            (hashtable-set! ids id nm)
+                                            nm))])
+                          (put-string out canon)
+                          (loop j))))
+                  (begin (put-char out c) (loop (+ i 1)))))))))
+
   (define (comparable-ir s)
     (let ([p (open-string-input-port s)] [out (open-output-string)])
       (let loop ()
@@ -213,7 +248,7 @@
               (put-string out (canonical-line l))
               (put-char out #\newline))
             (loop))))
-      (get-output-string out)))
+      (canonicalize-md-ids (get-output-string out))))
 
   ;; NOT strippable via the C API (LLVM 19): dso_local, comdat,
   ;; externally_initialized, DLL storage, gc names, prefix/prologue data,
@@ -228,6 +263,17 @@
       (guard (e [#t #f]) (LLVMStripModuleDebugInfo mp))
       (LLVMSetTarget mp "")
       (LLVMSetDataLayout mp ""))
+    ;; StripModuleDebugInfo removes the dbg-intrinsic CALLS but leaves
+    ;; their declarations behind; the dead stumps would otherwise trip
+    ;; on their metadata-typed parameters
+    (for-each
+      (lambda (f)
+        (let ([name (ir:value-name f)])
+          (when (and (>= (string-length name) 9)
+                     (string=? (substring name 0 9) "llvm.dbg.")
+                     (base:null-ptr? (LLVMGetFirstUse f)))
+            (LLVMDeleteFunction f))))
+      (ir:module-functions m))
     (for-each normalize-global! (ir:module-globals m))
     (for-each normalize-alias! (ir:module-aliases m))
     (for-each normalize-function! (ir:module-functions m))))

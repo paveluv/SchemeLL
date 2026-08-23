@@ -47,11 +47,13 @@ ptr addrspace(20) needs the stripped datalayout to parse). Constant expressions 
 modeled in round 10 (grammar: instruction forms nested in operand
 position; +1k files). Rounds 9-10 emptied every BUG bucket and the
 MISMATCH bucket. Round 11 modeled function
-alignment and global aliases. As of round 11: 29432 strict + 2557
-renderer + 2 fixpoint = 31991 verified (87.7% of all, 89.6% of
-parseable). Largest remaining buckets: metadata-typed operands
-(~1.7k), operand bundles (~329), token type kind (~289), residual
-constexpr kinds (~239), alloca addrspace (~196). "100% coverage" is meaningless without a
+alignment and global aliases; round 12 modeled metadata-typed
+operands (constrained FP, type.test, read/write_register) and purged
+the normalizer's dead dbg-declaration stumps. As of round 12: 31012
+strict + 2659 renderer + 2 fixpoint = 33673 verified (92.3% of all,
+94.3% of parseable). Largest remaining buckets: operand bundles
+(~334), token type kind (~293), residual constexpr kinds (~244),
+alloca addrspace (~199). "100% coverage" is meaningless without a
 machine-checkable oracle and an explicit scope. This plan defines both, and
 three verification levels that turn coverage from a claim into a test that
 fails.

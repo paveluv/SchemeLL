@@ -143,6 +143,7 @@
       [(scalable-vector)
        `(scalable-vector ,(LLVMGetVectorSize ty)
                          ,(unbuild-type (LLVMGetElementType ty)))]
+      [(metadata) 'metadata]
       [else (not-modeled (string-append "type kind: " (symbol->string (ir:type-kind ty))))]))
 
   (define (struct-fields ty)
@@ -351,8 +352,56 @@
 
   ;; ---- operands ----------------------------------------------------------------------
 
+  ;; equal-content metadata nodes with different identities are distinct
+  ;; nodes (e.g. LowerTypeTests typeids `distinct !{}`); rebuilding them
+  ;; uniqued would collapse the identities -- form -> first value seen
+  (define md-node-forms (make-parameter #f))
+
+  ;; metadata operand forms: (md "string") | (md (elem ...)); distinct
+  ;; nodes rebuild as uniqued ones (no C API), cycles cannot
+  (define (md-string-text v)
+    (let-values ([(p len) (base:call-with-out-ptr
+                            (lambda (out) (LLVMGetMDString v out)))])
+      (base:cstring->string/len p len)))
+
+  (define (md-form v seen)
+    (cond
+      [(isa? (LLVMIsAMDString v)) `(md ,(md-string-text v))]
+      [(isa? (LLVMIsAValueAsMetadata v))
+       (not-modeled "value-as-metadata operands (metadata-wrapped SSA values)")]
+      [(isa? (LLVMIsAMDNode v))
+       (when (memv v seen)
+         (not-modeled "cyclic metadata node operands (distinct self-references)"))
+       (let* ([n (LLVMGetMDNodeNumOperands v)]
+              [arr (foreign-alloc (fxmax 8 (fx* 8 n)))])
+         (LLVMGetMDNodeOperands v arr)
+         (let loop ([i 0] [acc '()])
+           (if (fx= i n)
+               (begin
+                 (foreign-free arr)
+                 (let ([form `(md ,(reverse acc))] [reg (md-node-forms)])
+                   (when reg
+                     (let ([prev (hashtable-ref reg form #f)])
+                       (cond
+                         [(not prev) (hashtable-set! reg form v)]
+                         [(eqv? prev v) (void)]
+                         [else
+                          (not-modeled
+                            "distinct metadata operand nodes (same content, different identity; no C API for distinct nodes)")])))
+                   form))
+               (loop (fx+ i 1)
+                     (cons (md-form (foreign-ref 'unsigned-64 arr (fx* 8 i))
+                                    (cons v seen))
+                           acc)))))]
+      [else (not-modeled "metadata operand kind")]))
+
+  (define (metadata-value? v)
+    (or (isa? (LLVMIsAMDString v)) (isa? (LLVMIsAValueAsMetadata v))
+        (isa? (LLVMIsAMDNode v))))
+
   (define (operand st v)
     (cond
+      [(metadata-value? v) (md-form v '())]
       [(isa? (LLVMIsAArgument v)) (local-name st v)]
       [(isa? (LLVMIsAInstruction v)) (local-name st v)]
       [(or (isa? (LLVMIsAFunction v)) (isa? (LLVMIsAGlobalVariable v))
@@ -889,6 +938,7 @@
   ;; strict so the tool never silently loses it).
   (define (unbuild m . opts)
     (parameterize ([struct-registry (make-eqv-hashtable)]
+                   [md-node-forms (make-hashtable equal-hash equal?)]
                    [tolerate-folds (memq 'tolerate-builder-folds opts)])
       (check-module-decorations m (memq 'ignore-named-metadata opts))
       (let ([gnames (module-gnames m)])

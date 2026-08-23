@@ -103,6 +103,10 @@
     ;; generic value/type inspection (read-only; used by ll:unbuild)
     GetOperand GetNumOperands GetNumArgOperands
     IsAInstruction IsAArgument IsAFunction IsAGlobalVariable IsAGlobalAlias
+    DeleteFunction GetFirstUse
+    IsAMDNode IsAMDString IsAValueAsMetadata
+    MDStringInContext2 MDNodeInContext2 MetadataAsValue2 GetMDString
+    GetMDNodeNumOperands GetMDNodeOperands MetadataTypeInContext
     IsAConstantInt IsAConstantFP IsAConstantExpr IsAConstantPointerNull
     IsAConstantAggregateZero IsAConstantDataArray IsAConstantArray
     IsAConstantStruct IsAConstantVector IsAConstantDataVector
@@ -633,6 +637,24 @@
   (define-getter IsAFunction "LLVMIsAFunction" (void*) void*)
   (define-getter IsAGlobalVariable "LLVMIsAGlobalVariable" (void*) void*)
   (define-getter IsAGlobalAlias "LLVMIsAGlobalAlias" (void*) void*)
+  (define-getter DeleteFunction "LLVMDeleteFunction" (void*) void)
+  (define-getter GetFirstUse "LLVMGetFirstUse" (void*) void*)
+  (define-getter IsAMDNode "LLVMIsAMDNode" (void*) void*)
+  (define-getter IsAMDString "LLVMIsAMDString" (void*) void*)
+  (define-getter IsAValueAsMetadata "LLVMIsAValueAsMetadata" (void*) void*)
+  (define-getter MDStringInContext2      ; -> LLVMMetadataRef
+    "LLVMMDStringInContext2" (void* string size_t) void*)
+  (define-getter MDNodeInContext2        ; (ctx, MetadataRef*, count)
+    "LLVMMDNodeInContext2" (void* void* size_t) void*)
+  (define-getter MetadataAsValue2        ; MetadataRef -> ValueRef
+    "LLVMMetadataAsValue" (void* void*) void*)
+  (define-getter GetMDString             ; (value, unsigned* len-out)
+    "LLVMGetMDString" (void* void*) void*)
+  (define-getter GetMDNodeNumOperands
+    "LLVMGetMDNodeNumOperands" (void*) unsigned-int)
+  (define GetMDNodeOperands              ; fills a ValueRef array
+    (foreign-procedure "LLVMGetMDNodeOperands" (void* void*) void))
+  (define-getter MetadataTypeInContext "LLVMMetadataTypeInContext" (void*) void*)
   (define-getter IsAConstantInt "LLVMIsAConstantInt" (void*) void*)
   (define-getter IsAConstantFP "LLVMIsAConstantFP" (void*) void*)
   (define-getter IsAConstantExpr "LLVMIsAConstantExpr" (void*) void*)

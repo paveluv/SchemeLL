@@ -200,6 +200,14 @@
          [(blockaddress)
           (format "blockaddress(~a, ~a)"
                   (name->text (cadr v)) (name->text (caddr v)))]
+         [(md)
+          ;; metadata operand: !"string" or an inline node !{...}
+          (let md->text ([x (cadr v)])
+            (if (string? x)
+                (string-append "!" (quoted x))
+                (format "!{~a}"
+                        (join ", " (map (lambda (e) (md->text (cadr e)))
+                                        x)))))]
          [(trunc ptrtoint inttoptr bitcast addrspacecast)
           ;; constexpr cast: op (src-ty VAL to dst-ty)
           (format "~a (~a ~a to ~a)" (car v) (type->text (cadr v))
