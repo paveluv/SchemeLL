@@ -19,11 +19,12 @@
 ;;; permitted forward reference to a *value*; everything else must be
 ;;; defined textually before use.
 (library (llscheme ll)
-  (export build jit dump)
+  (export build jit dump unbuild)
   (import (chezscheme)
           (prefix (llvm base) base:)
           (prefix (llvm ir) ir:)
-          (prefix (llvm jit) jit:))
+          (prefix (llvm jit) jit:)
+          (llscheme ll unbuild))
 
   (define (ll-error msg . irritants)
     (apply base:error 'll:build msg irritants))
@@ -68,6 +69,11 @@
          [(ptr) (ir:pointer-type ctx)]
          [(float) (ir:float-type ctx)]
          [(double) (ir:double-type ctx)]
+         [(half) (ir:half-type ctx)]
+         [(bfloat) (ir:bfloat-type ctx)]
+         [(fp128) (ir:fp128-type ctx)]
+         [(x86_fp80) (ir:x86fp80-type ctx)]
+         [(ppc_fp128) (ir:ppcfp128-type ctx)]
          [(void) (ir:void-type ctx)]
          [else
           (let ([bits (int-bits t)])
@@ -118,6 +124,9 @@
       [(eq? form 'undef)
        (unless ty (ll-error "undef needs a type annotation" form))
        (ir:undef-value ty)]
+      [(eq? form 'poison)
+       (unless ty (ll-error "poison needs a type annotation" form))
+       (ir:poison-value ty)]
       [(local-name? form)
        (or (hashtable-ref (fstate-locals st) form #f)
            ;; not defined yet: legal when the defining block only appears
@@ -832,6 +841,7 @@
       (resolve-constant ctx globals (resolve-type ctx (car g)) (cadr g)))
     (cond
       [(eq? form 'undef) (ir:undef-value ty)]
+      [(eq? form 'poison) (ir:poison-value ty)]
       [(memq form '(zeroinitializer null)) (ir:const-null ty)]
       [(global-name? form)
        (or (hashtable-ref globals form #f)

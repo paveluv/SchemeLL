@@ -22,7 +22,9 @@
     builder? make-builder builder-dispose! builder-live-ptr
     ;; types
     void-type int-type int1-type int8-type int16-type int32-type int64-type
-    float-type double-type pointer-type function-type struct-type array-type
+    float-type double-type half-type bfloat-type fp128-type x86fp80-type
+    ppcfp128-type
+    pointer-type function-type struct-type array-type
     vector-type
     type-kind type-int-width type-return-type type-param-types type-vararg?
     type->string
@@ -34,7 +36,8 @@
     set-nsw! set-nuw! set-exact! set-nneg! set-disjoint! set-volatile!
     set-fast-math-flags! fast-math-flags can-use-fast-math-flags?
     gep-no-wrap-flags
-    const-int const-real const-null undef-value const-vector block-address
+    const-int const-real const-null undef-value poison-value
+    const-vector block-address
     const-array const-struct const-string
     ;; module-level globals
     add-global set-initializer! set-global-constant! set-linkage! linkage
@@ -226,6 +229,11 @@
   (define (int-type ctx bits) (LLVMIntTypeInContext (context-live-ptr ctx) bits))
   (define (float-type ctx)  (LLVMFloatTypeInContext (context-live-ptr ctx)))
   (define (double-type ctx) (LLVMDoubleTypeInContext (context-live-ptr ctx)))
+  (define (half-type ctx)   (LLVMHalfTypeInContext (context-live-ptr ctx)))
+  (define (bfloat-type ctx) (LLVMBFloatTypeInContext (context-live-ptr ctx)))
+  (define (fp128-type ctx)  (LLVMFP128TypeInContext (context-live-ptr ctx)))
+  (define (x86fp80-type ctx) (LLVMX86FP80TypeInContext (context-live-ptr ctx)))
+  (define (ppcfp128-type ctx) (LLVMPPCFP128TypeInContext (context-live-ptr ctx)))
 
   (define pointer-type
     (case-lambda
@@ -333,6 +341,7 @@
   (define (const-real ty x) (LLVMConstReal ty (inexact x)))
   (define (const-null ty) (LLVMConstNull ty))
   (define (undef-value ty) (LLVMGetUndef ty))
+  (define (poison-value ty) (LLVMGetPoison ty))
 
   ;; scalars: a list of constant values, all of the same type
   (define (const-vector scalars)

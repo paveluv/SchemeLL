@@ -135,6 +135,17 @@
               name built-text golden-text))
     (t:check (string-append "golden round-trip: " name)
              (string=? built-text golden-text))
+    ;; unbuild self-test: parse the golden, unbuild it back to ll data,
+    ;; rebuild, and demand the same canonical print
+    (let* ([prog (ll:unbuild parsed)]
+           [rebuilt (ll:build ctx (string-append name "-u") prog)]
+           [rebuilt-text (ir-body (ir:module->string rebuilt))])
+      (unless (string=? rebuilt-text golden-text)
+        (printf "~%--- unbuilt+rebuilt (~a) ---~%~a--- golden ---~%~a---~%"
+                name rebuilt-text golden-text))
+      (t:check (string-append "unbuild round-trip: " name)
+               (string=? rebuilt-text golden-text))
+      (ir:module-dispose! rebuilt))
     (ir:module-dispose! built)
     (ir:module-dispose! parsed)))
 
@@ -905,6 +916,27 @@ compute:
   br label %use
 }
 ")
+
+(t:section "coverage: unbuild strictness (not-modeled detection)")
+
+(define (unbuild-of-ir text)
+  (ll:unbuild (ir:parse-ir ctx "strict" text)))
+
+(t:check-exn "unbuild rejects function attributes"
+             (unbuild-of-ir "define void @f() nounwind {\nentry:\n  ret void\n}"))
+(t:check-exn "unbuild rejects instruction metadata"
+             (unbuild-of-ir
+               "define void @f() {\nentry:\n  ret void, !x !0\n}\n!0 = !{}"))
+(t:check-exn "unbuild rejects named struct types"
+             (unbuild-of-ir
+               "%pair = type { i64, i64 }\ndefine void @f(ptr %p) {\nentry:\n  %v = load %pair, ptr %p\n  ret void\n}"))
+(t:check-exn "unbuild rejects target triple"
+             (unbuild-of-ir "target triple = \"x86_64-pc-linux-gnu\"\n"))
+(t:check-exn "unbuild rejects calling conventions"
+             (unbuild-of-ir "define fastcc void @f() {\nentry:\n  ret void\n}"))
+(t:check-exn "unbuild rejects constant expressions"
+             (unbuild-of-ir
+               "@g = global i64 0\n@p = global i64 ptrtoint (ptr @g to i64)"))
 
 ;; ---- the ledger check (level 1) -----------------------------------------------------
 

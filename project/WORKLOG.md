@@ -95,8 +95,20 @@ Newest entries first. Format: date, Done / Decided / Next.
   function — LLVM's printer emits non-dominance block orders, so the
   corpus needs this). 145 checks.
 
+- Step 6a done: ll:unbuild — the inverse of ll:build, named per review
+  (LLVM parses, we unbuild). New library (llscheme ll unbuild),
+  re-exported by (llscheme ll); ~95 read-only getter bindings added to
+  (llvm raw) (layering note in RULES: raw getters are safe for read-only
+  walks). Unnamed values get their LLVM printer slot numbers, so rebuilt
+  modules print byte-identically. All 24 golden entries round-trip
+  parse -> unbuild -> build -> identical print. Grammar additions en
+  route: poison operands, half/bfloat/fp128/x86_fp80/ppc_fp128 types.
+  Strict mode raises "not modeled" errors; the complete ledger (detected
+  vs undetected) is project/not-modeled.md. 174 checks.
+
 ### Next (coverage plan order)
-- Step 6: ll:unbuild + LLVM test-corpus round-trip (level 3).
+- Step 6b: the corpus harness (normalize / exclude / burn-down tiers)
+  over reference/llvm-project llvm/test .ll files.
 - Smaller leftovers: scalable vectors, raw value injection (the reserved
   (ptr N) shape), constant expressions on demand, address-spaced globals.
 

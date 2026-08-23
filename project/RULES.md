@@ -12,7 +12,7 @@
 | 1 | `(llvm ir)` | Safe handles (context/module/builder records with ownership state), IR construction. |
 | 1/2 | `(llvm target)` | Native target init, target machines, object/assembly emission. |
 | 2 | `(llvm jit)` | ORC LLJIT: compile modules in memory, look up functions as ready-to-call Scheme procedures. |
-| 3 | `(llscheme ll)` | LLVM IR as s-expressions (`project/ll-design.md`): data interpreter over an opcode table; `build`/`jit`/`dump`. |
+| 3 | `(llscheme ll)` | LLVM IR as s-expressions (`project/ll-design.md`): data interpreter over an opcode table; `build`/`jit`/`dump`/`unbuild`. `(llscheme ll unbuild)` is its internal inverse-walker; it reads through `(llvm raw)` getters directly — read-only walks over borrowed pointers carry none of the ownership hazards `(llvm ir)` fences. Everything unbuild cannot represent is ledgered in `project/not-modeled.md`. |
 | 4 | `(llscheme medl)` | (future) nanopass-based structured DSL, compiling down to ll. Working code name DECIDED 2026-08-22: "medl" (MEDium Language, pronounced like "medal"); essentially collision-free. |
 
 ## Naming and namespaces

@@ -100,6 +100,41 @@
     TargetMachineEmitToFile TargetMachineEmitToMemoryBuffer
     CreateTargetDataLayout CopyStringRepOfTargetData DisposeTargetData
     GetBufferStart GetBufferSize DisposeMemoryBuffer
+    ;; generic value/type inspection (read-only; used by ll:unbuild)
+    GetOperand GetNumOperands GetNumArgOperands
+    IsAInstruction IsAArgument IsAFunction IsAGlobalVariable
+    IsAConstantInt IsAConstantFP IsAConstantExpr IsAConstantPointerNull
+    IsAConstantAggregateZero IsAConstantDataArray IsAConstantArray
+    IsAConstantStruct IsAConstantVector IsAConstantDataVector
+    IsAInlineAsm IsABlockAddress IsAConstantTokenNone
+    IsUndef IsPoison GetPoison
+    ConstIntGetSExtValue ConstIntGetZExtValue ConstRealGetDouble
+    GetAggregateElement IsConstantString GetAsString GetConstOpcode
+    GetElementType GetArrayLength2 GetVectorSize
+    CountStructElementTypes StructGetTypeAtIndex GetStructName
+    GetPointerAddressSpace
+    HalfTypeInContext BFloatTypeInContext FP128TypeInContext
+    X86FP80TypeInContext PPCFP128TypeInContext
+    GetAlignment GetAllocatedType GetGEPSourceElementType
+    CountIncoming GetIncomingValue GetIncomingBlock
+    GetCalledValue GetCalledFunctionType
+    GetNormalDest GetUnwindDest GetNumSuccessors GetSuccessor
+    GetNumClauses GetClause IsCleanup
+    GetNumHandlers GetHandlers GetParentCatchSwitch
+    GetNumIndices GetIndices
+    GetNumMaskElements GetMaskValue GetUndefMaskElem
+    GetInlineAsmAsmString GetInlineAsmConstraintString
+    GetInlineAsmHasSideEffects GetInlineAsmNeedsAlignedStack
+    GetInlineAsmDialect GetInlineAsmCanUnwind
+    GetBlockAddressFunction GetBlockAddressBasicBlock
+    HasPersonalityFn GetPersonalityFn
+    GetInitializer IsGlobalConstant
+    HasMetadata GetFunctionCallConv GetAttributeCountAtIndex
+    GetVisibility IsThreadLocal GetSection
+    GetNumOperandBundles IsAtomicSingleThread IsPackedStruct
+    GetBasicBlockName
+    GetFirstGlobalAlias GetFirstGlobalIFunc GetFirstNamedMetadata
+    GetModuleInlineAsm GetTarget GetDataLayoutStr
     ;; IRReader.h + memory buffers from bytes
     ParseIRInContext CreateMemoryBufferWithMemoryRangeCopy
     ;; Transforms/PassBuilder.h (new pass manager)
@@ -556,6 +591,107 @@
     (foreign-procedure "LLVMGetBufferSize" (void*) size_t))
   (define DisposeMemoryBuffer
     (foreign-procedure "LLVMDisposeMemoryBuffer" (void*) void))
+
+  ;; --- generic value/type inspection (read-only; used by ll:unbuild) --------
+  (define-syntax define-getter          ; (name "LLVMName" (types) ret)
+    (syntax-rules ()
+      [(_ name c-name (t ...) r)
+       (define name (foreign-procedure c-name (t ...) r))]))
+
+  (define-getter GetOperand "LLVMGetOperand" (void* unsigned-int) void*)
+  (define-getter GetNumOperands "LLVMGetNumOperands" (void*) int)
+  (define-getter GetNumArgOperands "LLVMGetNumArgOperands" (void*) unsigned-int)
+  ;; IsA* casts: value if it is one, NULL otherwise
+  (define-getter IsAInstruction "LLVMIsAInstruction" (void*) void*)
+  (define-getter IsAArgument "LLVMIsAArgument" (void*) void*)
+  (define-getter IsAFunction "LLVMIsAFunction" (void*) void*)
+  (define-getter IsAGlobalVariable "LLVMIsAGlobalVariable" (void*) void*)
+  (define-getter IsAConstantInt "LLVMIsAConstantInt" (void*) void*)
+  (define-getter IsAConstantFP "LLVMIsAConstantFP" (void*) void*)
+  (define-getter IsAConstantExpr "LLVMIsAConstantExpr" (void*) void*)
+  (define-getter IsAConstantPointerNull "LLVMIsAConstantPointerNull" (void*) void*)
+  (define-getter IsAConstantAggregateZero "LLVMIsAConstantAggregateZero" (void*) void*)
+  (define-getter IsAConstantDataArray "LLVMIsAConstantDataArray" (void*) void*)
+  (define-getter IsAConstantArray "LLVMIsAConstantArray" (void*) void*)
+  (define-getter IsAConstantStruct "LLVMIsAConstantStruct" (void*) void*)
+  (define-getter IsAConstantVector "LLVMIsAConstantVector" (void*) void*)
+  (define-getter IsAConstantDataVector "LLVMIsAConstantDataVector" (void*) void*)
+  (define-getter IsAInlineAsm "LLVMIsAInlineAsm" (void*) void*)
+  (define-getter IsABlockAddress "LLVMIsABlockAddress" (void*) void*)
+  (define-getter IsAConstantTokenNone "LLVMIsAConstantTokenNone" (void*) void*)
+  (define-getter IsUndef "LLVMIsUndef" (void*) int)
+  (define-getter IsPoison "LLVMIsPoison" (void*) int)
+  (define-getter GetPoison "LLVMGetPoison" (void*) void*)
+  (define-getter ConstIntGetSExtValue "LLVMConstIntGetSExtValue" (void*) integer-64)
+  (define-getter ConstIntGetZExtValue "LLVMConstIntGetZExtValue" (void*) unsigned-64)
+  (define-getter ConstRealGetDouble "LLVMConstRealGetDouble" (void* void*) double)
+  (define-getter GetAggregateElement "LLVMGetAggregateElement" (void* unsigned-int) void*)
+  (define-getter IsConstantString "LLVMIsConstantString" (void*) int)
+  (define-getter GetAsString "LLVMGetAsString" (void* void*) void*)
+  (define-getter GetConstOpcode "LLVMGetConstOpcode" (void*) int)
+  (define-getter GetElementType "LLVMGetElementType" (void*) void*)
+  (define-getter GetArrayLength2 "LLVMGetArrayLength2" (void*) unsigned-64)
+  (define-getter GetVectorSize "LLVMGetVectorSize" (void*) unsigned-int)
+  (define-getter CountStructElementTypes "LLVMCountStructElementTypes" (void*) unsigned-int)
+  (define-getter StructGetTypeAtIndex "LLVMStructGetTypeAtIndex" (void* unsigned-int) void*)
+  (define-getter GetStructName "LLVMGetStructName" (void*) void*)
+  (define-getter GetPointerAddressSpace "LLVMGetPointerAddressSpace" (void*) unsigned-int)
+  (define-getter HalfTypeInContext "LLVMHalfTypeInContext" (void*) void*)
+  (define-getter BFloatTypeInContext "LLVMBFloatTypeInContext" (void*) void*)
+  (define-getter FP128TypeInContext "LLVMFP128TypeInContext" (void*) void*)
+  (define-getter X86FP80TypeInContext "LLVMX86FP80TypeInContext" (void*) void*)
+  (define-getter PPCFP128TypeInContext "LLVMPPCFP128TypeInContext" (void*) void*)
+  (define-getter GetAlignment "LLVMGetAlignment" (void*) unsigned-int)
+  (define-getter GetAllocatedType "LLVMGetAllocatedType" (void*) void*)
+  (define-getter GetGEPSourceElementType "LLVMGetGEPSourceElementType" (void*) void*)
+  (define-getter CountIncoming "LLVMCountIncoming" (void*) unsigned-int)
+  (define-getter GetIncomingValue "LLVMGetIncomingValue" (void* unsigned-int) void*)
+  (define-getter GetIncomingBlock "LLVMGetIncomingBlock" (void* unsigned-int) void*)
+  (define-getter GetCalledValue "LLVMGetCalledValue" (void*) void*)
+  (define-getter GetCalledFunctionType "LLVMGetCalledFunctionType" (void*) void*)
+  (define-getter GetNormalDest "LLVMGetNormalDest" (void*) void*)
+  (define-getter GetUnwindDest "LLVMGetUnwindDest" (void*) void*)
+  (define-getter GetNumSuccessors "LLVMGetNumSuccessors" (void*) unsigned-int)
+  (define-getter GetSuccessor "LLVMGetSuccessor" (void* unsigned-int) void*)
+  (define-getter GetNumClauses "LLVMGetNumClauses" (void*) unsigned-int)
+  (define-getter GetClause "LLVMGetClause" (void* unsigned-int) void*)
+  (define-getter IsCleanup "LLVMIsCleanup" (void*) int)
+  (define-getter GetNumHandlers "LLVMGetNumHandlers" (void*) unsigned-int)
+  (define-getter GetHandlers "LLVMGetHandlers" (void* void*) void)
+  (define-getter GetParentCatchSwitch "LLVMGetParentCatchSwitch" (void*) void*)
+  (define-getter GetNumIndices "LLVMGetNumIndices" (void*) unsigned-int)
+  (define-getter GetIndices "LLVMGetIndices" (void*) void*)
+  (define-getter GetNumMaskElements "LLVMGetNumMaskElements" (void*) unsigned-int)
+  (define-getter GetMaskValue "LLVMGetMaskValue" (void* unsigned-int) int)
+  (define-getter GetUndefMaskElem "LLVMGetUndefMaskElem" () int)
+  (define-getter GetInlineAsmAsmString "LLVMGetInlineAsmAsmString" (void* void*) void*)
+  (define-getter GetInlineAsmConstraintString "LLVMGetInlineAsmConstraintString" (void* void*) void*)
+  (define-getter GetInlineAsmHasSideEffects "LLVMGetInlineAsmHasSideEffects" (void*) int)
+  (define-getter GetInlineAsmNeedsAlignedStack "LLVMGetInlineAsmNeedsAlignedStack" (void*) int)
+  (define-getter GetInlineAsmDialect "LLVMGetInlineAsmDialect" (void*) int)
+  (define-getter GetInlineAsmCanUnwind "LLVMGetInlineAsmCanUnwind" (void*) int)
+  (define-getter GetBlockAddressFunction "LLVMGetBlockAddressFunction" (void*) void*)
+  (define-getter GetBlockAddressBasicBlock "LLVMGetBlockAddressBasicBlock" (void*) void*)
+  (define-getter HasPersonalityFn "LLVMHasPersonalityFn" (void*) int)
+  (define-getter GetPersonalityFn "LLVMGetPersonalityFn" (void*) void*)
+  (define-getter GetInitializer "LLVMGetInitializer" (void*) void*)
+  (define-getter IsGlobalConstant "LLVMIsGlobalConstant" (void*) int)
+  (define-getter HasMetadata "LLVMHasMetadata" (void*) int)
+  (define-getter GetFunctionCallConv "LLVMGetFunctionCallConv" (void*) unsigned-int)
+  (define-getter GetAttributeCountAtIndex "LLVMGetAttributeCountAtIndex" (void* unsigned-int) unsigned-int)
+  (define-getter GetVisibility "LLVMGetVisibility" (void*) int)
+  (define-getter IsThreadLocal "LLVMIsThreadLocal" (void*) int)
+  (define-getter GetSection "LLVMGetSection" (void*) void*)
+  (define-getter GetNumOperandBundles "LLVMGetNumOperandBundles" (void*) unsigned-int)
+  (define-getter IsAtomicSingleThread "LLVMIsAtomicSingleThread" (void*) int)
+  (define-getter IsPackedStruct "LLVMIsPackedStruct" (void*) int)
+  (define-getter GetBasicBlockName "LLVMGetBasicBlockName" (void*) void*)
+  (define-getter GetFirstGlobalAlias "LLVMGetFirstGlobalAlias" (void*) void*)
+  (define-getter GetFirstGlobalIFunc "LLVMGetFirstGlobalIFunc" (void*) void*)
+  (define-getter GetFirstNamedMetadata "LLVMGetFirstNamedMetadata" (void*) void*)
+  (define-getter GetModuleInlineAsm "LLVMGetModuleInlineAsm" (void* void*) void*)
+  (define-getter GetTarget "LLVMGetTarget" (void*) void*)
+  (define-getter GetDataLayoutStr "LLVMGetDataLayoutStr" (void*) void*)
 
   ;; --- IRReader.h -----------------------------------------------------------------
   (define ParseIRInContext             ; (ctx, membuf, module* out, char** err) -> bool (true = failed); consumes membuf
