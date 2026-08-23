@@ -145,6 +145,26 @@ Newest entries first. Format: date, Done / Decided / Next.
   textual ll->IR backend parsed by LLVM (zero-glue, exact; roadmapped),
   upstream C API patch, C shim (rejected: breaks zero-glue).
 
+- (llscheme ll render): ll->textual-IR printer in pure Scheme (no LLVM
+  calls). Purpose: constructing modules through LLVM's parser instead
+  of the folding C-API builder, making the STRICT corpus comparison
+  possible for all-constant/no-op-cast files -- 2254 files upgraded
+  from fixpoint-verified to exactly verified (corpus: 30281 = 83.0%).
+  Render round-trip self-test per golden entry (+25 checks, 203
+  total; new wide-floats entry pins the fp hex forms). Renderer
+  subtleties earned the hard way: fp constants must use per-type hex
+  forms (0xK fp80 sign|exp15|explicit-bit+frac63; 0xL fp128 printed
+  LOW 64-bit word first; 0xM ppc_fp128 = two doubles), unquoted names
+  are ASCII-only and must not start with a digit (all-digit numeric
+  IDs must stay UNQUOTED), scalable shuffle masks are splat constants
+  (zeroinitializer/poison), musttail forwards `...` iff caller AND
+  callee are varargs, declare params are bare types (can be pairs!).
+  Not a production path: permanent bench in the corpus harness,
+  aggregated over every PASS file: build 4.0s vs render+parse 14.8s
+  (3.90x over 28023 modules); LLVM's parser is fast, but text can't
+  beat direct calls. One render-unrepresentable PASS file (wasm
+  funcref: callee in addrspace(20) needs the stripped datalayout).
+
 ### Next (coverage burn-down, by corpus statistics)
 - BUG build-fail: invalid type (152), global has no assigned name (54),
   untyped forward refs (2), indirectbr shape (1) -- diagnose next.

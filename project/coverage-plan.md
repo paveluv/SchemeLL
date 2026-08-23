@@ -28,19 +28,26 @@ constants as operands, any-width integers, poison mask lanes,
 address-spaced globals, function linkage, anonymous %N names, trunc
 nsw/nuw, uitofp nneg, atomicrmw/cmpxchg alignment). The MISMATCH
 bucket is diagnosed and defeated: 2762 -> 25 files (0.07%), probe tool
-in tests/probe-mismatch.ss. FIXPOINT TIER (2026-08-22): files the
+in tests/probe-mismatch.ss. RENDER TIER (2026-08-22): files the
 C-API builder's constant folding excludes from the strict comparison
-get a second chance -- rebuild with (ll:unbuild m
-'tolerate-builder-folds), then re-round-trip our own print and demand
-stability (text2 == text3). Lossy-but-stable transforms would pass
-this tier, which is why it exists ONLY where the strict tier cannot
-apply, and reports separately: 28024 strict PASS + 1826 PASS (modulo
-builder folding) = 29850 verified (81.8% of all, 83.6% of parseable).
-Largest remaining buckets: metadata-typed operands (~1.7k), constant
-expressions (~1.2k), unstable/other folding files (~730), fn alignment
-(~333), operand bundles (~321), aliases (~262), invalid-type
-build-fails (~151). A textual ll->IR backend (build via LLVM's parser,
-which never folds) is the roadmapped exact fix for the folding class. "100% coverage" is meaningless without a
+get a STRICT second chance through (llscheme ll render) -- ll->text in
+pure Scheme, constructed via LLVMParseIRInContext (LLVM's parser uses
+the direct instruction constructors and never folds), so the original
+text1 == text2 comparison applies unchanged. A fixpoint check
+(re-round-trip our own builder print, demand stability) remains as
+fallback. 28024 strict PASS + 2254 PASS (via text renderer) + 3
+fixpoint = 30281 verified (83.0% of all, 84.8% of parseable). The
+renderer is self-tested against every golden entry, render+parse is
+benched against direct build on EVERY corpus PASS file (report at the
+end of each run), and tests/bench-build.ss measures single modules.
+Aggregate over 28023 files: build 4.0s vs render 4.7s + parse 10.8s
+= 3.90x -- fine for testing, wrong default for production. One PASS
+file is render-unrepresentable (WebAssembly funcref: a call through
+ptr addrspace(20) needs the stripped datalayout to parse). Largest
+remaining buckets: metadata-typed operands (~1.7k), constant
+expressions (~1.2k), folding files with other unmodeled constructs
+(~350), fn alignment (~333), operand bundles (~321), aliases (~262),
+invalid-type build-fails (~151). "100% coverage" is meaningless without a
 machine-checkable oracle and an explicit scope. This plan defines both, and
 three verification levels that turn coverage from a claim into a test that
 fails.

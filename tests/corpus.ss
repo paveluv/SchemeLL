@@ -18,7 +18,8 @@
 (import (chezscheme)
         (prefix (llvm ir) ir:)
         (prefix (llscheme ll) ll:)
-        (prefix (tests normalize) n:))
+        (prefix (tests normalize) n:)
+        (prefix (llscheme ll render) render:))
 
 (define root
   (let ([args (cdr (command-line))])
@@ -79,8 +80,23 @@
 
 ;; ---- the round trip -----------------------------------------------------------
 
-;; second chance for files the builder's constant folding excludes from
-;; the strict comparison: rebuild tolerating folds, then verify the
+;; first chance for files the builder's constant folding excludes from
+;; the strict comparison: render the ll program to text in pure Scheme
+;; and construct through LLVM's parser, which never folds -- this makes
+;; the ORIGINAL strict comparison possible again (a is the comparable
+;; parse-side text)
+(define (render-strict? m a)
+  (guard (e [#t #f])
+    (let* ([prog (ll:unbuild m 'ignore-named-metadata 'tolerate-builder-folds)]
+           [ctx2 (ir:make-context)]
+           [m2 (ir:parse-ir ctx2 "rendered" (render:ll->text prog))])
+      (n:normalize-module! m2)
+      (let ([b (n:comparable-ir (ir:module->string m2))])
+        (ir:module-dispose! m2)
+        (ir:context-dispose! ctx2)
+        (string=? a b)))))
+
+;; second chance: rebuild tolerating folds, then verify the
 ;; result is a FIXPOINT -- parse our own print, round-trip again, and
 ;; demand stability. Catches divergence; lossy-but-stable transforms are
 ;; exactly what the strict tier exists for, so this tier is only entered
@@ -107,6 +123,35 @@
             (ir:context-dispose! rctx3)
             (string=? b b2)))))))
 
+;; permanent construction benchmark, aggregated over every PASS file:
+;; direct C-API build vs pure-Scheme render + LLVM parse (one shot each;
+;; the corpus size smooths the noise)
+(define bench-n 0)
+(define build-ns 0)
+(define render-ns 0)
+(define parse-ns 0)
+
+(define (now-ns)
+  (let ([t (current-time 'time-monotonic)])
+    (+ (* (time-second t) 1000000000) (time-nanosecond t))))
+
+(define bench-failed '())   ; PASS files whose render or re-parse failed
+
+(define (bench-render+parse! path prog build-dt)
+  (guard (e [#t (set! bench-failed (cons path bench-failed))])
+    (let* ([t0 (now-ns)]
+           [text (render:ll->text prog)]
+           [t1 (now-ns)]
+           [ctx (ir:make-context)]
+           [m (ir:parse-ir ctx "bench" text)]
+           [t2 (now-ns)])
+      (ir:module-dispose! m)
+      (ir:context-dispose! ctx)
+      (set! bench-n (+ bench-n 1))
+      (set! build-ns (+ build-ns build-dt))
+      (set! render-ns (+ render-ns (- t1 t0)))
+      (set! parse-ns (+ parse-ns (- t2 t1))))))
+
 (define (folding-bucket? b)
   (or (after-marker b "all-constant operands")
       (after-marker b "no-op casts")))
@@ -123,6 +168,15 @@
        (let ([ctx (ir:make-context)] [rctx (ir:make-context)] [m #f] [m2 #f])
          (guard (e [#t (let ([b (classify e)])
                          (cond
+                           ;; m is already normalized when unbuild's
+                           ;; folding detection fires, so the strict A
+                           ;; text is recomputable here
+                           [(and (folding-bucket? b) m
+                                 (render-strict?
+                                   m (guard (e2 [#t #f])
+                                       (n:comparable-ir
+                                         (ir:module->string m)))))
+                            (bucket! "PASS (via text renderer)")]
                            [(and (folding-bucket? b) m
                                  (fold-fixpoint? m rctx))
                             (bucket! "PASS (modulo builder folding)")]
@@ -134,14 +188,19 @@
            (set! m (ir:parse-ir ctx path text))
            (n:normalize-module! m)
            (let ([a (n:comparable-ir (ir:module->string m))])
-             (let ([prog (ll:unbuild m 'ignore-named-metadata)])
-               (set! m2 (ll:build rctx "corpus" prog))
+             (let* ([prog (ll:unbuild m 'ignore-named-metadata)]
+                    [t0 (now-ns)]
+                    [build-dt (begin
+                                (set! m2 (ll:build rctx "corpus" prog))
+                                (- (now-ns) t0))])
                ;; normalize the rebuild too: LLVM auto-attaches intrinsic
                ;; attributes to declarations it recognizes
                (n:normalize-module! m2)
                (let ([b (n:comparable-ir (ir:module->string m2))])
                  (if (string=? a b)
-                     (bucket! "PASS")
+                     (begin
+                       (bucket! "PASS")
+                       (bench-render+parse! path prog build-dt))
                      (begin
                        (bucket! "MISMATCH (bug)")
                        (set! failures
@@ -193,4 +252,13 @@
                 failures))
     'replace)
   (printf "~a failure paths written to tests/tmp/corpus-failures.txt~%"
-          (length failures)))
+          (length failures))
+  (when (> bench-n 0)
+    (printf "~%construction bench over ~a PASS files (one shot each):~%"
+            bench-n)
+    (printf "  build ~,1fs   render ~,1fs   parse ~,1fs   (render+parse)/build = ~,2fx~%"
+            (/ build-ns 1e9) (/ render-ns 1e9) (/ parse-ns 1e9)
+            (/ (+ render-ns parse-ns) (max build-ns 1)))
+    (unless (null? bench-failed)
+      (printf "  RENDER-FAIL on ~a PASS files:~%" (length bench-failed))
+      (for-each (lambda (f) (printf "    ~a~%" f)) bench-failed))))

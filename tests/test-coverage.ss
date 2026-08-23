@@ -12,7 +12,8 @@
         (prefix (tests harness) t:)
         (prefix (tests oracle) o:)
         (prefix (llvm ir) ir:)
-        (prefix (llscheme ll) ll:))
+        (prefix (llscheme ll) ll:)
+        (prefix (llscheme ll render) render:))
 
 ;; ---- the oracle and the ledger ------------------------------------------
 
@@ -150,7 +151,19 @@
                 name rebuilt-text golden-text))
       (t:check (string-append "unbuild round-trip: " name)
                (string=? rebuilt-text golden-text))
-      (ir:module-dispose! rebuilt))
+      (ir:module-dispose! rebuilt)
+      ;; render self-test: the same ll data rendered to text in pure
+      ;; Scheme and re-parsed by LLVM must print identically
+      (let* ([xctx (ir:make-context)]
+             [reparsed (ir:parse-ir xctx name (render:ll->text prog))]
+             [reparsed-text (ir-body (ir:module->string reparsed))])
+        (unless (string=? reparsed-text golden-text)
+          (printf "~%--- rendered+reparsed (~a) ---~%~a--- golden ---~%~a---~%"
+                  name reparsed-text golden-text))
+        (t:check (string-append "render round-trip: " name)
+                 (string=? reparsed-text golden-text))
+        (ir:module-dispose! reparsed)
+        (ir:context-dispose! xctx)))
     (ir:module-dispose! built)
     (ir:module-dispose! parsed)
     (ir:context-dispose! bctx)
@@ -945,6 +958,29 @@ compute:
 (t:check-exn "unbuild rejects constant expressions"
              (unbuild-of-ir
                "@g = global i64 0\n@p = global i64 ptrtoint (ptr @g to i64)"))
+
+(check-entry! "wide-floats"
+  '((= @h (global half 2.0))
+    (= @bf (global bfloat 2.0))
+    (= @e (global x86_fp80 -2.5))
+    (= @q (global fp128 -0.0))
+    (= @pq (global ppc_fp128 2.0))
+    (define fp128 (@pick (i1 %c))
+      (label %entry
+        (= %r (select (i1 %c) (fp128 1.0) (fp128 0.5)))
+        (ret fp128 %r))))
+  "@h = global half 0xH4000
+@bf = global bfloat 0xR4000
+@e = global x86_fp80 0xKC000A000000000000000
+@q = global fp128 0xL00000000000000008000000000000000
+@pq = global ppc_fp128 0xM40000000000000000000000000000000
+
+define fp128 @pick(i1 %c) {
+entry:
+  %r = select i1 %c, fp128 0xL00000000000000003FFF000000000000, fp128 0xL00000000000000003FFE000000000000
+  ret fp128 %r
+}
+")
 
 (check-entry! "named-types"
   '((type %pair (struct i64 i32))
