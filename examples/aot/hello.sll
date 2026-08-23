@@ -1,0 +1,26 @@
+;; hello.sll -- a complete freestanding program as pure sll data.
+;; No libc: the string is built on the stack and written with raw
+;; Linux syscalls through inline asm, so the object needs no
+;; relocations and sllc --exe can produce the executable by itself:
+;;
+;;   scheme --libdirs . --script tools/sllc.ss --exe examples/aot/hello.sll
+;;   ./examples/aot/hello        => Hello, SchemeLL!
+
+(define void (@_start)
+  (label %entry
+    (= %buf (alloca (array 24 i8) (align 8)))
+    ;; "Hello, SchemeLL!\n" as two little-endian i64 stores + a byte
+    (store (i64 5989836361474794824) (ptr %buf) (align 8))       ; "Hello, S"
+    (= %p8 (getelementptr i8 (ptr %buf) (i64 8)))
+    (store (i64 2399376699992402019) (ptr %p8) (align 8))        ; "chemeLL!"
+    (= %p16 (getelementptr i8 (ptr %buf) (i64 16)))
+    (store (i8 10) (ptr %p16))                                   ; "\n"
+    ;; write(fd=1, buf, 17)
+    (= %w (call i64 ((asm "syscall"
+                          "={rax},{rax},{rdi},{rsi},{rdx},~{rcx},~{r11},~{memory}"
+                          sideeffect)
+                     (i64 1) (i64 1) (ptr %buf) (i64 17))))
+    ;; exit_group(0)
+    (call i64 ((asm "syscall" "={rax},{rax},{rdi},~{rcx},~{r11}" sideeffect)
+               (i64 231) (i64 0)))
+    (unreachable)))

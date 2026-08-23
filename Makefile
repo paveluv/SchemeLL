@@ -1,7 +1,7 @@
 CHEZ ?= scheme
 LIBDIRS = .
 
-.PHONY: test repl build corpus format clean
+.PHONY: test repl build corpus format clean examples
 
 test:
 	$(CHEZ) --libdirs $(LIBDIRS) --script tests/run.ss
@@ -16,6 +16,16 @@ corpus:
 	$(CHEZ) --libdirs $(LIBDIRS) --script tests/corpus.ss $(CORPUS_DIR)
 
 # Format all tracked Scheme sources in place (prints the files it changed)
+examples:
+	@for f in examples/sll/*.ss examples/llvm/*.ss examples/aot/*.ss; do \
+	  echo "== $$f"; $(CHEZ) --libdirs $(LIBDIRS) --script $$f >/dev/null || exit 1; \
+	done
+	@$(CHEZ) --libdirs $(LIBDIRS) --script tools/sllc.ss --run examples/aot/fact.sll; \
+	  test $$? -eq 120 || exit 1
+	@$(CHEZ) --libdirs $(LIBDIRS) --script tools/sllc.ss --opt O2 --exe examples/aot/hello.sll && \
+	  ./examples/aot/hello && rm -f examples/aot/hello
+	@echo "examples ok"
+
 format:
 	~/.e/tools/scheme-format -i $$(git ls-files '*.sls' '*.ss')
 

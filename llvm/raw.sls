@@ -185,7 +185,9 @@
     OrcCreateNewThreadSafeModule OrcDisposeThreadSafeModule
     OrcCreateLLJITBuilder OrcDisposeLLJITBuilder
     OrcCreateLLJIT OrcDisposeLLJIT
-    OrcLLJITGetMainJITDylib OrcLLJITAddLLVMIRModule OrcLLJITLookup)
+    OrcLLJITGetMainJITDylib OrcLLJITAddLLVMIRModule OrcLLJITLookup
+    OrcLLJITGetGlobalPrefix OrcCreateDynamicLibrarySearchGeneratorForProcess
+    OrcJITDylibAddGenerator)
   (import (chezscheme) (prefix (llvm config) config:))
 
   ;; Must run before any foreign-procedure below is evaluated.
@@ -944,6 +946,13 @@
     (foreign-procedure "LLVMOrcDisposeLLJIT" (void*) void*))
   (define OrcLLJITGetMainJITDylib
     (foreign-procedure "LLVMOrcLLJITGetMainJITDylib" (void*) void*))
+  (define OrcLLJITGetGlobalPrefix
+    (foreign-procedure "LLVMOrcLLJITGetGlobalPrefix" (void*) char))
+  (define OrcCreateDynamicLibrarySearchGeneratorForProcess
+    (foreign-procedure "LLVMOrcCreateDynamicLibrarySearchGeneratorForProcess"
+      (void* char void* void*) void*))
+  (define OrcJITDylibAddGenerator
+    (foreign-procedure "LLVMOrcJITDylibAddGenerator" (void* void*) void))
   (define OrcLLJITAddLLVMIRModule      ; consumes TSM even on error -> LLVMErrorRef
     (foreign-procedure "LLVMOrcLLJITAddLLVMIRModule" (void* void* void*) void*))
   (define OrcLLJITLookup               ; (jit, uint64* out-addr, name) -> LLVMErrorRef

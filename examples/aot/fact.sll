@@ -1,0 +1,20 @@
+;; fact.sll -- a @main so it also runs directly under the JIT:
+;;   sllc --run examples/aot/fact.sll ; echo $?     => 120
+;;   sllc examples/aot/fact.sll                     -> fact.o
+
+(define i64 (@fact (i64 %n))
+  (label %entry
+    (= %base (icmp slt i64 %n 2))
+    (br i1 %base (label %one) (label %rec)))
+  (label %one (ret i64 1))
+  (label %rec
+    (= %n1 (sub i64 %n 1))
+    (= %f (call i64 (@fact (i64 %n1))))
+    (= %r (mul i64 %n %f))
+    (ret i64 %r)))
+
+(define i32 (@main)
+  (label %entry
+    (= %f (call i64 (@fact (i64 5))))
+    (= %r (trunc i64 %f i32))
+    (ret i32 %r)))

@@ -94,6 +94,16 @@
                           (LLVMOrcLLJITGetMainJITDylib ptr)
                           (make-hashtable string-hash string=?)
                           'owned)])
+        ;; resolve process symbols (libc, the Scheme runtime, ...) so
+        ;; JIT'd code may call declared externals
+        (let-values ([(err gen)
+                      (base:call-with-out-ptr
+                        (lambda (out)
+                          (LLVMOrcCreateDynamicLibrarySearchGeneratorForProcess
+                            out (LLVMOrcLLJITGetGlobalPrefix ptr)
+                            base:null-ptr base:null-ptr)))])
+          (base:check-error-ref 'jit:make err)
+          (LLVMOrcJITDylibAddGenerator (jit-dylib j) gen))
         (jit-guardian j)
         j)))
 

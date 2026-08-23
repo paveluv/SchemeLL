@@ -1,8 +1,6 @@
 ;;; @fact, live: an sll program (plain data!) compiled in memory and called.
-;;; Run with: scheme --libdirs . --script examples/fact.ss
-(import (chezscheme)
-        (prefix (sll) sll:)
-        (prefix (llvm jit) jit:))
+;;; Run with: scheme --libdirs . --script examples/sll/02-fact.ss
+(import (chezscheme) (prefix (sll) sll:))
 
 (define fact-prog
   '((define i64 (@fact (i64 %n))
@@ -20,7 +18,7 @@
 (printf "=== the sll program, transliterated to LLVM IR ===~%~a~%"
         (sll:dump fact-prog))
 
-(define fact (jit:function (sll:jit fact-prog) "fact"))
+(define fact (sll:procedure fact-prog "fact"))
 
 (printf "=== calling the JIT'd code ===~%")
 (do ([i 0 (+ i 1)])

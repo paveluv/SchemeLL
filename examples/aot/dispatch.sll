@@ -1,0 +1,31 @@
+;; dispatch.sll -- a threaded-interpreter dispatch core: a constant
+;; table of blockaddresses driven by indirectbr. The shape a bytecode
+;; VM (or a GC's state machine) compiles to.
+;;   sllc --run examples/aot/dispatch.sll ; echo $?    => 42
+
+(= @ops (constant (array 3 ptr)
+                  ((ptr (blockaddress @run %op_add))
+                   (ptr (blockaddress @run %op_double))
+                   (ptr (blockaddress @run %op_halt)))))
+
+(define i64 (@run (i64 %opcode) (i64 %acc))
+  (label %entry
+    (= %slot (getelementptr (array 3 ptr) (ptr @ops) (i64 0) (i64 %opcode)))
+    (= %target (load ptr (ptr %slot)))
+    (indirectbr (ptr %target)
+                (label %op_add) (label %op_double) (label %op_halt)))
+  (label %op_add
+    (= %a (add i64 %acc 2))
+    (ret i64 %a))
+  (label %op_double
+    (= %d (mul i64 %acc 2))
+    (ret i64 %d))
+  (label %op_halt
+    (ret i64 %acc)))
+
+(define i32 (@main)
+  (label %entry
+    (= %x (call i64 (@run (i64 0) (i64 19))))   ; 19+2 = 21
+    (= %y (call i64 (@run (i64 1) (i64 %x))))   ; *2   = 42
+    (= %r (trunc i64 %y i32))
+    (ret i32 %r)))

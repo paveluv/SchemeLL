@@ -1,0 +1,15 @@
+;; add.sll -- a tiny library: compile to a relocatable object and link
+;; it into any C program.
+;;   sllc examples/aot/add.sll        -> examples/aot/add.o
+;;   (from C:  long sll_add(long, long);  long sll_clamp(long);)
+
+(define i64 (@sll_add (i64 %a) (i64 %b))
+  (label %entry
+    (= %s (add nsw i64 %a %b))
+    (ret i64 %s)))
+
+(define i64 (@sll_clamp (i64 %x))
+  (label %entry
+    (= %neg (icmp slt i64 %x 0))
+    (= %r (select (i1 %neg) (i64 0) (i64 %x)))
+    (ret i64 %r)))

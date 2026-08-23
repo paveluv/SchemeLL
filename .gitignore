@@ -8,3 +8,6 @@ reference/
 # Test/example build artifacts
 *.o
 tests/tmp/
+examples/aot/*.o
+examples/aot/*.s
+examples/aot/hello

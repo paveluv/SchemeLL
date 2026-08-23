@@ -19,7 +19,7 @@
 ;;; permitted forward reference to a *value*; everything else must be
 ;;; defined textually before use.
 (library (sll)
-  (export build jit dump unbuild)
+  (export build jit dump unbuild procedure)
   (import (except (chezscheme) error)
           (prefix (llvm base) base:)
           (prefix (llvm ir) ir:)
@@ -1529,6 +1529,12 @@
       (jit:add-module! j jc m)
       (jit:context-dispose! jc)
       j))
+
+  ;; The one-stop shop: compile a program in memory and hand back one of
+  ;; its functions as an ordinary Scheme procedure. The procedure keeps
+  ;; the underlying JIT alive.
+  (define (procedure prog name)
+    (jit:function (jit prog) name))
 
   ;; Build a program and return its textual LLVM IR (for humans).
   (define (dump prog)

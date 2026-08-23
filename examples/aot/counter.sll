@@ -1,0 +1,16 @@
+;; counter.sll -- module state: a global with accessors, plus target
+;; items spelled directly in sll. Compile: sllc examples/aot/counter.sll
+
+(triple "x86_64-unknown-linux-gnu")
+
+(= @count (global i64 0))
+
+(define i64 (@counter_next)
+  (label %entry
+    (= %old (atomicrmw add (ptr @count) (i64 1) monotonic))
+    (ret i64 %old)))
+
+(define void (@counter_reset)
+  (label %entry
+    (store atomic (i64 0) (ptr @count) seq_cst (align 8))
+    (ret void)))

@@ -1,0 +1,81 @@
+# SchemeLL examples
+
+Run any example with `scheme --libdirs . --script <file>` from the
+repository root (or `make examples` to smoke-run everything).
+
+## examples/sll -- sll scripting (JIT)
+
+Programs are plain data; `sll:procedure` compiles one in memory and
+hands back a Scheme procedure. One import, no ceremony.
+
+| example | shows |
+|---|---|
+| 01-add | the smallest program |
+| 02-fact | recursion; `sll:dump` for the generated IR |
+| 03-fib | several functions calling each other |
+| 04-switch | `switch` with a default |
+| 05-loop-phi | SSA loops: `phi` incoming pairs |
+| 06-memory | `alloca` / `store` / `load`, alignment, `getelementptr` |
+| 07-structs | named struct types; `insertvalue`/`extractvalue` |
+| 08-strings | global byte strings; calling `puts` |
+| 09-floats | fast-math flags, `fcmp`, `select` |
+| 10-vectors | SIMD lanes, `shufflevector` masks |
+| 11-casts | trunc/zext (+`nneg`), `ptrtoint`/`inttoptr` |
+| 12-globals | mutable module state |
+| 13-constexpr | constant expressions in initializers |
+| 14-libc | declared externals resolve against the process |
+| 15-quasiquote | metaprogramming: quasiquote generates programs |
+| 16-bitops | shifts, masks, a popcount loop |
+| 17-i128 | wide integers inside, i64 at the FFI edge |
+| 18-atomics | `atomicrmw`, `cmpxchg`, `fence`, orderings |
+| 19-aggregates | arrays of structs as constant data |
+| 20-unbuild | module -> sll data -> textual IR (pure Scheme) |
+
+## examples/llvm -- the binding layers
+
+| example | shows |
+|---|---|
+| 01-jit-add | (llvm ir) + (llvm jit) end to end |
+| 02-builder-tour | manual blocks, phis, and wiring |
+| 03-parse-and-walk | parsing textual IR and walking the object model |
+| 04-verify-errors | the verifier raising Scheme conditions |
+| 05-optimize | the new pass manager (`default<O2>`) |
+| 06-emit-object | object code straight into a bytevector |
+| 07-emit-asm | native assembly text |
+| 08-raw-ffi | the (llvm raw) layer: the C API verbatim |
+| 09-ownership | use-after-dispose raises instead of crashing |
+| 10-target-info | host triple / CPU / features |
+
+## examples/aot -- ahead-of-time objects and executables
+
+Scripts (`0*.ss`) build sll programs and emit `.o` / `.s` through the
+LLVM API. The `.sll` files are whole programs as pure data, compiled by
+the `sllc` tool:
+
+    scheme --libdirs . --script tools/sllc.ss            prog.sll  # -> .o
+    scheme --libdirs . --script tools/sllc.ss --asm      prog.sll  # -> .s
+    scheme --libdirs . --script tools/sllc.ss --run      prog.sll  # JIT @main
+    scheme --libdirs . --script tools/sllc.ss --exe      prog.sll  # executable
+
+`--exe` writes a static ELF executable itself -- no compiler,
+assembler, or linker involved anywhere. It handles self-contained
+programs (an `@_start`, no external symbols or data relocations); the
+flagship is `hello.sll`, a 186-byte binary that talks to the kernel
+directly:
+
+    $ scheme --libdirs . --script tools/sllc.ss --opt O2 --exe examples/aot/hello.sll
+    $ ./examples/aot/hello
+    Hello, SchemeLL!
+
+| file | shows |
+|---|---|
+| 01-emit-object.ss | sll -> .o in a script |
+| 02-optimized.ss | O2 pipeline before emission |
+| 03-assembly.ss | .s text output |
+| 04-data-and-target.ss | data sections; triple/datalayout as sll items |
+| 05-main-for-cc.ss | a main.o calling printf (link with cc) |
+| hello.sll | freestanding syscall hello world (`--exe`) |
+| add.sll | a C-linkable library |
+| fact.sll | `--run`: JIT @main, exit code 120 |
+| counter.sll | atomic global state |
+| dispatch.sll | blockaddress + indirectbr threaded dispatch |

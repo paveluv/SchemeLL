@@ -16,6 +16,10 @@ What works today:
 - **`(sll)`** — LLVM IR as s-expressions: textual IR transliterated
   into plain Scheme data (see `project/sll-design.md`), interpreted into real
   IR. Since programs are lists, quasiquote is the metaprogramming layer.
+  `sll:procedure` compiles a program in memory and returns a Scheme
+  procedure; `tools/sllc.ss` compiles `.sll` files to objects — or, for
+  self-contained programs, straight to a static executable with no
+  external toolchain at all. Start at `examples/README.md`.
 
 ```scheme
 (import (prefix (sll) sll:) (prefix (llvm jit) jit:))

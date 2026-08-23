@@ -1,0 +1,210 @@
+;;; sllc -- compile a .sll file (an sll program as plain data) using the
+;;; LLVM C API directly: no external compiler, assembler, or linker.
+;;;
+;;;   scheme --libdirs . --script tools/sllc.ss prog.sll            -> prog.o
+;;;   scheme --libdirs . --script tools/sllc.ss --asm prog.sll     -> prog.s
+;;;   scheme --libdirs . --script tools/sllc.ss --print prog.sll   (show IR)
+;;;   scheme --libdirs . --script tools/sllc.ss --opt O2 prog.sll  (optimize)
+;;;   scheme --libdirs . --script tools/sllc.ss --run prog.sll     (JIT @main,
+;;;                                              exit with its return value)
+;;;   scheme --libdirs . --script tools/sllc.ss --exe prog.sll     -> prog
+;;;     A static executable, written by sllc itself (a minimal ELF64
+;;;     emitter): works for self-contained programs -- an @_start, no
+;;;     external symbols, no data relocations (hello-world class).
+;;;   -o PATH   set the output path
+(import (chezscheme)
+        (prefix (sll) sll:)
+        (prefix (llvm ir) ir:)
+        (prefix (llvm jit) jit:)
+        (prefix (llvm target) target:))
+
+;; ---- arguments -------------------------------------------------------------
+
+(define args (cdr (command-line)))
+(define mode 'object)
+(define opt-level #f)
+(define out-path #f)
+(define in-path #f)
+
+(let loop ([a args])
+  (unless (null? a)
+    (cond
+      [(string=? (car a) "--asm") (set! mode 'asm) (loop (cdr a))]
+      [(string=? (car a) "--run") (set! mode 'run) (loop (cdr a))]
+      [(string=? (car a) "--exe") (set! mode 'exe) (loop (cdr a))]
+      [(string=? (car a) "--print") (set! mode 'print) (loop (cdr a))]
+      [(string=? (car a) "--opt")
+       (set! opt-level (cadr a)) (loop (cddr a))]
+      [(string=? (car a) "-o")
+       (set! out-path (cadr a)) (loop (cddr a))]
+      [else (set! in-path (car a)) (loop (cdr a))])))
+
+(unless in-path
+  (printf "usage: sllc [--asm|--run|--exe|--print] [--opt O2] [-o PATH] prog.sll~%")
+  (exit 2))
+
+(define (default-out ext)
+  (or out-path
+      (let* ([n (string-length in-path)]
+             [base (if (and (> n 4)
+                            (string=? (substring in-path (- n 4) n) ".sll"))
+                       (substring in-path 0 (- n 4))
+                       in-path)])
+        (string-append base ext))))
+
+;; ---- read and build ---------------------------------------------------------
+
+(define prog
+  (call-with-input-file in-path
+    (lambda (p)
+      (let loop ([items '()])
+        (let ([d (read p)])
+          (if (eof-object? d)
+              (reverse items)
+              (loop (cons d items))))))))
+
+(define ctx (ir:make-context))
+(define m (sll:build ctx (path-last in-path) prog))
+(ir:verify-module m)
+
+(target:initialize-native!)
+(define tm (target:make-machine))
+(target:configure-module! m tm)
+(when opt-level
+  (ir:run-module-passes! m (string-append "default<" opt-level ">")))
+
+;; ---- the minimal ELF64 executable emitter ----------------------------------
+;; Takes the relocatable object LLVM produced, extracts .text, finds
+;; @_start, and lays out a one-segment static executable. Refuses
+;; programs that need what a real linker provides (relocations,
+;; external symbols, data sections).
+
+(define (bv-u16 bv i) (bytevector-u16-ref bv i (endianness little)))
+(define (bv-u32 bv i) (bytevector-u32-ref bv i (endianness little)))
+(define (bv-u64 bv i) (bytevector-u64-ref bv i (endianness little)))
+
+(define (cstr bv off)
+  (let loop ([i off] [acc '()])
+    (let ([b (bytevector-u8-ref bv i)])
+      (if (zero? b)
+          (list->string (reverse acc))
+          (loop (+ i 1) (cons (integer->char b) acc))))))
+
+(define (sections obj)
+  (let* ([shoff (bv-u64 obj #x28)]
+         [shentsize (bv-u16 obj #x3A)]
+         [shnum (bv-u16 obj #x3C)]
+         [shstrndx (bv-u16 obj #x3E)]
+         [sh (lambda (i field) (+ shoff (* i shentsize) field))]
+         [strtab-off (bv-u64 obj (sh shstrndx #x18))])
+    (let loop ([i 0] [acc '()])
+      (if (= i shnum)
+          (reverse acc)
+          (loop (+ i 1)
+                (cons (list (cstr obj (+ strtab-off (bv-u32 obj (sh i 0))))
+                            (bv-u32 obj (sh i 4))        ; type
+                            (bv-u64 obj (sh i #x18))     ; offset
+                            (bv-u64 obj (sh i #x20))     ; size
+                            (bv-u32 obj (sh i #x28)))    ; link
+                      acc))))))
+
+(define (section-named secs name)
+  (find (lambda (s) (string=? (car s) name)) secs))
+
+(define (emit-executable obj path)
+  (let* ([secs (sections obj)]
+         [text (or (section-named secs ".text")
+                   (error 'sllc "no .text section in the object"))])
+    (when (section-named secs ".rela.text")
+      (error 'sllc
+        "--exe handles only self-contained code (no relocations); use --run, or link the .o with a system linker"))
+    (for-each
+      (lambda (s)
+        (when (and (= (cadr s) 1)           ; SHT_PROGBITS
+                   (> (cadddr s) 0)
+                   (member (car s) '(".data" ".rodata" ".bss")))
+          (error 'sllc "--exe handles only code; found data section" (car s))))
+      secs)
+    ;; find _start's offset inside .text via the symbol table
+    (let* ([symtab (or (find (lambda (s) (= (cadr s) 2)) secs)   ; SHT_SYMTAB
+                       (error 'sllc "no symbol table in the object"))]
+           [strtab (list-ref secs (list-ref symtab 4))]
+           [text-index (let loop ([ss secs] [i 0])
+                         (if (eq? (car ss) text) i (loop (cdr ss) (+ i 1))))]
+           [start-off
+            (let loop ([off (caddr symtab)])
+              (if (>= off (+ (caddr symtab) (cadddr symtab)))
+                  (error 'sllc "--exe requires a @_start function")
+                  (let ([nm (cstr obj (+ (caddr strtab)
+                                         (bv-u32 obj off)))]
+                        [shndx (bv-u16 obj (+ off 6))])
+                    (if (and (string=? nm "_start") (= shndx text-index))
+                        (bv-u64 obj (+ off 8))
+                        (loop (+ off 24))))))]
+           [text-bytes (let ([b (make-bytevector (cadddr text))])
+                         (bytevector-copy! obj (caddr text) b 0
+                                           (cadddr text))
+                         b)]
+           [base #x400000]
+           [hdr-size #x78]                  ; ehdr (64) + one phdr (56)
+           [entry (+ base hdr-size start-off)]
+           [total (+ hdr-size (bytevector-length text-bytes))]
+           [exe (make-bytevector total 0)])
+      ;; ELF header
+      (bytevector-copy! (bytevector #x7F 69 76 70) 0 exe 0 4) ; \x7F E L F
+      (bytevector-u8-set! exe 1 (char->integer #\E))
+      (bytevector-u8-set! exe 2 (char->integer #\L))
+      (bytevector-u8-set! exe 3 (char->integer #\F))
+      (bytevector-u8-set! exe 4 2)   ; 64-bit
+      (bytevector-u8-set! exe 5 1)   ; little-endian
+      (bytevector-u8-set! exe 6 1)   ; version
+      (bytevector-u16-set! exe #x10 2 (endianness little))       ; ET_EXEC
+      (bytevector-u16-set! exe #x12 62 (endianness little))      ; EM_X86_64
+      (bytevector-u32-set! exe #x14 1 (endianness little))
+      (bytevector-u64-set! exe #x18 entry (endianness little))
+      (bytevector-u64-set! exe #x20 #x40 (endianness little))    ; phoff
+      (bytevector-u16-set! exe #x34 64 (endianness little))      ; ehsize
+      (bytevector-u16-set! exe #x36 56 (endianness little))      ; phentsize
+      (bytevector-u16-set! exe #x38 1 (endianness little))       ; phnum
+      ;; program header: one RX PT_LOAD covering the whole file
+      (bytevector-u32-set! exe #x40 1 (endianness little))       ; PT_LOAD
+      (bytevector-u32-set! exe #x44 5 (endianness little))       ; R+X
+      (bytevector-u64-set! exe #x48 0 (endianness little))       ; offset
+      (bytevector-u64-set! exe #x50 base (endianness little))    ; vaddr
+      (bytevector-u64-set! exe #x58 base (endianness little))    ; paddr
+      (bytevector-u64-set! exe #x60 total (endianness little))   ; filesz
+      (bytevector-u64-set! exe #x68 total (endianness little))   ; memsz
+      (bytevector-u64-set! exe #x70 #x1000 (endianness little))  ; align
+      (bytevector-copy! text-bytes 0 exe hdr-size
+                        (bytevector-length text-bytes))
+      (when (file-exists? path) (delete-file path))
+      (call-with-port (open-file-output-port path)
+        (lambda (p) (put-bytevector p exe)))
+      (chmod path #o755)
+      (printf "wrote executable ~a (~a bytes, entry #x~x)~%"
+              path total entry))))
+
+;; ---- modes -------------------------------------------------------------------
+
+(case mode
+  [(print)
+   (display (ir:module->string m))]
+  [(object)
+   (let ([path (default-out ".o")])
+     (target:emit-object-file tm m path)
+     (printf "wrote ~a~%" path))]
+  [(asm)
+   (let ([path (default-out ".s")])
+     (target:emit-assembly-file tm m path)
+     (printf "wrote ~a~%" path))]
+  [(run)
+   (let* ([jc (jit:make-context)]
+          [m2 (sll:build (jit:context-ir jc) "main" prog)]
+          [j (jit:make)])
+     (jit:add-module! j jc m2)
+     (jit:context-dispose! jc)
+     (let ([main (jit:function j "main")])
+       (exit (main))))]
+  [(exe)
+   (emit-executable (target:emit-object-bytevector tm m)
+                    (default-out ""))])
