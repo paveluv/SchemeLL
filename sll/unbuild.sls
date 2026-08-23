@@ -130,10 +130,17 @@
            `(,(if (nz? (LLVMIsPackedStruct ty)) 'packed-struct 'struct)
              ,@(struct-fields ty))
            ;; identified struct: reference by name, register a (type ...)
-           ;; item to be emitted at the top of the program
-           (let ([nm (base:cstring->string (LLVMGetStructName ty))])
-             (when (or (not nm) (string=? nm ""))
-               (not-modeled "unnamed identified struct types"))
+           ;; item to be emitted at the top of the program. Unnamed ones
+           ;; get first-encounter numbers -- the same order the printer
+           ;; assigns %N type slots, since our walk mirrors print order
+           (let ([nm (let ([given (base:cstring->string
+                                    (LLVMGetStructName ty))])
+                       (if (and given (not (string=? given "")))
+                           given
+                           (or (hashtable-ref (struct-registry) ty #f)
+                               (let ([n (anon-type-counter)])
+                                 (anon-type-counter (+ n 1))
+                                 (number->string n)))))])
              (hashtable-set! (struct-registry) ty nm)
              (sigil-symbol "%" nm)))]
       [(function)
@@ -156,6 +163,9 @@
 
   ;; identified structs encountered during a walk: ty -> name
   (define struct-registry (make-parameter #f))
+  ;; next %N slot for unnamed identified structs (a mutable parameter)
+  (define anon-type-counter
+    (make-parameter 0 (lambda (v) v)))
 
   ;; 'tolerate-builder-folds: emit instructions the C-API builder will
   ;; fold instead of raising -- the rebuild is then only comparable
@@ -311,7 +321,7 @@
          (aggregate-form st c ty)]
         [(isa? (LLVMIsAConstantExpr c))
          (constexpr-form st c)]
-        [else (not-modeled "constant kind")])))
+        [else (not-modeled "constant kind" (ir:value->string c))])))
 
   ;; the constexpr kinds LLVM 19 still has (zext/sext/icmp/select/and/
   ;; shl are gone upstream); spelled exactly like the instruction forms
@@ -382,12 +392,15 @@
                 `(c ,s)))))
 
   (define (blockaddress-form st c)
-    (let ([f (LLVMGetBlockAddressFunction c)]
-          [bb (LLVMGetBlockAddressBasicBlock c)])
-      (unless (eqv? f (ustate-fnptr st))
-        (not-modeled "blockaddress outside the enclosing function"))
+    (let* ([f (LLVMGetBlockAddressFunction c)]
+           [bb (LLVMGetBlockAddressBasicBlock c)]
+           ;; another function's labels come from a fresh naming walk
+           ;; (same numbering the printer gives that function)
+           [names (if (eqv? f (ustate-fnptr st))
+                      (ustate-names st)
+                      (function-names f))])
       `(blockaddress ,(global-sym st f)
-                     ,(hashtable-ref (ustate-names st) bb #f))))
+                     ,(hashtable-ref names bb #f))))
 
   ;; ---- operands ----------------------------------------------------------------------
 
@@ -774,12 +787,23 @@
                                                       'poison m)
                                                   (loop (fx+ i 1))))))))]
            [(extractvalue insertvalue)
-            (when (> (LLVMGetNumIndices ins) 1)
+            ;; multi-index forms have no C-API builder; under the
+            ;; tolerance flag they are emitted for the render tier
+            (when (and (> (LLVMGetNumIndices ins) 1)
+                       (not (tolerate-folds)))
               (not-modeled "multi-index extractvalue/insertvalue"))
-            (let ([idx (foreign-ref 'unsigned-32 (LLVMGetIndices ins) 0)])
+            (let* ([n (LLVMGetNumIndices ins)]
+                   [arr (LLVMGetIndices ins)]
+                   [idxs (let loop ([i 0])
+                           (if (fx= i n)
+                               '()
+                               (cons (foreign-ref 'unsigned-32 arr
+                                                  (fx* 4 i))
+                                     (loop (fx+ i 1)))))])
               (if (eq? op 'extractvalue)
-                  `(extractvalue ,(group st (op0)) ,idx)
-                  `(insertvalue ,(group st (op0)) ,(group st (op1)) ,idx)))]
+                  `(extractvalue ,(group st (op0)) ,@idxs)
+                  `(insertvalue ,(group st (op0)) ,(group st (op1))
+                                ,@idxs)))]
            [(fence)
             `(fence ,@(if (nz? (LLVMIsAtomicSingleThread ins))
                           '(singlethread) '())
@@ -1064,6 +1088,7 @@
   ;; strict so the tool never silently loses it).
   (define (unbuild m . opts)
     (parameterize ([struct-registry (make-eqv-hashtable)]
+                   [anon-type-counter 0]
                    [md-node-forms (make-hashtable equal-hash equal?)]
                    [tolerate-folds (memq 'tolerate-builder-folds opts)])
       (check-module-decorations m (memq 'ignore-named-metadata opts))

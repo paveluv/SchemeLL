@@ -95,7 +95,7 @@
          [else
           (if (local-name? t)
               ;; %name: a named struct type from a (type %name ...) item
-              (or (ir:named-type ctx (strip-sigil t))
+              (or (lookup-type ctx (strip-sigil t))
                   (error "unknown named type" t))
               (let ([bits (int-bits t)])
                 (unless bits (error "unknown type" t))
@@ -223,12 +223,18 @@
        (unless (and (= (length form) 3) (global-name? (cadr form))
                     (local-name? (caddr form)))
          (error "expected (blockaddress @function %label)" form))
-       (unless (eq? (cadr form) (fstate-fname st))
-         (error "blockaddress currently supports only the enclosing function"
-                form (fstate-fname st)))
-       (ir:block-address
-         (hashtable-ref (fstate-globals st) (cadr form) #f)
-         (block-by-name st (caddr form)))]
+       (let* ([fname (cadr form)]
+              [fn (or (hashtable-ref (fstate-globals st) fname #f)
+                      (error "unbound function in blockaddress" form))]
+              [tbl (if (eq? fname (fstate-fname st))
+                       (fstate-blocks st)
+                       (or (and (function-blocks)
+                                (hashtable-ref (function-blocks) fname #f))
+                           (error "blockaddress target is not a define"
+                                  form)))]
+              [bb (or (hashtable-ref tbl (caddr form) #f)
+                      (error "unknown label in blockaddress" form))])
+         (ir:block-address fn bb))]
       [(memq form '(null zeroinitializer none))
        (unless ty (error "null/zeroinitializer/none needs a type annotation"
                          form))
@@ -324,11 +330,32 @@
     (unless (terminator-form? (car (last-pair g)))
       (error "block does not end in a terminator" (cadr g) fname)))
 
-  (define (add-block! st f name)
-    (when (hashtable-ref (fstate-blocks st) name #f)
-      (error "duplicate label" name (fstate-fname st)))
-    (hashtable-set! (fstate-blocks st) name
-                    (ir:append-block (fstate-ctx st) f (llvm-name name))))
+  ;; fname -> (label -> block) for every define, filled BEFORE any body
+  ;; or initializer is emitted, so blockaddress may cross functions
+  (define function-blocks (make-parameter #f))
+
+  (define (prepare-blocks! ctx globals item)
+    (when (eq? (item-kind item) 'define)
+      (let-values ([(retty-form fname params lk full-body)
+                    (item-signature item)])
+        (let* ([f (hashtable-ref globals fname #f)]
+               [body (let skip ([b full-body])
+                       (if (and (pair? b) (pair? (car b))
+                                (memq (caar b)
+                                      '(align gc personality)))
+                           (skip (cdr b))
+                           b))]
+               [tbl (make-eq-hashtable)])
+          (for-each (lambda (g) (check-block-group g fname)) body)
+          (for-each
+            (lambda (g)
+              (let ([name (cadr g)])
+                (when (hashtable-ref tbl name #f)
+                  (error "duplicate label" name fname))
+                (hashtable-set! tbl name
+                                (ir:append-block ctx f (llvm-name name)))))
+            body)
+          (hashtable-set! (function-blocks) fname tbl)))))
 
   ;; ---- the opcode tables ----------------------------------------------------------------
 
@@ -1017,6 +1044,16 @@
        (unless (and (= (length form) 2) (string? (cadr form)))
          (error "expected (c \"bytes\") or (cz \"bytes\")" form))
        (ir:const-string ctx (cadr form) (eq? (car form) 'cz))]
+      [(and (pair? form) (eq? (car form) 'blockaddress))
+       ;; in initializers: blocks of every define exist before emission
+       (let* ([fn (or (hashtable-ref globals (cadr form) #f)
+                      (error "unbound function in blockaddress" form))]
+              [tbl (or (and (function-blocks)
+                            (hashtable-ref (function-blocks) (cadr form) #f))
+                       (error "blockaddress target is not a define" form))]
+              [bb (or (hashtable-ref tbl (caddr form) #f)
+                      (error "unknown label in blockaddress" form))])
+         (ir:block-address fn bb))]
       [(and (pair? form)
             (memq (car form) '(trunc ptrtoint inttoptr bitcast
                                 addrspacecast)))
@@ -1067,10 +1104,12 @@
          (case (ir:type-kind ty)
            [(array) (ir:const-array (resolve-type ctx (caar form)) elts)]
            [(vector) (ir:const-vector elts)]
-           [(struct) (if (ir:struct-name ty)
-                         (ir:const-named-struct ty elts)
+           ;; identified (named OR anonymous) vs literal struct types --
+           ;; the name alone misses anonymous identified structs
+           [(struct) (if (ir:literal-struct-type? ty)
                          (ir:const-struct ctx elts
-                                          (ir:packed-struct-type? ty)))]
+                                          (ir:packed-struct-type? ty))
+                         (ir:const-named-struct ty elts))]
            [else (error "aggregate initializer for a non-aggregate type"
                         form)]))]
       [else (error "invalid constant initializer" form)]))
@@ -1128,20 +1167,32 @@
                           (memq (car (caddr item)) '(struct packed-struct)))))
       (error "expected (type %name (struct ...)|opaque)" item)))
 
+  ;; all-digit type names are anonymous (like values): the struct is
+  ;; created UNNAMED so the printer numbers it; the binding lives here
+  (define anon-types (make-parameter #f))
+
+  (define (lookup-type ctx nm)
+    (if (anonymous-name? nm)
+        (and (anon-types) (hashtable-ref (anon-types) nm #f))
+        (ir:named-type ctx nm)))
+
   (define (create-type-item! ctx item)
     (when (eq? (car item) 'type)
       (check-type-item item)
       (let ([nm (strip-sigil (cadr item))])
-        (when (ir:named-type ctx nm)
+        (when (lookup-type ctx nm)
           (error "duplicate named type" (cadr item)))
-        (ir:create-named-struct ctx nm))))
+        (if (anonymous-name? nm)
+            (hashtable-set! (anon-types) nm
+                            (ir:create-named-struct ctx ""))
+            (ir:create-named-struct ctx nm)))))
 
   (define (fill-type-item! ctx item)
     (when (eq? (car item) 'type)
       (let ([body (caddr item)])
         (unless (eq? body 'opaque)
           (ir:struct-set-body!
-            (ir:named-type ctx (strip-sigil (cadr item)))
+            (lookup-type ctx (strip-sigil (cadr item)))
             (map (lambda (e) (resolve-type ctx e)) (cdr body))
             (eq? (car body) 'packed-struct))))))
 
@@ -1273,7 +1324,8 @@
           (when (null? body)
             (error "function body is empty" fname))
           (let ([st (make-fstate ctx builder globals (make-eq-hashtable)
-                                 (make-eq-hashtable) fname f '() #f
+                                 (hashtable-ref (function-blocks) fname #f)
+                                 fname f '() #f
                                  (make-eq-hashtable))])
             ;; bind and name the parameters (skipping a variadic marker)
             (let-values ([(params variadic?) (split-variadic params)])
@@ -1287,11 +1339,8 @@
                       (unless (string=? nm "") (ir:set-value-name! pv nm)))
                     (hashtable-set! (fstate-locals st) pname pv)
                     (loop (cdr ps) (+ i 1)))))
-              ;; every body form is a block group; the first is the entry
-              ;; block. Create all blocks before emitting, so branches and
-              ;; phi incoming may reference blocks defined later.
-              (for-each (lambda (g) (check-block-group g fname)) body)
-              (for-each (lambda (g) (add-block! st f (cadr g))) body)
+              ;; blocks were created in the prepare pass (so blockaddress
+              ;; may reference them across functions); emit into them
               (for-each
                 (lambda (g)
                   (ir:position-at-end! builder (block-by-name st (cadr g)))
@@ -1375,6 +1424,7 @@
   (define (build ctx name prog)
     (let ([m (ir:make-module ctx name)]
           [globals (make-eq-hashtable)])
+      (anon-types (make-hashtable string-hash string=?))
       ;; target strings first: datalayout drives default alignments the
       ;; builder bakes into instructions (e.g. alloca)
       (for-each
@@ -1390,9 +1440,11 @@
       (for-each (lambda (item) (declare-item! ctx m globals item)) prog)
       (for-each (lambda (item) (create-alias! ctx m globals item)) prog)
       (for-each (lambda (item) (create-ifunc! ctx m globals item)) prog)
-      (for-each (lambda (item) (patch-alias! ctx m globals item)) prog)
-      (for-each (lambda (item) (patch-ifunc! ctx m globals item)) prog)
-      (for-each (lambda (item) (emit-item! ctx m globals item)) prog)
+      (parameterize ([function-blocks (make-eq-hashtable)])
+        (for-each (lambda (item) (prepare-blocks! ctx globals item)) prog)
+        (for-each (lambda (item) (patch-alias! ctx m globals item)) prog)
+        (for-each (lambda (item) (patch-ifunc! ctx m globals item)) prog)
+        (for-each (lambda (item) (emit-item! ctx m globals item)) prog))
       m))
 
   ;; Build, verify and JIT a program; returns the jit record, ready for

@@ -247,6 +247,50 @@
                           (loop j))))
                   (begin (put-char out c) (loop (+ i 1)))))))))
 
+  ;; a `%name = type ...` line whose name appears nowhere else in the
+  ;; retained text is a print artifact: LLVM's TypeFinder also walks
+  ;; named metadata, which this comparison textually ignores
+  (define (drop-unused-type-defs text)
+    (let ([p (open-string-input-port text)] [lines '()])
+      (let loop ()
+        (let ([l (get-line p)])
+          (unless (eof-object? l)
+            (set! lines (cons l lines))
+            (loop))))
+      (let* ([lines (reverse lines)]
+             [type-def-name
+              (lambda (l)
+                (and (> (string-length l) 1)
+                     (char=? (string-ref l 0) #\%)
+                     (let ([i (find-sub l " = type " 0)])
+                       (and i (substring l 0 i)))))]
+             [used?
+              (lambda (nm)
+                (let ([m (string-length nm)])
+                  (exists
+                    (lambda (l)
+                      (and (not (equal? (type-def-name l) nm))
+                           (let scan ([i 0])
+                             (let ([j (find-sub l nm i)])
+                               (and j
+                                    (or (let ([k (+ j m)])
+                                          (or (>= k (string-length l))
+                                              (not (let ([c (string-ref l k)])
+                                                     (or (char-alphabetic? c)
+                                                         (char-numeric? c)
+                                                         (memv c '(#\. #\_ #\$ #\-)))))))
+                                        (scan (+ j 1))))))))
+                    lines)))]
+             [out (open-output-string)])
+        (for-each
+          (lambda (l)
+            (let ([nm (type-def-name l)])
+              (unless (and nm (not (used? nm)))
+                (put-string out l)
+                (put-char out #\newline))))
+          lines)
+        (get-output-string out))))
+
   (define (comparable-ir s)
     (let ([p (open-string-input-port s)] [out (open-output-string)])
       (let loop ()
@@ -261,7 +305,11 @@
               (put-string out (canonical-line l))
               (put-char out #\newline))
             (loop))))
-      (canonicalize-md-ids (get-output-string out))))
+      ;; iterate: dropping a def may orphan defs it referenced
+      (canonicalize-md-ids
+        (let fixpoint ([t (get-output-string out)])
+          (let ([t2 (drop-unused-type-defs t)])
+            (if (string=? t t2) t (fixpoint t2)))))))
 
   ;; NOT strippable via the C API (LLVM 19): dso_local, comdat,
   ;; externally_initialized, DLL storage, gc names, prefix/prologue data,

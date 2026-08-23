@@ -493,9 +493,12 @@
                             (g 0) (g 1) (length mask)
                             (join ", " (map (lambda (e) (format "i32 ~a" e))
                                             mask)))))]
-             [(extractvalue) (format "extractvalue ~a, ~a" (g 0) (cadr args))]
+             [(extractvalue)
+              (format "extractvalue ~a, ~a" (g 0)
+                      (join ", " (map number->string (cdr args))))]
              [(insertvalue)
-              (format "insertvalue ~a, ~a, ~a" (g 0) (g 1) (caddr args))]
+              (format "insertvalue ~a, ~a, ~a" (g 0) (g 1)
+                      (join ", " (map number->string (cddr args))))]
              [(fence) (format "fence~a ~a" (sync-text flags) (car args))]
              [(atomicrmw)
               (words "atomicrmw" (memory-flags-text flags)

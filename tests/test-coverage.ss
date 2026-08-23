@@ -949,9 +949,12 @@ compute:
 (t:check-exn "unbuild rejects instruction metadata"
              (unbuild-of-ir
                "define void @f() {\nentry:\n  ret void, !x !0\n}\n!0 = !{}"))
-(t:check-exn "unbuild rejects unnamed identified struct types"
-             (unbuild-of-ir
-               "%0 = type { i64, i64 }\ndefine void @f(ptr %p) {\nentry:\n  %v = load %0, ptr %p\n  ret void\n}"))
+(t:check "unbuild names unnamed identified struct types by print slot"
+         (equal? (car (sll:unbuild
+                        (ir:parse-ir
+                          (ir:make-context) "t"
+                          "%0 = type { i64, i64 }\ndefine void @f(ptr %p) {\nentry:\n  %v = load %0, ptr %p\n  ret void\n}")))
+                 '(type %0 (struct i64 i64))))
 ;; regression: render's local `error` once wrapped itself (infinite
 ;; recursion) instead of base:error -- this hung rather than raised
 (t:check-exn "render raises (not loops) on unknown items"

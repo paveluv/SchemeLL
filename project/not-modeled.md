@@ -63,7 +63,7 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 | `swifterror` / `inalloca` bits on alloca | undetected (no C API); normalized textually |
 | sanitizer metadata on globals (`no_sanitize_address`, ...) | undetected (no C API); normalized textually |
 | values explicitly named with digit strings (`%"0"`, `@"0"`; inexpressible under the anonymity rule) | detected (locals and globals) |
-| multi-index extractvalue/insertvalue (chain single-index forms instead) | detected |
+| multi-index extractvalue/insertvalue (no C-API builder; chain single-index forms, or let the corpus render tier verify via the parser) | detected in strict mode; emitted under `'tolerate-builder-folds` |
 | instructions with all-constant operands (the C-API builder constant-folds them; no non-folding builder exists in the C API) | detected; `'tolerate-builder-folds` opts in, and the corpus render tier verifies such files strictly through `(sll render)` + LLVM's non-folding parser |
 | alloca outside the datalayout's alloca address space (the C-API builder always uses the `A` default; allocas IN it are modeled) | detected (A sniffed from the datalayout string) |
 | functions outside the datalayout's program address space (same story with `P`) | detected |
@@ -77,13 +77,13 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 
 | Construct | Detection |
 |---|---|
-| unnamed identified struct types (`%0 = type {...}`) | detected |
 | `x86_mmx`, `x86_amx`, target extension types, `label`/`metadata`/`token` in type positions | detected |
 
 ## Constants
 
 | Construct | Detection |
 |---|---|
+| `dso_local_equivalent` / `no_cfi` constants (no C-API constructors) | detected (as "constant kind"; the irritant carries the printed constant) |
 | constexpr kinds outside LLVM 19's core set: extractelement/insertelement/shufflevector constexprs (they almost always fold away at construction) | detected (reports the constexpr opcode) |
 | constexpr binops carrying BOTH nuw and nsw (the C API constructors set one flag each) | detected |
 | `inrange(lo, hi)` annotations on gep constexprs (vtable splitting; no C API accessor exists) | detected (textually, from the printed constant) |

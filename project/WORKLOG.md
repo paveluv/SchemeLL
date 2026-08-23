@@ -284,13 +284,40 @@ Newest entries first. Format: date, Done / Decided / Next.
   (223 checks). Corpus: 31888 + 2720 renderer + 2 fixpoint = 34610
   verified (94.9% of all, 97.0% of parseable).
 
+- Round 15 (2026-08-23): coverage goal REDEFINED with the user: 100%
+  means utilizing the C API to full potential; C-API gaps are valid
+  exclusions (like UserOp1/2). Modeled: unnamed identified struct
+  types ((type %0 ...) -- all-digit type names are anonymous like
+  values; StructCreateNamed(ctx, "") creates them, and the printer
+  numbers types by FIRST USE on both sides, so numbering matches by
+  construction; build keeps an anon-types table since GetTypeByName2
+  cannot see unnamed types). Cross-function blockaddress: build gained
+  a prepare-blocks! pass creating every define's blocks BEFORE any
+  emission (registry parameter function-blocks), so blockaddress
+  resolves across functions and from global initializers; unbuild
+  names other functions' blocks via an on-demand function-names walk.
+  Multi-index extractvalue/insertvalue: no C-API builder (valid
+  exclusion for the build path) but emitted under the tolerance flag
+  and verified strictly by the render tier. Fixed a real bug the
+  round surfaced: struct constants for ANONYMOUS identified types
+  were built as literal structs (the named-vs-literal test used the
+  name; now IsLiteralStruct). The comparison drops type-definition
+  lines whose name is unreferenced in retained text (to a fixpoint):
+  LLVM's TypeFinder also walks named metadata, which the harness
+  ignores. constant kind bucket diagnosed: mostly
+  dso_local_equivalent/no_cfi (no C constructors -- valid exclusion);
+  irritants now carry the printed constant. Corpus: 32061 + 2803
+  renderer + 2 fixpoint = 34866 verified (95.6% of all, 97.6% of
+  parseable).
+
 ### Next (coverage burn-down, by corpus statistics)
-- Residual constexpr kinds (~246), alloca outside DL-A (~157, C API
-  gap), unnamed identified structs (~122), all-constant folding
-  residue (~85), cross-function blockaddress (~67), target-ext /
-  x86-mmx / x86-amx type kinds (~142), constant kind (~39, grew as
-  files unblocked -- diagnose), multi-index extractvalue/insertvalue
-  (~39), digit-string names (~32).
+- Residual constexpr kinds (~247, diagnose composition), constant
+  kind (~39, mostly dso_local_equivalent/no_cfi -- exclusions),
+  digit-string names (~32, anonymity-rule conflict), Intel asm (~29),
+  cyclic metadata (~22), inrange (~21), metadata operand kind (~7).
+  C-API-gap exclusions (documented): alloca outside DL-A (~157),
+  all-constant folding residue (~58 strict-unverifiable), target-ext
+  / x86-mmx / x86-amx type kinds (~142), fn outside DL-P (~21).
 - Smaller leftovers: scalable vectors, raw value injection (the reserved
   (ptr N) shape), constant expressions on demand, address-spaced globals.
 

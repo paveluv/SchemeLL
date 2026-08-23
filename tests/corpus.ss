@@ -154,7 +154,8 @@
 
 (define (folding-bucket? b)
   (or (after-marker b "all-constant operands")
-      (after-marker b "no-op casts")))
+      (after-marker b "no-op casts")
+      (after-marker b "multi-index extractvalue")))
 
 (define (process path)
   (let ([text (guard (e [#t #f])

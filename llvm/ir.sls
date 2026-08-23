@@ -46,6 +46,7 @@
     set-module-asm!
     metadata-type md-string md-node metadata-value
     value-address-space set-atomic-single-thread! set-externally-initialized!
+    literal-struct-type?
     set-gc! gc-name set-target! set-data-layout!
     create-operand-bundle dispose-operand-bundle!
     build-call-bundles build-invoke-bundles
@@ -391,6 +392,8 @@
   ;; ---- gc / module target strings ----------------------------------------
 
   (define (set-gc! f name) (LLVMSetGCString f name))
+  (define (literal-struct-type? ty)
+    (not (zero? (LLVMIsLiteralStruct ty))))
   (define (value-address-space v)   ; of a pointer-typed value
     (LLVMGetPointerAddressSpace (LLVMTypeOf v)))
   (define (set-atomic-single-thread! v) (LLVMSetAtomicSingleThread v 1))
