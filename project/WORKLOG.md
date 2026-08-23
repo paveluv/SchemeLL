@@ -134,6 +134,17 @@ Newest entries first. Format: date, Done / Decided / Next.
   addrspace, digit-string explicit names, non-double NaN payloads.
   Corpus: 76.9% PASS, 176 suite checks green.
 
+- Fixpoint tier added after design discussion: the parser (LLParser)
+  builds via direct C++ instruction constructors and never folds; the C
+  API's only construction path is IRBuilder with ConstantFolder
+  hardwired (template-parameter policy, inexpressible in a C ABI), so
+  strict text1==text2 is impossible for all-constant instructions.
+  Second chance: (ll:unbuild m 'tolerate-builder-folds) + stability
+  check over our own print. Corpus: 28024 strict + 1826 modulo-folding
+  = 29850 verified (81.8%). Escape hatches ranked for the residue:
+  textual ll->IR backend parsed by LLVM (zero-glue, exact; roadmapped),
+  upstream C API patch, C shim (rejected: breaks zero-glue).
+
 ### Next (coverage burn-down, by corpus statistics)
 - BUG build-fail: invalid type (152), global has no assigned name (54),
   untyped forward refs (2), indirectbr shape (1) -- diagnose next.

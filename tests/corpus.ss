@@ -79,6 +79,38 @@
 
 ;; ---- the round trip -----------------------------------------------------------
 
+;; second chance for files the builder's constant folding excludes from
+;; the strict comparison: rebuild tolerating folds, then verify the
+;; result is a FIXPOINT -- parse our own print, round-trip again, and
+;; demand stability. Catches divergence; lossy-but-stable transforms are
+;; exactly what the strict tier exists for, so this tier is only entered
+;; when the strict one cannot apply.
+(define (fold-fixpoint? m rctx)
+  (guard (e [#t #f])
+    (let* ([prog (ll:unbuild m 'ignore-named-metadata 'tolerate-builder-folds)]
+           [m2 (ll:build rctx "fx1" prog)])
+      (n:normalize-module! m2)
+      (let* ([text2 (ir:module->string m2)]
+             [b (n:comparable-ir text2)]
+             [ctx3 (ir:make-context)] [rctx3 (ir:make-context)]
+             [m3 (ir:parse-ir ctx3 "fx" text2)])
+        (n:normalize-module! m3)
+        (let* ([prog2 (ll:unbuild m3 'ignore-named-metadata
+                                  'tolerate-builder-folds)]
+               [m4 (ll:build rctx3 "fx2" prog2)])
+          (n:normalize-module! m4)
+          (let ([b2 (n:comparable-ir (ir:module->string m4))])
+            (ir:module-dispose! m4)
+            (ir:module-dispose! m3)
+            (ir:module-dispose! m2)
+            (ir:context-dispose! ctx3)
+            (ir:context-dispose! rctx3)
+            (string=? b b2)))))))
+
+(define (folding-bucket? b)
+  (or (after-marker b "all-constant operands")
+      (after-marker b "no-op casts")))
+
 (define (process path)
   (let ([text (guard (e [#t #f])
                 (call-with-input-file path get-string-all))])
@@ -90,9 +122,15 @@
        ;; so rebuilding in the parse context would collide
        (let ([ctx (ir:make-context)] [rctx (ir:make-context)] [m #f] [m2 #f])
          (guard (e [#t (let ([b (classify e)])
-                         (bucket! b)
-                         (when (starts-with? b "BUG")
-                           (set! failures (cons (cons path b) failures))))])
+                         (cond
+                           [(and (folding-bucket? b) m
+                                 (fold-fixpoint? m rctx))
+                            (bucket! "PASS (modulo builder folding)")]
+                           [else
+                            (bucket! b)
+                            (when (starts-with? b "BUG")
+                              (set! failures
+                                (cons (cons path b) failures)))]))])
            (set! m (ir:parse-ir ctx path text))
            (n:normalize-module! m)
            (let ([a (n:comparable-ir (ir:module->string m))])

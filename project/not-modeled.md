@@ -68,10 +68,10 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 | sanitizer metadata on globals (`no_sanitize_address`, ...) | undetected (no C API); normalized textually |
 | values explicitly named with digit strings (`%"0"`; inexpressible under the anonymity rule) | detected |
 | multi-index extractvalue/insertvalue (chain single-index forms instead) | detected |
-| instructions with all-constant operands (the C-API builder constant-folds them; no non-folding builder exists in the C API) | detected |
+| instructions with all-constant operands (the C-API builder constant-folds them; no non-folding builder exists in the C API) | detected; `'tolerate-builder-folds` opts in, and the corpus fixpoint tier verifies such files modulo folding |
 | alloca in a non-zero address space (datalayout-driven; the C-API builder cannot produce them) | detected |
 | alignments of 2^32 or larger (LLVMGetAlignment truncates; the attribute is omitted) | undetected |
-| no-op casts, e.g. `bitcast ptr %x to ptr` (the C-API builder folds them away even on non-constants) | detected |
+| no-op casts, e.g. `bitcast ptr %x to ptr` (the C-API builder folds them away even on non-constants) | detected; same `'tolerate-builder-folds` / fixpoint-tier treatment |
 | metadata- and token-typed operands (`metadata !"..."` intrinsic arguments) | detected (as type kinds) |
 
 ## Types

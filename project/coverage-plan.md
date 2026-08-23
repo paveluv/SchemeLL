@@ -28,11 +28,19 @@ constants as operands, any-width integers, poison mask lanes,
 address-spaced globals, function linkage, anonymous %N names, trunc
 nsw/nuw, uitofp nneg, atomicrmw/cmpxchg alignment). The MISMATCH
 bucket is diagnosed and defeated: 2762 -> 25 files (0.07%), probe tool
-in tests/probe-mismatch.ss. Largest remaining buckets: all-constant
-operands (C-API builder folds them, ~2.2k), metadata-typed operands
-(~1.7k), constant expressions (~1.2k), fn alignment (~333), operand
-bundles (~321), no-op casts (~316), aliases (~262). The burn-down
-continues by these statistics. "100% coverage" is meaningless without a
+in tests/probe-mismatch.ss. FIXPOINT TIER (2026-08-22): files the
+C-API builder's constant folding excludes from the strict comparison
+get a second chance -- rebuild with (ll:unbuild m
+'tolerate-builder-folds), then re-round-trip our own print and demand
+stability (text2 == text3). Lossy-but-stable transforms would pass
+this tier, which is why it exists ONLY where the strict tier cannot
+apply, and reports separately: 28024 strict PASS + 1826 PASS (modulo
+builder folding) = 29850 verified (81.8% of all, 83.6% of parseable).
+Largest remaining buckets: metadata-typed operands (~1.7k), constant
+expressions (~1.2k), unstable/other folding files (~730), fn alignment
+(~333), operand bundles (~321), aliases (~262), invalid-type
+build-fails (~151). A textual ll->IR backend (build via LLVM's parser,
+which never folds) is the roadmapped exact fix for the folding class. "100% coverage" is meaningless without a
 machine-checkable oracle and an explicit scope. This plan defines both, and
 three verification levels that turn coverage from a claim into a test that
 fails.

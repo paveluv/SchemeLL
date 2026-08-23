@@ -155,6 +155,11 @@
   ;; identified structs encountered during a walk: ty -> name
   (define struct-registry (make-parameter #f))
 
+  ;; 'tolerate-builder-folds: emit instructions the C-API builder will
+  ;; fold instead of raising -- the rebuild is then only comparable
+  ;; modulo folding (the corpus harness's fixpoint tier)
+  (define tolerate-folds (make-parameter #f))
+
   ;; ---- names ---------------------------------------------------------------------
 
   (define-record-type ustate
@@ -427,14 +432,15 @@
       (define (op0) (LLVMGetOperand ins 0))
       (define (op1) (LLVMGetOperand ins 1))
       (define (op2) (LLVMGetOperand ins 2))
-      (when (and (memq op foldable-ops) (all-constant-operands? ins))
+      (when (and (not (tolerate-folds)) (memq op foldable-ops)
+                 (all-constant-operands? ins))
         (not-modeled "instructions with all-constant operands (the C-API builder folds them)"))
       (cond
         [(memq op binop-names)
          `(,op ,@(int-flags ins op) ,@(fmf-flags ins)
                ,(unbuild-type ty) ,(operand st (op0)) ,(operand st (op1)))]
         [(memq op cast-names)
-         (when (eqv? (LLVMTypeOf (op0)) ty)
+         (when (and (not (tolerate-folds)) (eqv? (LLVMTypeOf (op0)) ty))
            (not-modeled "no-op casts (the C-API builder folds them away)"))
          `(,op ,@(if (eq? op 'trunc) (wrap-flags ins) '())
                ,@(if (and (memq op '(zext uitofp)) (nz? (LLVMGetNNeg ins)))
@@ -797,7 +803,8 @@
   ;; corpus harness strips it from the comparison; plain unbuild stays
   ;; strict so the tool never silently loses it).
   (define (unbuild m . opts)
-    (parameterize ([struct-registry (make-eqv-hashtable)])
+    (parameterize ([struct-registry (make-eqv-hashtable)]
+                   [tolerate-folds (memq 'tolerate-builder-folds opts)])
       (check-module-decorations m (memq 'ignore-named-metadata opts))
       (let ([gnames (module-gnames m)])
         (let ([items
