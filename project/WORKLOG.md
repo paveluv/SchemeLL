@@ -331,18 +331,29 @@ Newest entries first. Format: date, Done / Decided / Next.
   choices (digit-string names 32); a handful of stragglers (alias AS
   4, callbr bundles 1, splat residue 15) are modelable followups.
 
-### Next (coverage burn-down, by corpus statistics)
-- Residual constexpr kinds (~247, diagnose composition), constant
-  kind (~39, mostly dso_local_equivalent/no_cfi -- exclusions),
-  digit-string names (~32, anonymity-rule conflict), Intel asm (~29),
-  cyclic metadata (~22), inrange (~21), metadata operand kind (~7).
-  C-API-gap exclusions (documented): alloca outside DL-A (~157),
-  all-constant folding residue (~58 strict-unverifiable), target-ext
-  / x86-mmx / x86-amx type kinds (~142), fn outside DL-P (~21).
-- Smaller leftovers: scalable vectors, raw value injection (the reserved
-  (ptr N) shape), constant expressions on demand, address-spaced globals.
+- Round 16 (2026-08-23): splat constants ((splat (ty elem)); shape
+  verified by reconstructing and pointer-comparing, constexprs being
+  uniqued -- the C API cannot read a constexpr shuffle mask);
+  inteldialect/unwind asm flags (always just LLVMGetInlineAsm
+  parameters); x86_mmx / x86_amx / target-ext types with the full 19
+  reader set. 247-file constexpr bucket -> 15; 142 exotic-type files
+  unblocked.
+- Round 17, the scraps round (2026-08-23): alias address spaces,
+  operand bundles on callbr, call-site (addrspace n) markers typing
+  constant callees at build (call addrspace(1) void null() rebuilds
+  exactly), extractelement/insertelement constexprs. The harness
+  writes every bucketed file's path to tests/tmp/corpus-buckets.txt.
+  A lost-patch regression (call/callbr edits silently unapplied)
+  surfaced as 2 MISMATCHes and was re-applied.
 
-## 2026-08-21 — project start
+### Coverage campaign: COMPLETE (2026-08-23)
+
+Final: 32452 strict + 2868 renderer + 4 fixpoint = 35324 verified,
+96.8% of all 36488 files, 98.9% of the 35709 parseable. Zero
+MISMATCH / BUG / RENDER-FAIL. 17 rounds, 53.6% -> 98.9%. Declared
+complete per the agreed definition: 100% = full C-API potential; the
+385 remaining files sit in 17 named ledger buckets, every one a
+documented C-API gap or recorded grammar choice.
 
 ### Done
 - Repo skeleton, git init, project rules (`project/RULES.md`).

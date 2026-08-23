@@ -46,7 +46,7 @@
     set-module-asm!
     metadata-type md-string md-node metadata-value
     value-address-space set-atomic-single-thread! set-externally-initialized!
-    literal-struct-type? const-splat
+    literal-struct-type? const-splat const-extractelement const-insertelement
     x86mmx-type x86amx-type target-ext-type
     set-gc! gc-name set-target! set-data-layout!
     create-operand-bundle dispose-operand-bundle!
@@ -396,6 +396,9 @@
   (define (literal-struct-type? ty)
     (not (zero? (LLVMIsLiteralStruct ty))))
 
+  (define (const-extractelement v i) (LLVMConstExtractElement v i))
+  (define (const-insertelement v e i) (LLVMConstInsertElement v e i))
+
   ;; splat constant for a (possibly scalable) vector type: the
   ;; insertelement+shufflevector constexpr chain LLVM 19 spells
   ;; `splat (ty elem)`; folds to a plain vector for fixed types
@@ -479,8 +482,11 @@
 
   ;; ---- global aliases ---------------------------------------------------
 
-  (define (add-alias m value-ty aliasee name)
-    (LLVMAddAlias2 (module-live-ptr m) value-ty 0 aliasee name))
+  (define add-alias
+    (case-lambda
+      [(m value-ty aliasee name) (add-alias m value-ty aliasee name 0)]
+      [(m value-ty aliasee name addrspace)
+       (LLVMAddAlias2 (module-live-ptr m) value-ty addrspace aliasee name)]))
   (define (alias-aliasee a) (LLVMAliasGetAliasee a))
   (define (alias-set-aliasee! a v) (LLVMAliasSetAliasee a v))
   (define (module-aliases m)
@@ -638,13 +644,21 @@
     (LLVMBuildCleanupRet (builder-live-ptr b) cleanuppad
                          (or unwind-block base:null-ptr)))
 
-  (define (build-callbr b fn-type fn default-block indirect-blocks args name)
-    (base:call-with-pointer-array indirect-blocks
-      (lambda (dests ndests)
-        (base:call-with-pointer-array args
-          (lambda (arr n)
-            (LLVMBuildCallBr (builder-live-ptr b) fn-type fn default-block
-                             dests ndests arr n base:null-ptr 0 name))))))
+  (define build-callbr
+    (case-lambda
+      [(b fn-type fn default-block indirect-blocks args name)
+       (build-callbr b fn-type fn default-block indirect-blocks args
+                     '() name)]
+      [(b fn-type fn default-block indirect-blocks args bundles name)
+       (base:call-with-pointer-array indirect-blocks
+         (lambda (dests ndests)
+           (base:call-with-pointer-array args
+             (lambda (arr n)
+               (base:call-with-pointer-array bundles
+                 (lambda (barr bn)
+                   (LLVMBuildCallBr (builder-live-ptr b) fn-type fn
+                                    default-block dests ndests arr n
+                                    barr bn name)))))))]))
 
   ;; a callable inline-asm value of the given function type
   (define (inline-asm fn-type asm-text constraints side-effects? align-stack?

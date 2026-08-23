@@ -147,3 +147,33 @@ get sll back).
 Separate axis, same method: (llvm raw) completeness vs the 1267 exported
 C symbols — eventually via the header-driven binding generator; tracked by
 the same implemented/excluded ledger discipline.
+
+## CAMPAIGN COMPLETE (2026-08-23)
+
+Rounds 16-17 finished the modelable surface: splat constants,
+Intel-dialect and unwinding asm, x86_mmx/x86_amx/target-ext types,
+alias address spaces, callbr operand bundles, call-site addrspace
+markers typing constant callees, and extractelement/insertelement
+constexprs.
+
+Final standing over LLVM 19's own regression corpus (36488 .ll files):
+
+    32452  strict PASS (builder round-trip, byte-identical print)
+     2868  strict PASS via the text renderer (LLVM's parser as the
+           non-folding constructor)
+        4  PASS modulo builder folding (fixpoint-verified)
+    -----
+    35324  verified -- 96.8% of all files, 98.9% of the 35709 files
+           LLVM's own parser accepts
+
+    779    parse-fail (not IR: deliberately-invalid inputs, fragments,
+           multi-document test inputs)
+    385    in 17 named buckets, EVERY one a documented C-API gap or a
+           recorded grammar choice (project/not-modeled.md)
+
+Zero MISMATCH, zero BUG, zero RENDER-FAIL: no unexplained failure
+remains. Per the goal agreed 2026-08-23 (100% = utilizing the C API to
+full potential), the campaign is complete after 17 rounds: 53.6% ->
+98.9% of parseable. The ledger discipline stays in force: modeling a
+construct later means deleting its ledger row and its normalizer
+strip, at which point thousands of corpus files start testing it.

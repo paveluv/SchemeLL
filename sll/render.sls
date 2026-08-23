@@ -220,6 +220,11 @@
                                         x)))))]
          [(splat)
           (format "splat (~a)" (group->text env (cadr v)))]
+         [(extractelement insertelement)
+          ;; element-access constexpr: op (G, G[, G])
+          (format "~a (~a)" (car v)
+                  (join ", " (map (lambda (g) (group->text env g))
+                                  (cdr v))))]
          [(trunc ptrtoint inttoptr bitcast addrspacecast)
           ;; constexpr cast: op (src-ty VAL to dst-ty)
           (format "~a (~a ~a to ~a)" (car v) (type->text (cadr v))
@@ -444,10 +449,14 @@
                         (bundles->text env bs)
                         (label-ref (car labels)) (label-ref (cadr labels))))]
              [(callbr)
-              (format "callbr ~a to ~a [~a]"
-                      (app->text env (car args) (cadr args) #f)
-                      (label-ref (caddr args))
-                      (join ", " (map label-ref (cadddr args))))]
+              (let* ([bs (filter bundle-form? (cddr args))]
+                     [rest (filter (lambda (x) (not (bundle-form? x)))
+                                   (cddr args))])
+                (format "callbr ~a~a to ~a [~a]"
+                        (app->text env (car args) (cadr args) #f)
+                        (bundles->text env bs)
+                        (label-ref (car rest))
+                        (join ", " (map label-ref (cadr rest)))))]
              [(landingpad)
               (words "landingpad" (ty)
                      (join " "
@@ -584,13 +593,17 @@
              (format ", ~a" (group->text env (cadr rest))))))
 
   (define (alias->text env item)
-    ;; (= @a (alias linkage? value-type (ptr aliasee)))
+    ;; (= @a (alias (addrspace n)? linkage? value-type (ptr aliasee)))
     (let* ([rest (cdr (caddr item))]
+           [as (let ([x (car rest)])
+                 (and (pair? x) (eq? (car x) 'addrspace) (cadr x)))]
+           [rest (if as (cdr rest) rest)]
            [lk (and (symbol? (car rest)) (memq (car rest) linkage-words)
                     (car rest))]
            [rest (if lk (cdr rest) rest)])
       (words (format "~a =" (name->text (cadr item)))
              (if lk (symbol->string lk) "")
+             (if as (format "addrspace(~a)" as) "")
              "alias" (type->text (car rest))
              (format ", ~a" (group->text env (cadr rest))))))
 

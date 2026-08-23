@@ -166,7 +166,7 @@
     ConstPtrToInt ConstIntToPtr ConstBitCast ConstAddrSpaceCast
     ConstTrunc ConstAdd ConstNSWAdd ConstNUWAdd ConstSub ConstNSWSub
     ConstNUWSub ConstMul ConstNSWMul ConstNUWMul ConstXor
-    ConstInsertElement ConstShuffleVector
+    ConstExtractElement ConstInsertElement ConstShuffleVector
     IsAConstant IsExternallyInitialized HasPrefixData HasPrologueData
     SetGC SetGCString GetGC SetAtomicSingleThread SetExternallyInitialized
     CreateOperandBundle DisposeOperandBundle GetOperandBundleAtIndex
@@ -850,6 +850,8 @@
   (define-getter ConstNSWMul "LLVMConstNSWMul" (void* void*) void*)
   (define-getter ConstNUWMul "LLVMConstNUWMul" (void* void*) void*)
   (define-getter ConstXor "LLVMConstXor" (void* void*) void*)
+  (define-getter ConstExtractElement
+    "LLVMConstExtractElement" (void* void*) void*)
   (define-getter ConstInsertElement
     "LLVMConstInsertElement" (void* void* void*) void*)
   (define-getter ConstShuffleVector

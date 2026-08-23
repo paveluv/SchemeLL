@@ -50,6 +50,7 @@
 
 (define stats (make-hashtable string-hash string=?))
 (define failures '())   ; (path . bucket) for MISMATCH / build-fail
+(define bucketed '())   ; (path . bucket) for every non-PASS file
 
 (define (bucket! key)
   (hashtable-update! stats key (lambda (n) (+ n 1)) 0))
@@ -183,6 +184,7 @@
                             (bucket! "PASS (modulo builder folding)")]
                            [else
                             (bucket! b)
+                            (set! bucketed (cons (cons path b) bucketed))
                             (when (starts-with? b "BUG")
                               (set! failures
                                 (cons (cons path b) failures)))]))])
@@ -260,6 +262,12 @@
     'replace)
   (printf "~a failure paths written to tests/tmp/corpus-failures.txt~%"
           (length failures))
+  (call-with-output-file "tests/tmp/corpus-buckets.txt"
+    (lambda (p)
+      (for-each (lambda (e) (put-string p (car e)) (put-string p "  ")
+                  (put-string p (cdr e)) (put-char p #\newline))
+                (reverse bucketed)))
+    'replace)
   (when (> bench-n 0)
     (printf "~%construction bench over ~a PASS files (one shot each):~%"
             bench-n)

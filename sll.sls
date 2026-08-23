@@ -273,7 +273,8 @@
                           (resolve-md-ref (fstate-ctx st) form))]
       [(and (pair? form)
             (memq (car form) '(trunc ptrtoint inttoptr bitcast addrspacecast
-                                add sub mul xor getelementptr splat)))
+                                add sub mul xor getelementptr splat
+                                extractelement insertelement)))
        ;; a constant expression in operand position; splat is typed by
        ;; its context, the rest are self-typed
        (resolve-constant (fstate-ctx st) (fstate-globals st) ty form
@@ -421,7 +422,11 @@
   ;; callee of call/invoke/callbr: a function/pointer operand, or inline
   ;; asm: (asm "template" "constraints" flag ...), flags: sideeffect
   ;; alignstack. callbr requires an asm callee (LLVM restriction).
-  (define (resolve-callee st fnty form)
+  (define resolve-callee
+    (case-lambda
+      [(st fnty form) (resolve-callee* st fnty form 0)]
+      [(st fnty form as) (resolve-callee* st fnty form as)]))
+  (define (resolve-callee* st fnty form as)
     (if (and (pair? form) (eq? (car form) 'asm))
         (begin
           (unless (and (>= (length form) 3) (string? (cadr form))
@@ -437,8 +442,9 @@
                          (and (memq 'inteldialect (cdddr form)) #t)
                          (and (memq 'unwind (cdddr form)) #t)))
         ;; the callee slot is ptr-typed: lets undef/null callees and
-        ;; forward references through
-        (resolve-operand st (ir:pointer-type (fstate-ctx st)) form)))
+        ;; forward references through; a call-site (addrspace n) marker
+        ;; types constant callees outside the program space
+        (resolve-operand st (ir:pointer-type (fstate-ctx st) as) form)))
 
   ;; the type slot of call/invoke/callbr holds either the result type (the
   ;; call-site function type is then built from the argument groups) or a
@@ -680,10 +686,10 @@
                [(call)
                 ;; (call (addrspace n)? type (callee args...) bundles...)
                 (arity>= 2 "(call type (callee (type arg) ...) bundles...)")
-                (let* ([args (if (and (pair? (car args))
-                                      (eq? (caar args) 'addrspace))
-                                 (cdr args)   ; the callee value carries it
-                                 args)]
+                (let* ([callee-as (and (pair? (car args))
+                                       (eq? (caar args) 'addrspace)
+                                       (cadr (car args)))]
+                       [args (if callee-as (cdr args) args)]
                        [app (cadr args)])
                   (unless (pair? app)
                     (error "call expects an application group (callee args...)"
@@ -694,17 +700,17 @@
                     (when (and (eq? (ir:type-kind retty) 'void)
                             (not (string=? name "")))
                       (error "cannot bind the result of a void call" form))
-                    (if (null? (cddr args))
-                        (ir:build-call b fnty
-                                       (resolve-callee st fnty (car app))
-                                       avals name)
-                        (let ([brefs (map (lambda (bf) (resolve-bundle st bf))
-                                          (cddr args))])
-                          (let ([v (ir:build-call-bundles
-                                     b fnty (resolve-callee st fnty (car app))
-                                     avals brefs name)])
-                            (for-each ir:dispose-operand-bundle! brefs)
-                            v)))))]
+                    (let ([callee (resolve-callee st fnty (car app)
+                                                  (or callee-as 0))])
+                      (if (null? (cddr args))
+                          (ir:build-call b fnty callee avals name)
+                          (let ([brefs (map (lambda (bf)
+                                              (resolve-bundle st bf))
+                                            (cddr args))])
+                            (let ([v (ir:build-call-bundles
+                                       b fnty callee avals brefs name)])
+                              (for-each ir:dispose-operand-bundle! brefs)
+                              v))))))]
                [(invoke)
                 ;; (invoke type (callee args...) bundles... (label %ok) (label %pad))
                 (arity>= 4 "(invoke type (callee args...) bundles... (label %ok) (label %pad))")
@@ -741,10 +747,16 @@
                             (for-each ir:dispose-operand-bundle! brefs)
                             v)))))]
                [(callbr)
-                ;; (callbr type ((asm ...) args...)
+                ;; (callbr type ((asm ...) args...) bundles...
                 ;;         (label %fallthrough) ((label %indirect) ...))
-                (arity 4 "(callbr type ((asm ...) args...) (label %fall) ((label %i) ...))")
-                (let ([app (cadr args)])
+                (arity>= 4 "(callbr type ((asm ...) args...) bundles... (label %fall) ((label %i) ...))")
+                (let* ([bundles (filter bundle-form? (cddr args))]
+                       [args (cons (car args)
+                                   (cons (cadr args)
+                                         (filter (lambda (x)
+                                                   (not (bundle-form? x)))
+                                                 (cddr args))))]
+                       [app (cadr args)])
                   (unless (and (pair? app) (pair? (car app))
                                (eq? (caar app) 'asm))
                     (error "callbr requires an inline-asm callee (LLVM restriction)"
@@ -755,12 +767,25 @@
                   (let-values ([(fnty retty avals)
                                 (callsite-signature st ctx (car args)
                                                     (cdr app) form)])
-                    (ir:build-callbr b fnty
+                    (if (null? bundles)
+                        (ir:build-callbr b fnty
+                                         (resolve-callee st fnty (car app))
+                                         (block-ref st (caddr args))
+                                         (map (lambda (d) (block-ref st d))
+                                              (cadddr args))
+                                         avals name)
+                        (let ([brefs (map (lambda (bf)
+                                            (resolve-bundle st bf))
+                                          bundles)])
+                          (let ([v (ir:build-callbr
+                                     b fnty
                                      (resolve-callee st fnty (car app))
                                      (block-ref st (caddr args))
                                      (map (lambda (d) (block-ref st d))
                                           (cadddr args))
-                                     avals name)))]
+                                     avals brefs name)])
+                            (for-each ir:dispose-operand-bundle! brefs)
+                            v)))))]
                [(landingpad)
                 ;; (landingpad type clause ...) where clause is: cleanup |
                 ;; (catch type constant) | (filter type constant)
@@ -1107,6 +1132,18 @@
               (ir:const-binop (car form) nuw nsw
                               (elem-resolve ety (cadr rest))
                               (elem-resolve ety (caddr rest))))]))]
+      [(and (pair? form) (memq (car form) '(extractelement insertelement)))
+       ;; element-access constexprs, instruction-shaped groups
+       (let ([gs (map constant-group (cdr form))])
+         (if (eq? (car form) 'extractelement)
+             (begin
+               (unless (= (length gs) 2)
+                 (error "expected (extractelement (ty v) (ty i))" form))
+               (ir:const-extractelement (car gs) (cadr gs)))
+             (begin
+               (unless (= (length gs) 3)
+                 (error "expected (insertelement (ty v) (ty e) (ty i))" form))
+               (ir:const-insertelement (car gs) (cadr gs) (caddr gs)))))]
       [(and (pair? form) (eq? (car form) 'splat))
        ;; splat constant: (splat (elem-type elem)); ty is the vector type
        (unless (and ty (= (length form) 2) (pair? (cadr form))
@@ -1392,14 +1429,17 @@
   (define (alias-parts ctx item)
     (let* ([rhs (caddr item)]
            [rest (cdr rhs)]
+           [as (let ([x (car rest)])
+                 (and (pair? x) (eq? (car x) 'addrspace) (cadr x)))]
+           [rest (if as (cdr rest) rest)]
            [lk (and (pair? rest) (symbol? (car rest))
                     (assq (car rest) linkages))]
            [rest (if lk (cdr rest) rest)])
       (unless (and (= (length rest) 2) (pair? (cadr rest))
                    (= (length (cadr rest)) 2))
-        (error "expected (= @name (alias linkage? type (ptr aliasee)))"
+        (error "expected (= @name (alias (addrspace n)? linkage? type (ptr aliasee)))"
                item))
-      (values (cadr item) lk (car rest) (cadr rest))))
+      (values (cadr item) as lk (car rest) (cadr rest))))
 
   ;; (= @i (ifunc linkage? fn-type (ptr @resolver))) -- same two-phase
   ;; scheme as aliases (creation order = print order)
@@ -1435,18 +1475,19 @@
 
   (define (create-alias! ctx m globals item)
     (when (alias-item? item)
-      (let-values ([(name lk vty-form g) (alias-parts ctx item)])
+      (let-values ([(name as lk vty-form g) (alias-parts ctx item)])
         (when (hashtable-ref globals name #f)
           (error "duplicate global name" name))
         (let ([a (ir:add-alias m (resolve-type ctx vty-form)
-                               (ir:const-null (ir:pointer-type ctx))
-                               (llvm-name name))])
+                               (ir:const-null
+                                 (ir:pointer-type ctx (or as 0)))
+                               (llvm-name name) (or as 0))])
           (when lk (ir:set-linkage! a (cdr lk)))
           (hashtable-set! globals name a)))))
 
   (define (patch-alias! ctx m globals item)
     (when (alias-item? item)
-      (let-values ([(name lk vty-form g) (alias-parts ctx item)])
+      (let-values ([(name as lk vty-form g) (alias-parts ctx item)])
         (ir:alias-set-aliasee!
           (hashtable-ref globals name #f)
           (resolve-constant ctx globals (resolve-type ctx (car g))

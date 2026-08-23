@@ -377,6 +377,10 @@
                              (if (fx= i (LLVMGetNumOperands c))
                                  '()
                                  (cons (grp (opn i)) (loop (fx+ i 1))))))]
+        [(eq? op 'extractelement)
+         `(extractelement ,(grp (opn 0)) ,(grp (opn 1)))]
+        [(eq? op 'insertelement)
+         `(insertelement ,(grp (opn 0)) ,(grp (opn 1)) ,(grp (opn 2)))]
         [(eq? op 'shufflevector)
          ;; the splat chain: shufflevector(insertelement(poison, e, 0),
          ;; poison, zeroinitializer). Constexprs are uniqued, so an
@@ -625,15 +629,7 @@
 
   (define (application st ins)
     (let ([n (LLVMGetNumArgOperands ins)])
-      ;; the callee slot carries no type annotation in sll, so callees
-      ;; whose value NEEDS one (null/undef/poison) lose a non-zero
-      ;; address space; named callees carry their own type and are fine
-      (let ([cv (LLVMGetCalledValue ins)])
-        (when (and (not (zero? (LLVMGetPointerAddressSpace (LLVMTypeOf cv))))
-                   (or (isa? (LLVMIsAConstantPointerNull cv))
-                       (nz? (LLVMIsUndef cv))
-                       (nz? (LLVMIsPoison cv))))
-          (not-modeled "calls through pointer constants in non-zero address spaces")))
+
       (cons (operand st (LLVMGetCalledValue ins))
             (let loop ([i 0])
               (if (fx= i n)
@@ -751,10 +747,9 @@
                      ,(block-label st (LLVMGetNormalDest ins))
                      ,(block-label st (LLVMGetUnwindDest ins)))]
            [(callbr)
-            (when (nz? (LLVMGetNumOperandBundles ins))
-              (not-modeled "operand bundles on callbr"))
             `(callbr ,(call-type-slot (LLVMGetCalledFunctionType ins))
                      ,(application st ins)
+                     ,@(bundle-forms st ins)
                      ,(successor st ins 0)
                      ,(let loop ([i 1])
                         (if (fx= i (LLVMGetNumSuccessors ins))
@@ -1068,8 +1063,6 @@
                  ,(group st (ir:ifunc-resolver i))))))
 
   (define (unbuild-alias gnames a)
-    (unless (zero? (LLVMGetPointerAddressSpace (LLVMTypeOf a)))
-      (not-modeled "aliases in non-zero address spaces"))
     ;; the thread-local accessors unwrap GlobalVariable, so an alias's
     ;; thread_local bit is only witnessed textually
     (when (text-contains? (ir:value->string a) " thread_local")
@@ -1077,7 +1070,9 @@
     (let ([st (make-ustate (make-eqv-hashtable) gnames base:null-ptr)]
           [lk (ir:linkage a)])
       `(= ,(hashtable-ref gnames a #f)
-          (alias ,@(if (zero? lk) '()
+          (alias ,@(let ([as (LLVMGetPointerAddressSpace (LLVMTypeOf a))])
+                     (if (zero? as) '() `((addrspace ,as))))
+                 ,@(if (zero? lk) '()
                        (list (enum-name linkage-names lk "linkage")))
                  ,(unbuild-type (LLVMGlobalGetValueType a))
                  ,(group st (ir:alias-aliasee a))))))
