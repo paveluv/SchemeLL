@@ -9,7 +9,7 @@ test:
 repl:
 	$(CHEZ) --libdirs $(LIBDIRS)
 
-# Level-3 coverage: round-trip LLVM's own test corpus through ll
+# Level-3 coverage: round-trip LLVM's own test corpus through sll
 # (needs reference/llvm-project, see project/RULES.md)
 CORPUS_DIR = reference/llvm-project/llvm/test
 corpus:
@@ -21,9 +21,9 @@ format:
 
 # Compile libraries to Chez object files (llvm/*.so -- not ELF, gitignored)
 build:
-	echo '(compile-imported-libraries #t)(import (prefix (llscheme ll) ll:) (prefix (llvm target) target:))' | $(CHEZ) -q --libdirs $(LIBDIRS)
+	echo '(compile-imported-libraries #t)(import (prefix (sll) sll:) (prefix (llvm target) target:))' | $(CHEZ) -q --libdirs $(LIBDIRS)
 
 clean:
-	find llvm llscheme tests -name '*.so' -delete 2>/dev/null; \
-	find llvm llscheme tests -name '*.wpo' -delete 2>/dev/null; \
+	find llvm sll tests -name '*.so' -delete 2>/dev/null; \
+	find llvm sll tests -name '*.wpo' -delete 2>/dev/null; \
 	rm -rf tests/tmp

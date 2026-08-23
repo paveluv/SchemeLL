@@ -1,10 +1,10 @@
-# What ll does not model
+# What sll does not model
 
-The complete ledger of LLVM IR constructs outside (llscheme ll)'s grammar,
-as of 2026-08-22 (LLVM 19). Companion to `project/ll-design.md` (what IS
+The complete ledger of LLVM IR constructs outside (sll)'s grammar,
+as of 2026-08-22 (LLVM 19). Companion to `project/sll-design.md` (what IS
 modeled) and `project/coverage-plan.md` (how coverage is verified).
 
-**Detection column**: `ll:unbuild` is strict — *detected* means it raises a
+**Detection column**: `sll:unbuild` is strict — *detected* means it raises a
 `not modeled` error naming the construct; *undetected* means the walker
 cannot see the construct and would silently lose it — for those, the
 corpus harness's print comparison is the backstop that catches the loss.
@@ -21,7 +21,7 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 | aliases in non-zero address spaces | detected |
 | `thread_local` aliases (the thread-local accessors unwrap GlobalVariable) | detected (textually, from the printed alias) |
 | ifuncs (`@i = ifunc ...`) | detected |
-| named module metadata (`!llvm.module.flags`, `!llvm.ident`, ...) | detected; `(ll:unbuild m 'ignore-named-metadata)` opts out explicitly (the corpus harness does, stripping `!` lines from the comparison) |
+| named module metadata (`!llvm.module.flags`, `!llvm.ident`, ...) | detected; `(sll:unbuild m 'ignore-named-metadata)` opts out explicitly (the corpus harness does, stripping `!` lines from the comparison) |
 | module-level inline asm (`module asm "..."`) | detected |
 | comdat sections | undetected; the normalizer clears per-global comdats, declaration lines excluded textually |
 | `source_filename` | ignored by design (module identity, not IR content) |
@@ -68,7 +68,7 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 | sanitizer metadata on globals (`no_sanitize_address`, ...) | undetected (no C API); normalized textually |
 | values explicitly named with digit strings (`%"0"`, `@"0"`; inexpressible under the anonymity rule) | detected (locals and globals) |
 | multi-index extractvalue/insertvalue (chain single-index forms instead) | detected |
-| instructions with all-constant operands (the C-API builder constant-folds them; no non-folding builder exists in the C API) | detected; `'tolerate-builder-folds` opts in, and the corpus render tier verifies such files strictly through `(llscheme ll render)` + LLVM's non-folding parser |
+| instructions with all-constant operands (the C-API builder constant-folds them; no non-folding builder exists in the C API) | detected; `'tolerate-builder-folds` opts in, and the corpus render tier verifies such files strictly through `(sll render)` + LLVM's non-folding parser |
 | alloca in a non-zero address space (the C-API builder cannot produce them) | detected |
 | alloca in address space 0 under a datalayout with a non-zero alloca space (the C-API builder always uses the `A` default) | detected (sniffed from the datalayout string) |
 | alignments of 2^32, LLVM's maximum (LLVMGetAlignment truncates to 0; the attribute is omitted) | detected textually by the corpus harness (the C API cannot see it) |

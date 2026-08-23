@@ -1,5 +1,5 @@
 ;;; Coverage exclusions ledger (see project/coverage-plan.md).
-;;; Every oracle entry that (llscheme ll) does not implement MUST be listed
+;;; Every oracle entry that (sll) does not implement MUST be listed
 ;;; here with a reason; tests/test-coverage.ss enforces that
 ;;; observed + excluded = oracle, with no overlap and no stale entries.
 ;;; Format: (axis enum-entry-name "reason")

@@ -1,7 +1,7 @@
-;;; @fact, live: an ll program (plain data!) compiled in memory and called.
+;;; @fact, live: an sll program (plain data!) compiled in memory and called.
 ;;; Run with: scheme --libdirs . --script examples/fact.ss
 (import (chezscheme)
-        (prefix (llscheme ll) ll:)
+        (prefix (sll) sll:)
         (prefix (llvm jit) jit:))
 
 (define fact-prog
@@ -17,10 +17,10 @@
         (= %r (mul i64 %n %f))
         (ret i64 %r)))))
 
-(printf "=== the ll program, transliterated to LLVM IR ===~%~a~%"
-        (ll:dump fact-prog))
+(printf "=== the sll program, transliterated to LLVM IR ===~%~a~%"
+        (sll:dump fact-prog))
 
-(define fact (jit:function (ll:jit fact-prog) "fact"))
+(define fact (jit:function (sll:jit fact-prog) "fact"))
 
 (printf "=== calling the JIT'd code ===~%")
 (do ([i 0 (+ i 1)])

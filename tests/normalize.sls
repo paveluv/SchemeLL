@@ -1,5 +1,5 @@
-;;; (tests normalize) -- strip constructs ll does not model from a parsed
-;;; module, so the corpus round-trip measures what ll DOES model on files
+;;; (tests normalize) -- strip constructs sll does not model from a parsed
+;;; module, so the corpus round-trip measures what sll DOES model on files
 ;;; that also use what it doesn't (see project/coverage-plan.md, level 3).
 ;;; Every strip below corresponds to a row in project/not-modeled.md;
 ;;; modeling a construct later means deleting its strip here, at which

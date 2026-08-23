@@ -1,6 +1,6 @@
-# Design proposal: (llscheme ll) — LLVM IR as s-expressions
+# Design proposal: (sll) — LLVM IR as s-expressions
 
-Status: first slice IMPLEMENTED in `llscheme/ll.sls` (2026-08-21); this
+Status: first slice IMPLEMENTED in `sll.sls` (2026-08-21); this
 document is the grammar reference. Instruction flags supported since
 2026-08-22 (nsw/nuw/exact/disjoint/nneg/volatile, fast-math flags,
 getelementptr inbounds/nusw/nuw) — written in IR position between opcode
@@ -59,7 +59,7 @@ Corpus-driven additions (2026-08-22, step 6b): function linkage --
 same optional keyword-operand slot as globals; zero-incoming phis
 (legal parse-level IR in dead blocks); and the anonymity rule: all-digit
 `%names` (`%0`, `%42`) are positional/anonymous, exactly as in textual
-IR where digits are slot numbers, not names -- ll:build binds them in
+IR where digits are slot numbers, not names -- sll:build binds them in
 its environment but leaves the LLVM value unnamed, so LLVM's own
 printer reproduces the numbering (a value explicitly named "0" via the
 API would print as `%"0"` and is not expressible).
@@ -73,13 +73,13 @@ positions (created before bodies are filled, so mutual recursion works);
 (>64-bit go through decimal text); aggregate and string constants as
 instruction operands; `poison` shuffle-mask lanes.
 
-First layer of the llscheme DSL tower:
+First layer of the SchemeLL DSL tower:
 a notation for LLVM IR that is ordinary Scheme data/syntax, sitting directly
 on top of (llvm ir).
 
 ## The design principle (REVIEWED and DECIDED 2026-08-22)
 
-**An ll program is Scheme data that mirrors LLVM's *semantic structure*,
+**An sll program is Scheme data that mirrors LLVM's *semantic structure*,
 spelled with LLVM's *vocabulary*.**
 
 1. **Prefix-only grammar.** Every composite form is a list whose *head*
@@ -87,7 +87,7 @@ spelled with LLVM's *vocabulary*.**
    constructor, `asm`, `personality`, ...). Grammar words never appear at
    any other position. (Empirically verified: nanopass `define-language`
    productions cannot contain mid-pattern literal symbols — only head
-   keywords and meta-variables — so this rule is what keeps ll definable
+   keywords and meta-variables — so this rule is what keeps sll definable
    as a nanopass language.)
 2. **After the head, everything is an operand**: a name (`%x`, `@f`), a
    literal, a **keyword operand** (an enum-like word: `slt`, `seq_cst`,
@@ -97,7 +97,7 @@ spelled with LLVM's *vocabulary*.**
    them as terminals.
 3. **LLVM's vocabulary, LLVM's order.** Opcode names, flag names,
    predicate names, type names, and operand order match textual IR, so
-   the LangRef doubles as ll documentation.
+   the LangRef doubles as sll documentation.
 4. **Textual fidelity is a tiebreaker, not a goal.** Where IR's concrete
    syntax conflicts with rules 1–2 — infix markers (`to`, `within`,
    `from`, `unwind`), dual spellings (`entry:` vs `%entry`), bracket
@@ -111,7 +111,7 @@ words are operands.* `zext` is structure; `seq_cst` is semantics.
 
 ## The transliteration rules
 
-Under the principle, IR converts to ll with a fixed, reversible set of
+Under the principle, IR converts to sll with a fixed, reversible set of
 rewrites, and `clang -S -emit-llvm` output still transliterates line by
 line:
 
@@ -127,7 +127,7 @@ line:
    group is the entry block. Two deliberate deviations from the textual
    form, both DECIDED:
    - Uniform `%` spelling (2026-08-21): IR spells a block name two ways
-     (`x:` at definition, `%x` at reference), ll spells it one way. Blocks
+     (`x:` at definition, `%x` at reference), sll spells it one way. Blocks
      are function-local values in LLVM's `%` namespace (unnamed blocks even
      share the auto-numbering counter with instruction results), and
      one-name-one-symbol means the interpreter, nanopass layers emitting
@@ -138,7 +138,7 @@ line:
      one indent level left of instructions), make blocks the natural splice
      unit for generators, and enable structural checks — instruction
      outside a block, empty block, block not ending in a terminator, and
-     no nested blocks are all errors ll raises itself.
+     no nested blocks are all errors sll raises itself.
 5. phi's `[ 0, %entry ]` becomes `[0 %entry]` (Chez reads brackets as parens).
    Note: scheme-format normalizes brackets in quoted data to parens, so in
    committed sources phi pairs appear as `(0 %entry)`; both read the same.
@@ -165,7 +165,7 @@ line:
 
 Examples of the rule at work:
 
-| LLVM IR | ll |
+| LLVM IR | sll |
 |---|---|
 | `%sum = add i32 %a, %b` | `(= %sum (add i32 %a %b))` |
 | `%ok = icmp ne i32 %goal, 0` | `(= %ok (icmp ne i32 %goal 0))` |
@@ -186,7 +186,7 @@ Function definitions follow IR word order (`define <ret> @name(<args>)`):
 (declare i32 (@puts ptr))
 ```
 
-`define`/`declare` here are ll grammar words inside an ll form, not Scheme's —
+`define`/`declare` here are sll grammar words inside an sll form, not Scheme's —
 see "Macros" below for why that never collides.
 
 ## A complete function, side by side
@@ -211,7 +211,7 @@ indent level left of their instructions.
 
 ## Branching: flat with labels (the proposal)
 
-Between "flat with label instructions" and "nested structure", ll should be
+Between "flat with label instructions" and "nested structure", sll should be
 **flat**:
 
 - It preserves the transliteration property and the assembly-like reading.
@@ -231,7 +231,7 @@ Block rules:
   an error. The first group is the entry block (conventionally `%entry`).
 - Labels may be referenced before their group appears (forward branches,
   phi incoming) — building creates all blocks in a prepass.
-- ll itself checks: instruction outside a block, empty block, block not
+- sll itself checks: instruction outside a block, empty block, block not
   ending in `ret`/`br` (grows with the terminator set), nested blocks,
   duplicate labels and `%` names (SSA). LLVM's verifier backstops the rest.
 
@@ -239,9 +239,9 @@ Block rules:
 
 - `%name` = local SSA value, `@name` = global (function, later global var).
 - Bare integer/flonum literals are typed by the instruction's type token
-  (`(add i64 %n 1)` → `ConstInt(i64, 1)`); where IR would annotate, ll
+  (`(add i64 %n 1)` → `ConstInt(i64, 1)`); where IR would annotate, sll
   annotates: `(i64 1)`.
-- Escape hatch for metaprogramming: inside quasiquoted ll data, `,expr`
+- Escape hatch for metaprogramming: inside quasiquoted sll data, `,expr`
   splices a computed fragment — an operand, an instruction, a whole block
   list. A raw (llvm ir) value/type pointer is accepted wherever an operand/
   type may appear.
@@ -250,8 +250,8 @@ Block rules:
 
 Three possible embeddings were considered:
 
-**(a) Data interpreter (the core, build first).** An ll program is a list.
-`(ll:build ctx name prog)` walks it against an opcode table and produces an
+**(a) Data interpreter (the core, build first).** An sll program is a list.
+`(sll:build ctx name prog)` walks it against an opcode table and produces an
 (llvm ir) module:
 
 - pass 1 per function: create the function and a basic block per
@@ -267,8 +267,8 @@ lists, so "use the full power of Scheme to generate IR" is quasiquote —
 no new metaprogramming machinery. This is also the natural target for the
 nanopass layer (nanopass languages are s-expression data).
 
-**(b) A thin shell macro over (a).** `(ll:module "fact" (define ...))` is
-essentially `(ll:build ctx "fact" `(...))` with auto-quasiquotation. A few
+**(b) A thin shell macro over (a).** `(sll:module "fact" (define ...))` is
+essentially `(sll:build ctx "fact" `(...))` with auto-quasiquotation. A few
 lines of syntax-rules; gives literal-embedding convenience and keeps ONE
 semantics (the interpreter's).
 
@@ -285,9 +285,9 @@ only if compile-time name checking proves valuable in practice.
 **What it should NOT be: a set of top-level per-opcode macros.** Defining
 `store`, `add`, `=`, `define` as global Scheme macros would shadow and
 collide (`=` and `define` catastrophically so) and buys nothing: opcode
-forms only ever occur *inside* an ll shell form, which walks its own body,
+forms only ever occur *inside* an sll shell form, which walks its own body,
 so opcodes remain unbound symbols in Scheme — zero namespace pollution.
-"ll as define-syntax" therefore means one or two shell macros, not a macro
+"sll as define-syntax" therefore means one or two shell macros, not a macro
 per instruction.
 
 Recommendation: implement (a) then (b); leave (c) as a documented option.
@@ -295,13 +295,13 @@ Recommendation: implement (a) then (b); leave (c) as a documented option.
 ## Library and API sketch
 
 ```scheme
-(import (prefix (llscheme ll) ll:))
+(import (prefix (sll) sll:))
 
 (define prog
   '((define i64 (@fact (i64 %n))
       ...)))
 
-(define mod (ll:build ctx "fact" prog))   ; → (llvm ir) module record
+(define mod (sll:build ctx "fact" prog))   ; → (llvm ir) module record
 ```
 
 plus a jit convenience (build + add-module! + context handling) so the
@@ -316,5 +316,5 @@ alloca/load/store/gep, casts, select.
 - Anonymous values (`%1`-style auto-naming) — probably "no, name things".
 - Module-level items beyond functions: globals, struct type definitions
   (`(type %pair (struct i32 i32))`), attributes — add as needed.
-- Verifier-grade error messages (block fell through, name redefined) in ll
+- Verifier-grade error messages (block fell through, name redefined) in sll
   itself vs delegating to ir:verify-module.

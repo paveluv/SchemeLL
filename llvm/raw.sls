@@ -100,7 +100,7 @@
     TargetMachineEmitToFile TargetMachineEmitToMemoryBuffer
     CreateTargetDataLayout CopyStringRepOfTargetData DisposeTargetData
     GetBufferStart GetBufferSize DisposeMemoryBuffer
-    ;; generic value/type inspection (read-only; used by ll:unbuild)
+    ;; generic value/type inspection (read-only; used by sll:unbuild)
     GetOperand GetNumOperands GetNumArgOperands
     IsAInstruction IsAArgument IsAFunction IsAGlobalVariable IsAGlobalAlias
     DeleteFunction GetFirstUse
@@ -141,7 +141,7 @@
     AliasSetAliasee
     GetFirstGlobalIFunc GetFirstNamedMetadata
     GetModuleInlineAsm GetTarget GetDataLayoutStr
-    ;; normalization (stripping constructs ll does not model)
+    ;; normalization (stripping constructs sll does not model)
     StripModuleDebugInfo
     InstructionGetAllMetadataOtherThanDebugLoc
     ValueMetadataEntriesGetKind DisposeValueMetadataEntries
@@ -625,7 +625,7 @@
   (define DisposeMemoryBuffer
     (foreign-procedure "LLVMDisposeMemoryBuffer" (void*) void))
 
-  ;; --- generic value/type inspection (read-only; used by ll:unbuild) --------
+  ;; --- generic value/type inspection (read-only; used by sll:unbuild) --------
   (define-syntax define-getter          ; (name "LLVMName" (types) ret)
     (syntax-rules ()
       [(_ name c-name (t ...) r)
@@ -752,7 +752,7 @@
   (define-getter GetTarget "LLVMGetTarget" (void*) void*)
   (define-getter GetDataLayoutStr "LLVMGetDataLayoutStr" (void*) void*)
 
-  ;; normalization (stripping constructs ll does not model)
+  ;; normalization (stripping constructs sll does not model)
   (define-getter StripModuleDebugInfo "LLVMStripModuleDebugInfo" (void*) int)
   (define-getter InstructionGetAllMetadataOtherThanDebugLoc
     "LLVMInstructionGetAllMetadataOtherThanDebugLoc" (void* void*) void*)

@@ -17,7 +17,7 @@ Newest entries first. Format: date, Done / Decided / Next.
   block/instruction iteration, opcode/predicate getters.
 - Score: opcodes 42+25=67/67, icmp 10/10, fcmp 16/16.
 
-- Switched ll to grouped block form (DECIDED, replaces flat labels):
+- Switched sll to grouped block form (DECIDED, replaces flat labels):
   `(label %name insn ... terminator)`, first group = entry block, no `_`
   shorthand (one-name-one-symbol ruling). New structural errors:
   instruction outside a block, empty block, missing terminator, nested
@@ -60,13 +60,13 @@ Newest entries first. Format: date, Done / Decided / Next.
   proven through the JIT.
 
 - Naming DECIDED (working code name): the future structured nanopass layer
-  is "medl" — (llscheme medl), prefix medl:. MEDium Language, pronounced
+  is "medl" — (SchemeLL medl), prefix medl:. MEDium Language, pronounced
   like "medal"; only known collision is an obscure academic MEDL (MaC
-  runtime verification, ~2000). ll keeps its name (the .ll resonance).
+  runtime verification, ~2000). sll keeps its name (the .ll resonance).
   Rejected along the way: lol/mel (2026-08-22 discussion), M (MUMPS,
   Power Query), lowl/midl (MIDL = Microsoft IDL).
 
-- Grammar migration DECIDED + done: the ll design principle is now
+- Grammar migration DECIDED + done: the sll design principle is now
   formalized (prefix-only grammar; operands are names/literals/keyword
   operands/typed groups/nested forms; LLVM vocabulary and order; textual
   fidelity as tiebreaker; one name one symbol). All mid-form grammar words
@@ -95,9 +95,9 @@ Newest entries first. Format: date, Done / Decided / Next.
   function — LLVM's printer emits non-dominance block orders, so the
   corpus needs this). 145 checks.
 
-- Step 6a done: ll:unbuild — the inverse of ll:build, named per review
-  (LLVM parses, we unbuild). New library (llscheme ll unbuild),
-  re-exported by (llscheme ll); ~95 read-only getter bindings added to
+- Step 6a done: sll:unbuild — the inverse of sll:build, named per review
+  (LLVM parses, we unbuild). New library (sll unbuild),
+  re-exported by (sll); ~95 read-only getter bindings added to
   (llvm raw) (layering note in RULES: raw getters are safe for read-only
   walks). Unnamed values get their LLVM printer slot numbers, so rebuilt
   modules print byte-identically. All 24 golden entries round-trip
@@ -139,13 +139,13 @@ Newest entries first. Format: date, Done / Decided / Next.
   API's only construction path is IRBuilder with ConstantFolder
   hardwired (template-parameter policy, inexpressible in a C ABI), so
   strict text1==text2 is impossible for all-constant instructions.
-  Second chance: (ll:unbuild m 'tolerate-builder-folds) + stability
+  Second chance: (sll:unbuild m 'tolerate-builder-folds) + stability
   check over our own print. Corpus: 28024 strict + 1826 modulo-folding
   = 29850 verified (81.8%). Escape hatches ranked for the residue:
   textual ll->IR backend parsed by LLVM (zero-glue, exact; roadmapped),
   upstream C API patch, C shim (rejected: breaks zero-glue).
 
-- (llscheme ll render): ll->textual-IR printer in pure Scheme (no LLVM
+- (sll render): sll->llual-IR printer in pure Scheme (no LLVM
   calls). Purpose: constructing modules through LLVM's parser instead
   of the folding C-API builder, making the STRICT corpus comparison
   possible for all-constant/no-op-cast files -- 2254 files upgraded
@@ -285,7 +285,7 @@ Newest entries first. Format: date, Done / Decided / Next.
   trick), `size_t`/`unsigned-64` arg types.
 
 ### Decided
-- Library prefixes: `(llvm ...)` for bindings, `(llscheme ...)` reserved for the DSL.
+- Library prefixes: `(llvm ...)` for bindings, `(SchemeLL ...)` reserved for the DSL.
 - Layer-0 names = exact C names; opaque refs = raw integer addresses; only owning
   handles get records (see RULES.md ownership section).
 - Pin LLVM 19; isolate version knowledge in `config.sls`/`raw.sls`.
@@ -302,13 +302,13 @@ Newest entries first. Format: date, Done / Decided / Next.
   enforced by `project/hooks/pre-commit` (`git config core.hooksPath
   project/hooks`, once per clone). `make format` formats everything.
 
-- Wrote the design proposal for the first DSL layer: `project/ll-design.md`
-  ((llscheme ll), LLVM IR as s-expressions). Key calls: mechanical
+- Wrote the design proposal for the first DSL layer: `project/sll-design.md`
+  ((sll), LLVM IR as s-expressions). Key calls: mechanical
   transliteration from textual IR, flat control flow with `(label %x)`
   instructions, data-interpreter core + thin quasiquoting macro (not
   per-opcode macros). Awaiting review before implementation.
 
-- Implemented `(llscheme ll)` per the design doc: data interpreter with
+- Implemented `(sll)` per the design doc: data interpreter with
   module/function two-pass build (forward calls, forward labels), phi fixups,
   align attributes, `build`/`jit`/`dump` entry points. @fact runs live.
   Added `LLVMSetAlignment`/`LLVMSetValueName2`/`LLVMBuildFRem` down-stack.

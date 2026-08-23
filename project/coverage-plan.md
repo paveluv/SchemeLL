@@ -1,4 +1,4 @@
-# Plan: verifiable 100% IR coverage for (llscheme ll)
+# Plan: verifiable 100% IR coverage for (sll)
 
 Status: Levels 1+2 IMPLEMENTED (2026-08-22): `tests/test-coverage.ss` +
 `tests/oracle.sls` (enum extraction from installed headers) +
@@ -16,7 +16,7 @@ handling — the opcode axis is COMPLETE at 65 implemented + UserOp1/2
 permanently excluded = 67/67. Step 5.5 done 2026-08-22 (pre-corpus
 blockers): varargs, tail markers (tail-call-kind axis 4/4), alloca
 counts, non-phi forward references. Step 6a done 2026-08-22:
-ll:unbuild implemented and self-tested — all 24 golden entries
+sll:unbuild implemented and self-tested — all 24 golden entries
 round-trip parse -> unbuild -> build -> byte-identical print; strict
 `not modeled` errors per project/not-modeled.md, with six
 strictness tests. Step 6b harness DONE
@@ -30,7 +30,7 @@ nsw/nuw, uitofp nneg, atomicrmw/cmpxchg alignment). The MISMATCH
 bucket is diagnosed and defeated: 2762 -> 25 files (0.07%), probe tool
 in tests/probe-mismatch.ss. RENDER TIER (2026-08-22): files the
 C-API builder's constant folding excludes from the strict comparison
-get a STRICT second chance through (llscheme ll render) -- ll->text in
+get a STRICT second chance through (sll render) -- sll->sll in
 pure Scheme, constructed via LLVMParseIRInContext (LLVM's parser uses
 the direct instruction constructors and never folds), so the original
 text1 == text2 comparison applies unchanged. A fixpoint check
@@ -88,7 +88,7 @@ suite and run on every `make test`.
 ## Level 1 — enumeration tests (the ledger)
 
 A coverage test extracts each enum from the installed headers at test time
-and checks it against ll's tables plus the exclusion file:
+and checks it against sll's tables plus the exclusion file:
 
 - fails if an oracle entry is neither implemented nor excluded (we missed
   something, or a new LLVM version added an instruction);
@@ -99,23 +99,23 @@ and checks it against ll's tables plus the exclusion file:
 
 Two mechanisms make "implemented" mean "actually works":
 
-1. **Opcode observation.** After building every ll test program, walk all
+1. **Opcode observation.** After building every sll test program, walk all
    instructions with `LLVMGetInstructionOpcode` and collect the set of
    opcodes actually emitted. Assert: observed = implemented. A handler with
    no test exercising it fails the suite — coverage is measured on emitted
    IR, not trusted from a table. Same for type kinds and predicates.
 2. **Round-trip goldens.** Bind IRReader. Each construct gets a golden pair
-   (ll snippet, expected textual IR); assert
-   `print(build(ll)) == print(parse(expected))`. Both sides pass through
+   (sll snippet, expected textual IR); assert
+   `print(build(sll)) == print(parse(expected))`. Both sides pass through
    LLVM's canonical printer, so the string comparison is exact and
    formatting-proof. This checks the transliteration table in both
    directions using LLVM itself as the referee.
 
 ## Level 3 — corpus round-trip (the endgame)
 
-Implement `ll:unbuild` (named for what it is: the inverse of ll:build;
+Implement `sll:unbuild` (named for what it is: the inverse of sll:build;
 LLVM parses, we unbuild): walk any LLVM module (e.g. one parsed from
-disk) via the C API and emit ll data. Then for `.ll` files from LLVM's own
+disk) via the C API and emit sll data. Then for `.ll` files from LLVM's own
 regression corpus (`reference/llvm-project/llvm/test/`, clone command in
 RULES.md):
 
@@ -127,8 +127,8 @@ The corpus pass-rate is an *external* coverage metric over thousands of
 real-world IR files — it catches grammar gaps we didn't imagine, not just
 missing opcodes. 100% = every corpus file either round-trips byte-identically
 or matches a documented exclusion (debug metadata, inline asm, ...).
-Unbuilding also gives IR→ll transliteration for free (paste clang output,
-get ll back).
+Unbuilding also gives IR→sll transliteration for free (paste clang output,
+get sll back).
 
 ## Gap-closing order (current known gaps)
 
@@ -142,7 +142,7 @@ get ll back).
    the type grammar, aliases.
 5. Exception handling (invoke/landingpad/resume/catch*/cleanup*) — likely
    the initial exclusion list, implemented last.
-6. `ll:unbuild` + corpus harness (`make coverage`).
+6. `sll:unbuild` + corpus harness (`make coverage`).
 
 Separate axis, same method: (llvm raw) completeness vs the 1267 exported
 C symbols — eventually via the header-driven binding generator; tracked by

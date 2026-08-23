@@ -1,11 +1,11 @@
-;;; Compare module-construction paths for the same ll program:
-;;;   A: ll:build            (C-API IRBuilder, folding)
+;;; Compare module-construction paths for the same sll program:
+;;;   A: sll:build            (C-API IRBuilder, folding)
 ;;;   B: render + parse      (pure-Scheme text + LLVMParseIRInContext)
 ;;; Usage: scheme --libdirs . --script tests/bench-build.ss FILE.ll ...
 (import (chezscheme)
         (prefix (llvm ir) ir:)
-        (prefix (llscheme ll) ll:)
-        (prefix (llscheme ll render) render:)
+        (prefix (sll) sll:)
+        (prefix (sll render) render:)
         (prefix (tests normalize) n:))
 
 (define iterations 20)
@@ -24,8 +24,8 @@
            [m (let ([m (ir:parse-ir ctx path text)])
                 (n:normalize-module! m)
                 m)]
-           [prog (ll:unbuild m 'ignore-named-metadata 'tolerate-builder-folds)]
-           [rendered (render:ll->text prog)]
+           [prog (sll:unbuild m 'ignore-named-metadata 'tolerate-builder-folds)]
+           [rendered (render:sll->sll prog)]
            [insns (let count ([items prog] [n 0])
                     (if (null? items)
                         n
@@ -41,15 +41,15 @@
                                         0)))))])
       ;; warm-up both paths once
       (let ([c (ir:make-context)])
-        (ir:module-dispose! (ll:build c "w" prog))
+        (ir:module-dispose! (sll:build c "w" prog))
         (ir:module-dispose! (ir:parse-ir c "w" rendered))
         (ir:context-dispose! c))
       (let ([t-build (time-ms
                        (lambda ()
                          (let ([c (ir:make-context)])
-                           (ir:module-dispose! (ll:build c "b" prog))
+                           (ir:module-dispose! (sll:build c "b" prog))
                            (ir:context-dispose! c))))]
-            [t-render (time-ms (lambda () (render:ll->text prog)))]
+            [t-render (time-ms (lambda () (render:sll->sll prog)))]
             [t-parse (time-ms
                        (lambda ()
                          (let ([c (ir:make-context)])

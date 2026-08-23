@@ -1,8 +1,8 @@
-;;; (llscheme ll) -- LLVM IR as s-expressions: the first llscheme layer.
-;;; Grammar and rationale: project/ll-design.md. Import as:
-;;;   (prefix (llscheme ll) ll:)
+;;; (sll) -- LLVM IR as s-expressions: the first SchemeLL layer.
+;;; Grammar and rationale: project/sll-design.md. Import as:
+;;;   (prefix (sll) sll:)
 ;;;
-;;; An ll program is plain data -- a list of module items:
+;;; An sll program is plain data -- a list of module items:
 ;;;   (define <type> (@name (<type> %arg) ...) <block> ...)
 ;;;   (declare <type> (@name <type> ...))
 ;;; A function body is a list of block groups, mirroring LLVM's object
@@ -18,16 +18,16 @@
 ;;; phi incoming may reference blocks defined later. phi is the only
 ;;; permitted forward reference to a *value*; everything else must be
 ;;; defined textually before use.
-(library (llscheme ll)
+(library (sll)
   (export build jit dump unbuild)
   (import (chezscheme)
           (prefix (llvm base) base:)
           (prefix (llvm ir) ir:)
           (prefix (llvm jit) jit:)
-          (llscheme ll unbuild))
+          (sll unbuild))
 
   (define (ll-error msg . irritants)
-    (apply base:error 'll:build msg irritants))
+    (apply base:error 'sll:build msg irritants))
 
   ;; ---- names ---------------------------------------------------------------
 
@@ -44,7 +44,7 @@
       (substring s 1 (string-length s))))
 
   ;; All-digit names (%0, %42) are positional/anonymous, as in textual IR
-  ;; where digits are slot numbers, not names: ll binds them in its own
+  ;; where digits are slot numbers, not names: sll binds them in its own
   ;; environment but leaves the LLVM value unnamed, so LLVM's printer
   ;; reproduces the numbering itself.
   (define (anonymous-name? s)
@@ -270,7 +270,7 @@
                 [scratch (or (fstate-scratch st)
                              (let ([sb (ir:append-block (fstate-ctx st)
                                                         (fstate-fn st)
-                                                        "llscheme.fwd")])
+                                                        "sll.fwd")])
                                (fstate-scratch-set! st sb)
                                sb))])
             (ir:position-at-end! b scratch)
@@ -1273,7 +1273,7 @@
 
   ;; ---- entry points --------------------------------------------------------------------------
 
-  ;; Build an ll program (a list of module items) into a fresh (llvm ir)
+  ;; Build an sll program (a list of module items) into a fresh (llvm ir)
   ;; module in the given context.
   ;; (= @a (alias linkage? value-type (ptr aliasee))). Two phases so
   ;; that (a) aliases print in program order (LLVM prints creation
@@ -1334,7 +1334,7 @@
   ;; (jit:function j "name").
   (define (jit prog)
     (let* ([jc (jit:make-context)]
-           [m (build (jit:context-ir jc) "ll" prog)]
+           [m (build (jit:context-ir jc) "sll" prog)]
            [j (jit:make)])
       (ir:verify-module m)
       (jit:add-module! j jc m)
@@ -1344,7 +1344,7 @@
   ;; Build a program and return its textual LLVM IR (for humans).
   (define (dump prog)
     (let* ([ctx (ir:make-context)]
-           [m (build ctx "ll" prog)]
+           [m (build ctx "sll" prog)]
            [s (ir:module->string m)])
       (ir:module-dispose! m)
       (ir:context-dispose! ctx)

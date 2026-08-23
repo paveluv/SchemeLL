@@ -5,21 +5,21 @@
 ;;; For every .ll file under the directory (default: LLVM's own regression
 ;;; corpus in reference/llvm-project/llvm/test):
 ;;;
-;;;   parse -> normalize (strip what ll does not model, (tests normalize))
+;;;   parse -> normalize (strip what sll does not model, (tests normalize))
 ;;;         -> A := canonical print
-;;;         -> ll:unbuild -> ll:build -> B := canonical print
+;;;         -> sll:unbuild -> sll:build -> B := canonical print
 ;;;   PASS iff A == B.
 ;;;
 ;;; Buckets: PASS; parse-fail (LLVM's own parser rejects -- many corpus
 ;;; files are intentionally invalid or fragments); not modeled: <construct>
-;;; (ll:unbuild's strict errors classify the file); MISMATCH and build-fail
+;;; (sll:unbuild's strict errors classify the file); MISMATCH and build-fail
 ;;; (bugs in our layer -- the burn-down list). Sorted counts at the end;
 ;;; mismatch/build-fail paths are written to tests/tmp/corpus-failures.txt.
 (import (chezscheme)
         (prefix (llvm ir) ir:)
-        (prefix (llscheme ll) ll:)
+        (prefix (sll) sll:)
         (prefix (tests normalize) n:)
-        (prefix (llscheme ll render) render:))
+        (prefix (sll render) render:))
 
 (define root
   (let ([args (cdr (command-line))])
@@ -74,22 +74,22 @@
       [(eq? who 'ir:parse-ir) "parse-fail (LLVM rejects the file)"]
       [(after-marker msg "not-modeled.md): ") =>
        (lambda (what) (string-append "not modeled: " what))]
-      [(eq? who 'll:build)
+      [(eq? who 'sll:build)
        (string-append "BUG build-fail: " msg)]
       [else (string-append "BUG error: " msg)])))
 
 ;; ---- the round trip -----------------------------------------------------------
 
 ;; first chance for files the builder's constant folding excludes from
-;; the strict comparison: render the ll program to text in pure Scheme
+;; the strict comparison: render the sll program to text in pure Scheme
 ;; and construct through LLVM's parser, which never folds -- this makes
 ;; the ORIGINAL strict comparison possible again (a is the comparable
 ;; parse-side text)
 (define (render-strict? m a)
   (guard (e [#t #f])
-    (let* ([prog (ll:unbuild m 'ignore-named-metadata 'tolerate-builder-folds)]
+    (let* ([prog (sll:unbuild m 'ignore-named-metadata 'tolerate-builder-folds)]
            [ctx2 (ir:make-context)]
-           [m2 (ir:parse-ir ctx2 "rendered" (render:ll->text prog))])
+           [m2 (ir:parse-ir ctx2 "rendered" (render:sll->sll prog))])
       (n:normalize-module! m2)
       (let ([b (n:comparable-ir (ir:module->string m2))])
         (ir:module-dispose! m2)
@@ -103,17 +103,17 @@
 ;; when the strict one cannot apply.
 (define (fold-fixpoint? m rctx)
   (guard (e [#t #f])
-    (let* ([prog (ll:unbuild m 'ignore-named-metadata 'tolerate-builder-folds)]
-           [m2 (ll:build rctx "fx1" prog)])
+    (let* ([prog (sll:unbuild m 'ignore-named-metadata 'tolerate-builder-folds)]
+           [m2 (sll:build rctx "fx1" prog)])
       (n:normalize-module! m2)
       (let* ([text2 (ir:module->string m2)]
              [b (n:comparable-ir text2)]
              [ctx3 (ir:make-context)] [rctx3 (ir:make-context)]
              [m3 (ir:parse-ir ctx3 "fx" text2)])
         (n:normalize-module! m3)
-        (let* ([prog2 (ll:unbuild m3 'ignore-named-metadata
-                                  'tolerate-builder-folds)]
-               [m4 (ll:build rctx3 "fx2" prog2)])
+        (let* ([prog2 (sll:unbuild m3 'ignore-named-metadata
+                                   'tolerate-builder-folds)]
+               [m4 (sll:build rctx3 "fx2" prog2)])
           (n:normalize-module! m4)
           (let ([b2 (n:comparable-ir (ir:module->string m4))])
             (ir:module-dispose! m4)
@@ -140,7 +140,7 @@
 (define (bench-render+parse! path prog build-dt)
   (guard (e [#t (set! bench-failed (cons path bench-failed))])
     (let* ([t0 (now-ns)]
-           [text (render:ll->text prog)]
+           [text (render:sll->sll prog)]
            [t1 (now-ns)]
            [ctx (ir:make-context)]
            [m (ir:parse-ir ctx "bench" text)]
@@ -188,10 +188,10 @@
            (set! m (ir:parse-ir ctx path text))
            (n:normalize-module! m)
            (let ([a (n:comparable-ir (ir:module->string m))])
-             (let* ([prog (ll:unbuild m 'ignore-named-metadata)]
+             (let* ([prog (sll:unbuild m 'ignore-named-metadata)]
                     [t0 (now-ns)]
                     [build-dt (begin
-                                (set! m2 (ll:build rctx "corpus" prog))
+                                (set! m2 (sll:build rctx "corpus" prog))
                                 (- (now-ns) t0))])
                ;; normalize the rebuild too: LLVM auto-attaches intrinsic
                ;; attributes to declarations it recognizes

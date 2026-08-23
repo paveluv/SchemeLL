@@ -1,4 +1,4 @@
-# llscheme
+# SchemeLL
 
 LLVM bindings for Chez Scheme, plus (eventually) a Scheme-embedded,
 statically-typed DSL compiled through LLVM (working name: medl).
@@ -13,12 +13,12 @@ What works today:
   derived automatically from the function's LLVM type. No files touched.
 - **`(llvm target)`** — object file / assembly emission, to disk or to a
   bytevector; new-pass-manager optimization via `run-module-passes!`.
-- **`(llscheme ll)`** — LLVM IR as s-expressions: textual IR transliterated
-  into plain Scheme data (see `project/ll-design.md`), interpreted into real
+- **`(sll)`** — LLVM IR as s-expressions: textual IR transliterated
+  into plain Scheme data (see `project/sll-design.md`), interpreted into real
   IR. Since programs are lists, quasiquote is the metaprogramming layer.
 
 ```scheme
-(import (prefix (llscheme ll) ll:) (prefix (llvm jit) jit:))
+(import (prefix (sll) sll:) (prefix (llvm jit) jit:))
 
 (define fact-prog
   '((define i64 (@fact (i64 %n))
@@ -33,9 +33,9 @@ What works today:
         (= %r (mul i64 %n %f))
         (ret i64 %r)))))
 
-(define fact (jit:function (ll:jit fact-prog) "fact"))
+(define fact (jit:function (sll:jit fact-prog) "fact"))
 (fact 20)                ; => 2432902008176640000
-(display (ll:dump fact-prog))   ; the same program as textual LLVM IR
+(display (sll:dump fact-prog))   ; the same program as textual LLVM IR
 ```
 
 ```scheme

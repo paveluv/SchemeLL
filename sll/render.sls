@@ -1,4 +1,4 @@
-;;; (llscheme ll render) -- render an ll program to textual LLVM IR,
+;;; (sll render) -- render an sll program to textual LLVM IR,
 ;;; in pure Scheme (no LLVM involved). The output is not canonical --
 ;;; it only needs to PARSE; LLVM's printer canonicalizes both sides of
 ;;; any comparison.
@@ -10,13 +10,13 @@
 ;;;
 ;;; Caveat: all-digit %N names render explicitly (`%0 =`, `0:`), which
 ;;; the parser accepts only when the numbering matches its slot counter
-;;; -- true by construction for ll:unbuild output, the intended input.
-(library (llscheme ll render)
-  (export ll->text)
+;;; -- true by construction for sll:unbuild output, the intended input.
+(library (sll render)
+  (export sll->sll)
   (import (chezscheme))
 
   (define (r-error msg . irritants)
-    (apply error 'render:ll->text msg irritants))
+    (apply error 'render:sll->sll msg irritants))
 
   ;; single-allocation join: the naive string-append fold is quadratic,
   ;; which shows on multi-thousand-instruction modules
@@ -117,7 +117,7 @@
 
   ;; ---- constants and operands -----------------------------------------------------
 
-  ;; fp constants render bit-exactly in IR's hex forms. ll carries them
+  ;; fp constants render bit-exactly in IR's hex forms. sll carries them
   ;; as Scheme flonums (unbuild guarantees exact double representability
   ;; and rejects non-double NaNs), so the target-type bits are derivable:
   ;; half/bfloat/float/double use the plain 16-hex double form (the
@@ -271,7 +271,7 @@
   (define casts
     '(trunc zext sext fptoui fptosi uitofp sitofp fptrunc fpext
        ptrtoint inttoptr bitcast addrspacecast))
-  (define flag-words   ; leading modifiers an ll instruction may carry
+  (define flag-words   ; leading modifiers an sll instruction may carry
     '(nsw nuw exact disjoint nneg volatile atomic weak inbounds nusw
        tail musttail notail
        reassoc nnan ninf nsz arcp contract afn fast))
@@ -657,7 +657,7 @@
   (define (target-item? item)
     (and (pair? item) (memq (car item) '(datalayout triple))))
 
-  (define (ll->text prog0)
+  (define (sll->sll prog0)
     ;; the parser rejects `target` lines after any other entity
     (let ([prog (append (filter target-item? prog0)
                         (filter (lambda (i) (not (target-item? i))) prog0))]

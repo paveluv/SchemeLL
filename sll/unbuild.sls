@@ -1,8 +1,8 @@
-;;; (llscheme ll unbuild) -- the inverse of ll:build: walk an in-memory
+;;; (sll unbuild) -- the inverse of sll:build: walk an in-memory
 ;;; LLVM module (typically one produced by LLVM's own parser) and emit the
-;;; ll program that rebuilds it. Re-exported by (llscheme ll) as ll:unbuild.
+;;; sll program that rebuilds it. Re-exported by (sll) as sll:unbuild.
 ;;;
-;;; Strictness: everything ll does not model raises a `not modeled` error
+;;; Strictness: everything sll does not model raises a `not modeled` error
 ;;; naming the construct -- see project/not-modeled.md for the complete
 ;;; ledger (including constructs this walker cannot even detect). Nothing
 ;;; is ever silently dropped.
@@ -15,7 +15,7 @@
 ;;; Layering note (see project/RULES.md): this library reads through
 ;;; (llvm raw) getters directly -- they are read-only walks over borrowed
 ;;; pointers, with none of the ownership hazards (llvm ir) exists to fence.
-(library (llscheme ll unbuild)
+(library (sll unbuild)
   (export unbuild)
   (import (chezscheme)
           (prefix (llvm base) base:)
@@ -23,7 +23,7 @@
           (prefix (llvm ir) ir:))
 
   (define (u-error msg . irritants)
-    (apply base:error 'll:unbuild msg irritants))
+    (apply base:error 'sll:unbuild msg irritants))
 
   (define (not-modeled what . irritants)
     (apply u-error
@@ -219,7 +219,7 @@
         (foreign-free out)
         (values d lost))))
 
-  ;; aggregate constants are only expressible in ll where per-element-typed
+  ;; aggregate constants are only expressible in sll where per-element-typed
   ;; groups are accepted (global initializers, landingpad clauses)
   (define (constant-form st c allow-aggregate?)
     (let ([ty (LLVMTypeOf c)])
@@ -538,7 +538,7 @@
 
   (define (application st ins)
     (let ([n (LLVMGetNumArgOperands ins)])
-      ;; the callee slot carries no type annotation in ll, so callees
+      ;; the callee slot carries no type annotation in sll, so callees
       ;; whose value NEEDS one (null/undef/poison) lose a non-zero
       ;; address space; named callees carry their own type and are fine
       (let ([cv (LLVMGetCalledValue ins)])
@@ -898,7 +898,7 @@
            ,@(let ([as (LLVMGetPointerAddressSpace (LLVMTypeOf g))])
                (if (zero? as) '() `((addrspace ,as))))
            ;; external is the default and stays implicit -- except on
-           ;; declarations, where ll (like IR) spells it out
+           ;; declarations, where sll (like IR) spells it out
            ,@(if (zero? lk)
                  (if (base:null-ptr? init) '(external) '())
                  (list (enum-name linkage-names lk "linkage")))
@@ -996,7 +996,7 @@
                          pending)
                     acc))))))
 
-  ;; module record -> ll program. opts: 'ignore-named-metadata makes the
+  ;; module record -> sll program. opts: 'ignore-named-metadata makes the
   ;; walk tolerate named module metadata WITHOUT representing it (the
   ;; corpus harness strips it from the comparison; plain unbuild stays
   ;; strict so the tool never silently loses it).

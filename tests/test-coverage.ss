@@ -13,8 +13,8 @@
         (prefix (tests oracle) o:)
         (prefix (tests normalize) n:)
         (prefix (llvm ir) ir:)
-        (prefix (llscheme ll) ll:)
-        (prefix (llscheme ll render) render:))
+        (prefix (sll) sll:)
+        (prefix (sll render) render:))
 
 ;; ---- the oracle and the ledger ------------------------------------------
 
@@ -131,7 +131,7 @@
   (let* ([bctx (ir:make-context)]
          [pctx (ir:make-context)]
          [rctx (ir:make-context)]
-         [built (ll:build bctx name prog)]
+         [built (sll:build bctx name prog)]
          [parsed (ir:parse-ir pctx name golden)]
          [built-text (ir-body (ir:module->string built))]
          [golden-text (ir-body (ir:module->string parsed))])
@@ -142,10 +142,10 @@
               name built-text golden-text))
     (t:check (string-append "golden round-trip: " name)
              (string=? built-text golden-text))
-    ;; unbuild self-test: parse the golden, unbuild it back to ll data,
+    ;; unbuild self-test: parse the golden, unbuild it back to sll data,
     ;; rebuild, and demand the same canonical print
-    (let* ([prog (ll:unbuild parsed)]
-           [rebuilt (ll:build rctx (string-append name "-u") prog)]
+    (let* ([prog (sll:unbuild parsed)]
+           [rebuilt (sll:build rctx (string-append name "-u") prog)]
            [rebuilt-text (ir-body (ir:module->string rebuilt))])
       (unless (string=? rebuilt-text golden-text)
         (printf "~%--- unbuilt+rebuilt (~a) ---~%~a--- golden ---~%~a---~%"
@@ -153,10 +153,10 @@
       (t:check (string-append "unbuild round-trip: " name)
                (string=? rebuilt-text golden-text))
       (ir:module-dispose! rebuilt)
-      ;; render self-test: the same ll data rendered to text in pure
+      ;; render self-test: the same sll data rendered to text in pure
       ;; Scheme and re-parsed by LLVM must print identically
       (let* ([xctx (ir:make-context)]
-             [reparsed (ir:parse-ir xctx name (render:ll->text prog))]
+             [reparsed (ir:parse-ir xctx name (render:sll->sll prog))]
              [reparsed-text (ir-body (ir:module->string reparsed))])
         (unless (string=? reparsed-text golden-text)
           (printf "~%--- rendered+reparsed (~a) ---~%~a--- golden ---~%~a---~%"
@@ -942,7 +942,7 @@ compute:
 (t:section "coverage: unbuild strictness (not-modeled detection)")
 
 (define (unbuild-of-ir text)
-  (ll:unbuild (ir:parse-ir ctx "strict" text)))
+  (sll:unbuild (ir:parse-ir ctx "strict" text)))
 
 (t:check-exn "unbuild rejects function attributes"
              (unbuild-of-ir "define void @f() nounwind {\nentry:\n  ret void\n}"))
@@ -970,15 +970,15 @@ compute:
          [parsed (ir:parse-ir pctx name golden)])
     (n:normalize-module! parsed)
     (let* ([a (n:comparable-ir (ir:module->string parsed))]
-           [prog (ll:unbuild parsed)]
-           [rebuilt (ll:build rctx name prog)])
+           [prog (sll:unbuild parsed)]
+           [rebuilt (sll:build rctx name prog)])
       (n:normalize-module! rebuilt)
       (let ([b (n:comparable-ir (ir:module->string rebuilt))])
         (unless (string=? a b)
           (printf "~%--- rebuilt (~a) ---~%~a--- golden ---~%~a---~%" name b a))
         (t:check (string-append "normalized round-trip: " name)
                  (string=? a b)))
-      (let* ([reparsed (ir:parse-ir xctx name (render:ll->text prog))])
+      (let* ([reparsed (ir:parse-ir xctx name (render:sll->sll prog))])
         (n:normalize-module! reparsed)
         (let ([b (n:comparable-ir (ir:module->string reparsed))])
           (unless (string=? a b)

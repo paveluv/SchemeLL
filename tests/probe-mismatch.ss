@@ -4,7 +4,7 @@
 ;;; Pipe through `sort | uniq -c | sort -rn` for the histogram.
 (import (chezscheme)
         (prefix (llvm ir) ir:)
-        (prefix (llscheme ll) ll:)
+        (prefix (sll) sll:)
         (prefix (tests normalize) n:))
 
 (define failures-file
@@ -64,8 +64,8 @@
            [m (ir:parse-ir ctx path (call-with-input-file path get-string-all))])
       (n:normalize-module! m)
       (let* ([a (n:comparable-ir (ir:module->string m))]
-             [prog (ll:unbuild m 'ignore-named-metadata)]
-             [m2 (ll:build rctx "c" prog)])
+             [prog (sll:unbuild m 'ignore-named-metadata)]
+             [m2 (sll:build rctx "c" prog)])
         (n:normalize-module! m2)
         (let ([b (n:comparable-ir (ir:module->string m2))])
           (cond

@@ -1,8 +1,19 @@
 # Project rules and procedures
 
+## Terminology
+
+- **ll** refers to LLVM IR itself -- the textual language in `.ll`
+  files and the in-memory modules.
+- **sll** ("Scheme's Low Level") refers to its Scheme counterpart: the
+  s-expression representation defined by `(sll)` and
+  `project/sll-design.md`. `sll:build` interprets sll into IR;
+  `sll:unbuild` reads IR back into sll; `(sll render)`'s `sll->ll`
+  prints sll as textual ll without LLVM's help.
+- The project name is **SchemeLL**.
+
 ## What this project is
 
-`llscheme` — LLVM bindings for Chez Scheme, in four layers:
+`SchemeLL` — LLVM bindings for Chez Scheme, in four layers:
 
 | Layer | Library | Contents |
 |-------|---------|----------|
@@ -12,8 +23,8 @@
 | 1 | `(llvm ir)` | Safe handles (context/module/builder records with ownership state), IR construction. |
 | 1/2 | `(llvm target)` | Native target init, target machines, object/assembly emission. |
 | 2 | `(llvm jit)` | ORC LLJIT: compile modules in memory, look up functions as ready-to-call Scheme procedures. |
-| 3 | `(llscheme ll)` | LLVM IR as s-expressions (`project/ll-design.md`): data interpreter over an opcode table; `build`/`jit`/`dump`/`unbuild`. `(llscheme ll unbuild)` is its internal inverse-walker; it reads through `(llvm raw)` getters directly — read-only walks over borrowed pointers carry none of the ownership hazards `(llvm ir)` fences. Everything unbuild cannot represent is ledgered in `project/not-modeled.md`. |
-| 4 | `(llscheme medl)` | (future) nanopass-based structured DSL, compiling down to ll. Working code name DECIDED 2026-08-22: "medl" (MEDium Language, pronounced like "medal"); essentially collision-free. |
+| 3 | `(sll)` | LLVM IR as s-expressions (`project/sll-design.md`): data interpreter over an opcode table; `build`/`jit`/`dump`/`unbuild`. `(sll unbuild)` is its internal inverse-walker; it reads through `(llvm raw)` getters directly — read-only walks over borrowed pointers carry none of the ownership hazards `(llvm ir)` fences. Everything unbuild cannot represent is ledgered in `project/not-modeled.md`. |
+| 4 | `(SchemeLL medl)` | (future) nanopass-based structured DSL, compiling down to ll. Working code name DECIDED 2026-08-22: "medl" (MEDium Language, pronounced like "medal"); essentially collision-free. |
 
 ## Naming and namespaces
 
@@ -22,7 +33,7 @@
   job, via R6RS `prefix` imports.
 - ALL imports of project libraries are prefixed, everywhere (libraries, tests,
   examples, docs), with these canonical prefixes:
-  `config:` `base:` `ir:` `target:` `jit:` `ll:` `medl:` (future) `t:`
+  `config:` `base:` `ir:` `target:` `jit:` `sll:` `medl:` (future) `t:`
   (tests harness), and
   `(prefix (llvm raw) LLVM)` — no colon, so layer-0 call sites reconstruct the
   exact C names (`LLVMBuildAdd`) and read side by side with the headers.
