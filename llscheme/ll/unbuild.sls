@@ -144,6 +144,7 @@
        `(scalable-vector ,(LLVMGetVectorSize ty)
                          ,(unbuild-type (LLVMGetElementType ty)))]
       [(metadata) 'metadata]
+      [(token) 'token]
       [else (not-modeled (string-append "type kind: " (symbol->string (ir:type-kind ty))))]))
 
   (define (struct-fields ty)
@@ -482,6 +483,26 @@
 
   ;; ---- instructions ------------------------------------------------------------------
 
+  ;; the A<n> component of a datalayout string (default alloca space)
+  (define (dl-alloca-addrspace dl)
+    (if (not dl)
+        0
+        (let ([n (string-length dl)])
+          (let loop ([i 0])
+            (cond
+              [(>= i n) 0]
+              [(and (char=? (string-ref dl i) #\A)
+                    (or (zero? i) (char=? (string-ref dl (- i 1)) #\-))
+                    (< (+ i 1) n)
+                    (char-numeric? (string-ref dl (+ i 1))))
+               (let scan ([j (+ i 1)] [v 0])
+                 (if (and (< j n) (char-numeric? (string-ref dl j)))
+                     (scan (+ j 1)
+                           (+ (* v 10)
+                              (- (char->integer (string-ref dl j)) 48)))
+                     v))]
+              [else (loop (+ i 1))])))))
+
   (define (block-label st bb) `(label ,(local-name st bb)))
 
   (define (successor st ins i)
@@ -492,10 +513,31 @@
         (unbuild-type fnty)
         (unbuild-type (ir:type-return-type fnty))))
 
+  ;; (bundle "tag" (type arg) ...) forms from a call site; each read
+  ;; bundle ref is a fresh object the reader must dispose
+  (define (bundle-forms st ins)
+    (let ([nb (LLVMGetNumOperandBundles ins)])
+      (let loop ([i 0])
+        (if (fx= i nb)
+            '()
+            (let* ([bref (LLVMGetOperandBundleAtIndex ins i)]
+                   [tag (let-values ([(p len)
+                                      (base:call-with-out-ptr
+                                        (lambda (out)
+                                          (LLVMGetOperandBundleTag bref out)))])
+                          (base:cstring->string/len p len))]
+                   [na (LLVMGetNumOperandBundleArgs bref)]
+                   [bargs (let aloop ([j 0])
+                            (if (fx= j na)
+                                '()
+                                (cons (group st (LLVMGetOperandBundleArgAtIndex
+                                                  bref j))
+                                      (aloop (fx+ j 1)))))])
+              (LLVMDisposeOperandBundle bref)
+              (cons `(bundle ,tag ,@bargs) (loop (fx+ i 1))))))))
+
   (define (application st ins)
     (let ([n (LLVMGetNumArgOperands ins)])
-      (when (nz? (LLVMGetNumOperandBundles ins))
-        (not-modeled "operand bundles"))
       ;; the callee slot carries no type annotation in ll, so callees
       ;; whose value NEEDS one (null/undef/poison) lose a non-zero
       ;; address space; named callees carry their own type and are fine
@@ -612,13 +654,17 @@
                        [else '(notail)])
                    ,@(fmf-flags ins)
                    ,(call-type-slot (LLVMGetCalledFunctionType ins))
-                   ,(application st ins))]
+                   ,(application st ins)
+                   ,@(bundle-forms st ins))]
            [(invoke)
             `(invoke ,(call-type-slot (LLVMGetCalledFunctionType ins))
                      ,(application st ins)
+                     ,@(bundle-forms st ins)
                      ,(block-label st (LLVMGetNormalDest ins))
                      ,(block-label st (LLVMGetUnwindDest ins)))]
            [(callbr)
+            (when (nz? (LLVMGetNumOperandBundles ins))
+              (not-modeled "operand bundles on callbr"))
             `(callbr ,(call-type-slot (LLVMGetCalledFunctionType ins))
                      ,(application st ins)
                      ,(successor st ins 0)
@@ -629,6 +675,14 @@
            [(alloca)
             (unless (zero? (LLVMGetPointerAddressSpace ty))
               (not-modeled "alloca in a non-zero address space"))
+            ;; the C-API builder always allocates in the datalayout's
+            ;; alloca space (A); an AS0 alloca under a non-zero A default
+            ;; cannot be built
+            (let ([dl (base:cstring->string
+                        (LLVMGetDataLayoutStr
+                          (LLVMGetGlobalParent (ustate-fnptr st))))])
+              (unless (zero? (dl-alloca-addrspace dl))
+                (not-modeled "alloca in address space 0 under a datalayout with a non-zero alloca space")))
             `(alloca ,(unbuild-type (LLVMGetAllocatedType ins))
                      ,@(let ([count (op0)])
                          ;; the printer elides only an i32-typed constant 1
@@ -780,6 +834,10 @@
                        f (if (= i -1) 4294967295 i)))
         (not-modeled "function/return/parameter attributes"))))
 
+  (define (gc-attr f)
+    (let ([s (ir:gc-name f)])
+      (if (and s (not (string=? s ""))) `((gc ,s)) '())))
+
   (define (unbuild-function gnames f)
     (let* ([fnty (ir:function-type-of f)]
            [params (ir:function-params f)]
@@ -794,7 +852,8 @@
                     ,(unbuild-type (ir:type-return-type fnty))
                     (,gname ,@(map unbuild-type (ir:type-param-types fnty))
                             ,@variadic)
-                    ,@(align-attr f))
+                    ,@(align-attr f)
+                    ,@(gc-attr f))
           (let ([st (make-ustate (function-names f) gnames f)])
             `(define ,@lk-part
                ,(unbuild-type (ir:type-return-type fnty))
@@ -805,6 +864,7 @@
                         params)
                  ,@variadic)
                ,@(align-attr f)
+               ,@(gc-attr f)
                ;; the personality is any ptr constant: @fn, null, undef
                ,@(if (nz? (LLVMHasPersonalityFn f))
                      `((personality
@@ -850,12 +910,16 @@
 
   ;; ---- the module ------------------------------------------------------------------------
 
+  (define (module-target-items m)
+    (let ([mp (ir:module-live-ptr m)])
+      (append
+        (let ([d (base:cstring->string (LLVMGetDataLayoutStr mp))])
+          (if (and d (not (string=? d ""))) `((datalayout ,d)) '()))
+        (let ([t (base:cstring->string (LLVMGetTarget mp))])
+          (if (and t (not (string=? t ""))) `((triple ,t)) '())))))
+
   (define (check-module-decorations m ignore-named-metadata?)
     (let ([mp (ir:module-live-ptr m)])
-      (let ([t (base:cstring->string (LLVMGetTarget mp))])
-        (when (and t (not (string=? t ""))) (not-modeled "target triple")))
-      (let ([d (base:cstring->string (LLVMGetDataLayoutStr mp))])
-        (when (and d (not (string=? d ""))) (not-modeled "target datalayout")))
       (unless (base:null-ptr? (LLVMGetFirstGlobalIFunc mp))
         (not-modeled "ifuncs"))
       (unless (or ignore-named-metadata?
@@ -950,4 +1014,6 @@
                       (ir:module-aliases m))
                  (map (lambda (f) (unbuild-function gnames f))
                       (ir:module-functions m)))])
-          (append (type-items) items))))))
+          ;; target strings first: the parser rejects `target` lines
+          ;; after any other top-level entity
+          (append (module-target-items m) (type-items) items))))))

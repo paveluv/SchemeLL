@@ -91,6 +91,7 @@
          [(ppc_fp128) (ir:ppcfp128-type ctx)]
          [(void) (ir:void-type ctx)]
          [(metadata) (ir:metadata-type ctx)]
+         [(token) (ir:token-type ctx)]
          [else
           (if (local-name? t)
               ;; %name: a named struct type from a (type %name ...) item
@@ -180,6 +181,20 @@
         [else
          (ll-error "expected (md \"string\") or (md (element ...))" form)])))
 
+  ;; call-site operand bundles: (bundle "tag" (type arg) ...)
+  (define (bundle-form? x) (and (pair? x) (eq? (car x) 'bundle)))
+  (define (resolve-bundle st bf)
+    (unless (and (bundle-form? bf) (>= (length bf) 2) (string? (cadr bf)))
+      (ll-error "expected (bundle \"tag\" (type arg) ...)" bf))
+    (ir:create-operand-bundle
+      (cadr bf)
+      (map (lambda (g)
+             (unless (and (pair? g) (= (length g) 2))
+               (ll-error "bundle arguments are (type value) groups" g bf))
+             (resolve-operand st (resolve-type (fstate-ctx st) (car g))
+                              (cadr g)))
+           (cddr bf))))
+
   ;; ty types bare literals; #f when the position carries no type of its own
   ;; (then literals must come as a (type value) group).
   (define (resolve-operand st ty form)
@@ -214,8 +229,9 @@
        (ir:block-address
          (hashtable-ref (fstate-globals st) (cadr form) #f)
          (block-by-name st (caddr form)))]
-      [(memq form '(null zeroinitializer))
-       (unless ty (ll-error "null/zeroinitializer needs a type annotation" form))
+      [(memq form '(null zeroinitializer none))
+       (unless ty (ll-error "null/zeroinitializer/none needs a type annotation"
+                            form))
        (ir:const-null ty)]
       [(and (integer? form) (exact? form))
        (unless ty (ll-error "integer literal needs a type annotation" form))
@@ -598,9 +614,8 @@
                                          (fstate-phis st)))
                   ph)]
                [(call)
-                ;; (call type (callee (type arg) ...)) -- callee grouped with
-                ;; its arguments, as in IR's own @f(args)
-                (arity 2 "(call type (callee (type arg) ...))")
+                ;; (call type (callee (type arg) ...) (bundle "tag" ...) ...)
+                (arity>= 2 "(call type (callee (type arg) ...) bundles...)")
                 (let ([app (cadr args)])
                   (unless (pair? app)
                     (ll-error "call expects an application group (callee args...)"
@@ -611,27 +626,52 @@
                     (when (and (eq? (ir:type-kind retty) 'void)
                             (not (string=? name "")))
                       (ll-error "cannot bind the result of a void call" form))
-                    (ir:build-call b fnty (resolve-callee st fnty (car app))
-                                   avals name)))]
+                    (if (null? (cddr args))
+                        (ir:build-call b fnty
+                                       (resolve-callee st fnty (car app))
+                                       avals name)
+                        (let ([brefs (map (lambda (bf) (resolve-bundle st bf))
+                                          (cddr args))])
+                          (let ([v (ir:build-call-bundles
+                                     b fnty (resolve-callee st fnty (car app))
+                                     avals brefs name)])
+                            (for-each ir:dispose-operand-bundle! brefs)
+                            v)))))]
                [(invoke)
-                ;; (invoke type (callee args...) (label %ok) (label %pad))
-                (arity 4 "(invoke type (callee args...) (label %ok) (label %pad))")
-                (let ([app (cadr args)])
+                ;; (invoke type (callee args...) bundles... (label %ok) (label %pad))
+                (arity>= 4 "(invoke type (callee args...) bundles... (label %ok) (label %pad))")
+                (let* ([app (cadr args)]
+                       [bundles (filter bundle-form? (cddr args))]
+                       [labels (filter (lambda (x) (not (bundle-form? x)))
+                                       (cddr args))])
                   (unless (pair? app)
                     (ll-error "invoke expects an application group (callee args...)"
                               form))
+                  (unless (= (length labels) 2)
+                    (ll-error "invoke expects (label %ok) (label %pad)" form))
                   (let-values ([(fnty retty avals)
                                 (callsite-signature st ctx (car args)
                                                     (cdr app) form)])
                     (when (and (eq? (ir:type-kind retty) 'void)
                             (not (string=? name "")))
                       (ll-error "cannot bind the result of a void invoke" form))
-                    (ir:build-invoke b fnty
-                                     (resolve-callee st fnty (car app))
+                    (if (null? bundles)
+                        (ir:build-invoke b fnty
+                                         (resolve-callee st fnty (car app))
+                                         avals
+                                         (block-ref st (car labels))
+                                         (block-ref st (cadr labels))
+                                         name)
+                        (let ([brefs (map (lambda (bf) (resolve-bundle st bf))
+                                          bundles)])
+                          (let ([v (ir:build-invoke-bundles
+                                     b fnty (resolve-callee st fnty (car app))
                                      avals
-                                     (block-ref st (caddr args))
-                                     (block-ref st (cadddr args))
-                                     name)))]
+                                     (block-ref st (car labels))
+                                     (block-ref st (cadr labels))
+                                     brefs name)])
+                            (for-each ir:dispose-operand-bundle! brefs)
+                            v)))))]
                [(callbr)
                 ;; (callbr type ((asm ...) args...)
                 ;;         (label %fallthrough) ((label %indirect) ...))
@@ -1050,8 +1090,9 @@
   ;; ---- module items ---------------------------------------------------------------------
 
   (define (item-kind item)
-    (unless (and (pair? item) (memq (car item) '(define declare = type)))
-      (ll-error "unknown module item (expected define, declare, type or (= @name ...))"
+    (unless (and (pair? item)
+                 (memq (car item) '(define declare = type datalayout triple)))
+      (ll-error "unknown module item (expected define, declare, type, datalayout, triple or (= @name ...))"
                 item))
     (car item))
 
@@ -1110,19 +1151,18 @@
 
   (define (declare-item! ctx m globals item)
     (let ([kind (item-kind item)])
-      (if (or (eq? kind 'type) (alias-item? item))
+      (if (or (memq kind '(type datalayout triple)) (alias-item? item))
           (void)   ; types have their own passes; aliases come after
         (if (eq? kind '=)
           (let-values ([(name lk constant? ty-form init attrs as)
                         (parse-global item)])
             (when (hashtable-ref globals name #f)
               (ll-error "duplicate global name" name))
+            ;; explicit address space always: LLVMAddGlobal would use the
+            ;; datalayout's default-globals space (G) instead of 0
             (hashtable-set! globals name
-                            (if as
-                                (ir:add-global m (resolve-type ctx ty-form)
-                                               (llvm-name name) as)
-                                (ir:add-global m (resolve-type ctx ty-form)
-                                               (llvm-name name)))))
+                            (ir:add-global m (resolve-type ctx ty-form)
+                                           (llvm-name name) (or as 0))))
           (declare-function! ctx m globals item kind)))))
 
   (define (declare-function! ctx m globals item kind)
@@ -1141,14 +1181,25 @@
           (let ([f (ir:add-function m (llvm-name fname)
                                     (ir:function-type retty ptys variadic?))])
             (when lk (ir:set-linkage! f lk))
-            ;; optional (align N) right after the signature
-            (when (and (pair? body) (pair? (car body))
-                       (eq? (caar body) 'align))
-              (let ([a (car body)])
-                (unless (and (= (length a) 2) (fixnum? (cadr a))
-                             (positive? (cadr a)))
-                  (ll-error "expected (align bytes)" a fname))
-                (ir:set-alignment! f (cadr a))))
+            ;; optional decorations after the signature, in print order:
+            ;; (align N) then (gc "name")
+            (let deco ([b body])
+              (when (and (pair? b) (pair? (car b)))
+                (case (car (car b))
+                  [(align)
+                   (let ([a (car b)])
+                     (unless (and (= (length a) 2) (fixnum? (cadr a))
+                                  (positive? (cadr a)))
+                       (ll-error "expected (align bytes)" a fname))
+                     (ir:set-alignment! f (cadr a)))
+                   (deco (cdr b))]
+                  [(gc)
+                   (let ([g (car b)])
+                     (unless (and (= (length g) 2) (string? (cadr g)))
+                       (ll-error "expected (gc \"name\")" g fname))
+                     (ir:set-gc! f (cadr g)))
+                   (deco (cdr b))]
+                  [else (void)])))
             (hashtable-set! globals fname f))))))
 
   ;; pass 2: set global initializers/linkage; emit the body of each define
@@ -1169,11 +1220,12 @@
     (when (eq? (item-kind item) 'define)
       (let-values ([(retty-form fname params lk full-body0) (item-signature item)])
         (let* ([f (hashtable-ref globals fname #f)]
-               ;; (align N) was applied in the declare pass; skip it here
-               [full-body (if (and (pair? full-body0) (pair? (car full-body0))
-                                   (eq? (caar full-body0) 'align))
-                              (cdr full-body0)
-                              full-body0)]
+               ;; (align N)/(gc "...") were applied in the declare pass
+               [full-body (let skip ([b full-body0])
+                            (if (and (pair? b) (pair? (car b))
+                                     (memq (caar b) '(align gc)))
+                                (skip (cdr b))
+                                b))]
                ;; optional (personality type @fn) before the first block,
                ;; as in `define ... personality ptr @pers {`
                [pers? (and (pair? full-body) (pair? (car full-body))
@@ -1261,6 +1313,15 @@
   (define (build ctx name prog)
     (let ([m (ir:make-module ctx name)]
           [globals (make-eq-hashtable)])
+      ;; target strings first: datalayout drives default alignments the
+      ;; builder bakes into instructions (e.g. alloca)
+      (for-each
+        (lambda (item)
+          (when (pair? item)
+            (case (car item)
+              [(datalayout) (ir:set-data-layout! m (cadr item))]
+              [(triple) (ir:set-target! m (cadr item))])))
+        prog)
       (for-each (lambda (item) (create-type-item! ctx item)) prog)
       (for-each (lambda (item) (fill-type-item! ctx item)) prog)
       (for-each (lambda (item) (declare-item! ctx m globals item)) prog)

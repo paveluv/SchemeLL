@@ -43,6 +43,9 @@
     const-cast const-binop const-gep
     add-alias alias-aliasee alias-set-aliasee! module-aliases
     metadata-type md-string md-node metadata-value
+    set-gc! gc-name set-target! set-data-layout!
+    create-operand-bundle dispose-operand-bundle!
+    build-call-bundles build-invoke-bundles
     packed-struct-type?
     ;; module-level globals
     add-global set-initializer! set-global-constant! set-linkage! linkage
@@ -381,6 +384,41 @@
   (define (struct-name ty)
     (let ([s (base:cstring->string (LLVMGetStructName ty))])
       (and s (not (string=? s "")) s)))
+
+  ;; ---- gc / module target strings ----------------------------------------
+
+  (define (set-gc! f name) (LLVMSetGCString f name))
+  (define (gc-name f) (base:cstring->string (LLVMGetGC f)))
+  (define (set-target! m s) (LLVMSetTarget (module-live-ptr m) s))
+  (define (set-data-layout! m s) (LLVMSetDataLayout (module-live-ptr m) s))
+
+  ;; ---- operand bundles ------------------------------------------------------
+  ;; created, passed to a bundle-aware builder (which copies them into
+  ;; the instruction), then disposed by the caller
+
+  (define (create-operand-bundle tag args)
+    (base:call-with-pointer-array args
+      (lambda (arr n)
+        (LLVMCreateOperandBundle
+          tag (bytevector-length (string->utf8 tag)) arr n))))
+  (define (dispose-operand-bundle! b) (LLVMDisposeOperandBundle b))
+
+  (define (build-call-bundles b fn-type fn args bundles name)
+    (base:call-with-pointer-array args
+      (lambda (aarr an)
+        (base:call-with-pointer-array bundles
+          (lambda (barr bn)
+            (LLVMBuildCallWithOperandBundles
+              (builder-live-ptr b) fn-type fn aarr an barr bn name))))))
+  (define (build-invoke-bundles b fn-type fn args then-block unwind-block
+                                bundles name)
+    (base:call-with-pointer-array args
+      (lambda (aarr an)
+        (base:call-with-pointer-array bundles
+          (lambda (barr bn)
+            (LLVMBuildInvokeWithOperandBundles
+              (builder-live-ptr b) fn-type fn aarr an then-block unwind-block
+              barr bn name))))))
 
   ;; ---- metadata operands --------------------------------------------------
   ;; MetadataRef makers plus the Value wrapper for operand positions

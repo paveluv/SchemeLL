@@ -77,7 +77,6 @@
 
   (define (normalize-function! f)
     (LLVMGlobalClearMetadata f)
-    (LLVMSetGC f base:null-ptr)
     (LLVMSetComdat f base:null-ptr)
     (LLVMSetDLLStorageClass f 0)
     (LLVMSetFunctionCallConv f 0)
@@ -260,9 +259,7 @@
       ;; info (e.g. Verifier/verify-dwarf-no-operands.ll -- a DISubprogram
       ;; with no operands); the leftover metadata then classifies the
       ;; file honestly as unmodeled instruction metadata
-      (guard (e [#t #f]) (LLVMStripModuleDebugInfo mp))
-      (LLVMSetTarget mp "")
-      (LLVMSetDataLayout mp ""))
+      (guard (e [#t #f]) (LLVMStripModuleDebugInfo mp)))
     ;; StripModuleDebugInfo removes the dbg-intrinsic CALLS but leaves
     ;; their declarations behind; the dead stumps would otherwise trip
     ;; on their metadata-typed parameters

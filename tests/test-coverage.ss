@@ -952,8 +952,8 @@ compute:
 (t:check-exn "unbuild rejects unnamed identified struct types"
              (unbuild-of-ir
                "%0 = type { i64, i64 }\ndefine void @f(ptr %p) {\nentry:\n  %v = load %0, ptr %p\n  ret void\n}"))
-(t:check-exn "unbuild rejects target triple"
-             (unbuild-of-ir "target triple = \"x86_64-pc-linux-gnu\"\n"))
+(t:check-exn "unbuild rejects module-level inline asm"
+             (unbuild-of-ir "module asm \"nop\"\n"))
 (t:check-exn "unbuild rejects calling conventions"
              (unbuild-of-ir "define fastcc void @f() {\nentry:\n  ret void\n}"))
 (t:check-exn "unbuild rejects nuw+nsw constexpr binops (no C constructor)"
@@ -992,6 +992,51 @@ compute:
     (ir:context-dispose! pctx)
     (ir:context-dispose! rctx)
     (ir:context-dispose! xctx)))
+
+(check-entry! "gc-bundles"
+  '((datalayout "e-m:e-p:64:64-i64:64-ni:1")
+    (triple "x86_64-unknown-linux-gnu")
+    (declare void (@runtime_call))
+    (define void (@managed (i64 %frame) ((ptr (addrspace 1)) %obj))
+      (gc "statepoint-example")
+      (label %entry
+        (call void (@runtime_call)
+              (bundle "deopt" (i64 %frame) (i32 7))
+              (bundle "gc-live" ((ptr (addrspace 1)) %obj)))
+        (ret void))))
+  "target datalayout = \"e-m:e-p:64:64-i64:64-ni:1\"
+target triple = \"x86_64-unknown-linux-gnu\"
+
+declare void @runtime_call()
+
+define void @managed(i64 %frame, ptr addrspace(1) %obj) gc \"statepoint-example\" {
+entry:
+  call void @runtime_call() [ \"deopt\"(i64 %frame, i32 7), \"gc-live\"(ptr addrspace(1) %obj) ]
+  ret void
+}
+")
+
+(check-normalized-entry! "statepoints"
+  "define ptr addrspace(1) @relocate_obj(ptr addrspace(1) %obj) gc \"statepoint-example\" {
+entry:
+  %tok = call token (i64, i32, ptr, i32, i32, ...) @llvm.experimental.gc.statepoint.p0(i64 0, i32 0, ptr elementtype(void ()) @do_safepoint, i32 0, i32 0) [ \"deopt\"(i32 1), \"gc-live\"(ptr addrspace(1) %obj) ]
+  %obj.r = call ptr addrspace(1) @llvm.experimental.gc.relocate.p1(token %tok, i32 0, i32 0)
+  ret ptr addrspace(1) %obj.r
+}
+
+define i32 @with_result() gc \"statepoint-example\" {
+entry:
+  %tok = call token (i64, i32, ptr, i32, i32, ...) @llvm.experimental.gc.statepoint.p0(i64 0, i32 0, ptr elementtype(i32 ()) @compute, i32 0, i32 0)
+  %r = call i32 @llvm.experimental.gc.result.i32(token %tok)
+  ret i32 %r
+}
+
+declare void @do_safepoint()
+declare i32 @compute()
+declare token @llvm.experimental.gc.statepoint.p0(i64, i32, ptr, i32, i32, ...)
+declare ptr addrspace(1) @llvm.experimental.gc.relocate.p1(token, i32, i32)
+declare i32 @llvm.experimental.gc.result.i32(token)
+")
 
 (check-normalized-entry! "metadata-operands"
   "declare float @llvm.experimental.constrained.fadd.f32(float, float, metadata, metadata)

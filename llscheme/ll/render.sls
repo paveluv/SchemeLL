@@ -311,6 +311,20 @@
                            (map (lambda (g) (group->text env g)) args)
                            (if forward-varargs? '("...") '()))))))
 
+  (define (bundle-form? x) (and (pair? x) (eq? (car x) 'bundle)))
+  (define (bundles->text env bs)
+    (if (null? bs)
+        ""
+        (format " [ ~a ]"
+                (join ", "
+                      (map (lambda (b)
+                             (format "~s(~a)" (cadr b)
+                                     (join ", "
+                                           (map (lambda (g)
+                                                  (group->text env g))
+                                                (cddr b)))))
+                           bs)))))
+
   (define (asm->text a)
     (words "asm"
            (if (memq 'sideeffect (cdddr a)) "sideeffect" "")
@@ -386,17 +400,23 @@
                      (flags-text (filter (lambda (x)
                                            (not (memq x '(tail musttail notail))))
                                          flags))
-                     (app->text env (car args) (cadr args)
-                                (and (memq 'musttail flags)
-                                     (caller-variadic?)
-                                     (pair? (car args))
-                                     (eq? (caar args) 'fn)
-                                     (memq 'variadic (car args))
-                                     #t)))]
+                     (string-append
+                       (app->text env (car args) (cadr args)
+                                  (and (memq 'musttail flags)
+                                       (caller-variadic?)
+                                       (pair? (car args))
+                                       (eq? (caar args) 'fn)
+                                       (memq 'variadic (car args))
+                                       #t))
+                       (bundles->text env (cddr args))))]
              [(invoke)
-              (format "invoke ~a to ~a unwind ~a"
-                      (app->text env (car args) (cadr args) #f)
-                      (label-ref (caddr args)) (label-ref (cadddr args)))]
+              (let ([bs (filter bundle-form? (cddr args))]
+                    [labels (filter (lambda (x) (not (bundle-form? x)))
+                                    (cddr args))])
+                (format "invoke ~a~a to ~a unwind ~a"
+                        (app->text env (car args) (cadr args) #f)
+                        (bundles->text env bs)
+                        (label-ref (car labels)) (label-ref (cadr labels))))]
              [(callbr)
               (format "callbr ~a to ~a [~a]"
                       (app->text env (car args) (cadr args) #f)
@@ -575,14 +595,26 @@
       (if (eq? kind 'declare)
           (words "declare" (if lk (symbol->string lk) "")
                  (type->text ty) (signature->text env sig #f)   ; bare types
-                 (if (and (pair? body) (pair? (car body))
-                          (eq? (caar body) 'align))
-                     (format "align ~a" (cadr (car body)))
-                     ""))
+                 (let deco ([b body] [acc '()])
+                   (if (and (pair? b) (pair? (car b)))
+                       (case (caar b)
+                         [(align) (deco (cdr b)
+                                        (cons (format "align ~a"
+                                                      (cadr (car b)))
+                                              acc))]
+                         [(gc) (deco (cdr b)
+                                     (cons (format "gc ~s" (cadr (car b)))
+                                           acc))]
+                         [else (join " " (reverse acc))])
+                       (join " " (reverse acc)))))
           (let* ([algn (and (pair? body) (pair? (car body))
                             (eq? (caar body) 'align)
                             (car body))]
                  [body (if algn (cdr body) body)]
+                 [gc (and (pair? body) (pair? (car body))
+                          (eq? (caar body) 'gc)
+                          (car body))]
+                 [body (if gc (cdr body) body)]
                  [pers (and (pair? body) (pair? (car body))
                             (eq? (caar body) 'personality)
                             (car body))]
@@ -594,6 +626,7 @@
               (words "define" (if lk (symbol->string lk) "")
                      (type->text ty) (signature->text env sig #t)
                      (if algn (format "align ~a" (cadr algn)) "")
+                     (if gc (format "gc ~s" (cadr gc)) "")
                      (if pers
                          (format "personality ~a ~a"
                                  (type->text (cadr pers))
@@ -621,8 +654,14 @@
 
   ;; ---- entry point ------------------------------------------------------------------------
 
-  (define (ll->text prog)
-    (let ([env (make-eq-hashtable)])
+  (define (target-item? item)
+    (and (pair? item) (memq (car item) '(datalayout triple))))
+
+  (define (ll->text prog0)
+    ;; the parser rejects `target` lines after any other entity
+    (let ([prog (append (filter target-item? prog0)
+                        (filter (lambda (i) (not (target-item? i))) prog0))]
+          [env (make-eq-hashtable)])
       ;; register named struct kinds for aggregate-constant bracket choice
       (for-each
         (lambda (item)
@@ -636,6 +675,10 @@
         (join "\n"
               (map (lambda (item)
                      (case (car item)
+                       [(datalayout)
+                        (format "target datalayout = ~s" (cadr item))]
+                       [(triple)
+                        (format "target triple = ~s" (cadr item))]
                        [(type) (type-item->text item)]
                        [(=) (if (eq? (car (caddr item)) 'alias)
                                 (alias->text env item)

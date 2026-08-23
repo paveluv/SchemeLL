@@ -18,8 +18,6 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 
 | Construct | Detection |
 |---|---|
-| `target triple = "..."` | detected |
-| `target datalayout = "..."` | detected |
 | aliases in non-zero address spaces | detected |
 | `thread_local` aliases (the thread-local accessors unwrap GlobalVariable) | detected (textually, from the printed alias) |
 | ifuncs (`@i = ifunc ...`) | detected |
@@ -39,7 +37,6 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 | `dso_local` | undetected; the corpus harness normalizes it textually (no C API accessor in LLVM 19) |
 | `unnamed_addr` / `local_unnamed_addr` | undetected |
 | DLL storage class (`dllimport`/`dllexport`) | undetected; the corpus normalizer strips it |
-| garbage-collector name (`gc "..."`) | undetected; the corpus normalizer strips it |
 | prefix / prologue data | detected |
 | functions in non-zero program address spaces | detected |
 | intrinsic declarations acquiring auto-upgraded attributes | detected (via the attribute check) |
@@ -63,7 +60,7 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 |---|---|
 | attached metadata (`!dbg`, `!tbaa`, `!prof`, `!range`, ...) | detected |
 | call-site attributes and call-site calling conventions | undetected |
-| operand bundles (`[ "deopt"(...) ]`) | detected |
+| operand bundles on callbr | detected (call and invoke bundles are modeled) |
 | `syncscope("singlethread")` on atomics | detected |
 | calls through null/undef pointer constants in non-zero address spaces (the untyped callee slot cannot carry the addrspace) | detected |
 | named syncscopes (`syncscope("agent")`, ...) | undetected (no C API in LLVM 19); the harness normalizes them textually |
@@ -72,10 +69,10 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 | values explicitly named with digit strings (`%"0"`, `@"0"`; inexpressible under the anonymity rule) | detected (locals and globals) |
 | multi-index extractvalue/insertvalue (chain single-index forms instead) | detected |
 | instructions with all-constant operands (the C-API builder constant-folds them; no non-folding builder exists in the C API) | detected; `'tolerate-builder-folds` opts in, and the corpus render tier verifies such files strictly through `(llscheme ll render)` + LLVM's non-folding parser |
-| alloca in a non-zero address space (datalayout-driven; the C-API builder cannot produce them) | detected |
+| alloca in a non-zero address space (the C-API builder cannot produce them) | detected |
+| alloca in address space 0 under a datalayout with a non-zero alloca space (the C-API builder always uses the `A` default) | detected (sniffed from the datalayout string) |
 | alignments of 2^32, LLVM's maximum (LLVMGetAlignment truncates to 0; the attribute is omitted) | detected textually by the corpus harness (the C API cannot see it) |
 | no-op casts, e.g. `bitcast ptr %x to ptr` (the C-API builder folds them away even on non-constants) | detected; same `'tolerate-builder-folds` / render-tier treatment |
-| token-typed operands | detected (as a type kind) |
 | value-as-metadata operands (`metadata i64 %x`; nearly always debug intrinsics, which the harness strips) | detected |
 | cyclic metadata node operands (`distinct !{!0, ...}` self-references, e.g. noalias scope lists) | detected |
 | distinct metadata operand nodes (no C API to create distinct nodes; rebuilding uniqued would collapse identities, e.g. LowerTypeTests typeids `distinct !{}`) | detected (same content arriving under a second identity) |

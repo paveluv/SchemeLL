@@ -244,11 +244,30 @@ Newest entries first. Format: date, Done / Decided / Next.
   (92.3%), +1682 files, the largest single round since the harness
   was built. Zero bugs, zero mismatches.
 
+- Round 13 (2026-08-23), motivated by the GC-in-medl goal: operand
+  bundles, token type, gc attribute, and target datalayout/triple all
+  MODELED -- the full statepoint chain (gc.statepoint + "deopt"/
+  "gc-live" bundles + gc.relocate/gc.result + tokens + gc
+  "statepoint-example" + ni:1 datalayout) round-trips through build,
+  unbuild, AND render (statepoints golden). Grammar: (bundle "tag"
+  (ty arg)...) after the application on call/invoke; (gc "name")
+  after (align N); (datalayout "...")/(triple "...") module items --
+  which the parser demands BEFORE any other entity (found the hard
+  way: 811 render failures). Un-stripping the datalayout surfaced the
+  A/G default address spaces: LLVMAddGlobal uses the G default, so
+  globals now always pass an explicit space; AS0 allocas under a
+  non-zero A default are inexpressible (builder always uses A) and
+  detected by sniffing the datalayout string. Modeling datalayout
+  also fixed the one permanently render-unrepresentable file (wasm
+  funcref). Corpus: 31595 + 2705 renderer + 2 fixpoint = 34302
+  verified (94.0% of all, 96.2% of parseable); bundle (~334) and
+  token (~293) buckets gone. 219 checks.
+
 ### Next (coverage burn-down, by corpus statistics)
-- Operand bundles (~334), token type kind (~293), residual constexpr
-  kinds (~244), alloca addrspace (~199), unnamed identified structs
-  (~121), all-constant folding residue (~102), NaN payloads (~93),
-  module asm (~74), cross-function blockaddress (~66).
+- Residual constexpr kinds (~246), alloca addrspace (~200), unnamed
+  identified structs (~121), all-constant folding residue (~95), NaN
+  payloads (~93), module asm (~74), cross-function blockaddress (~66),
+  target-ext/x86-mmx/x86-amx type kinds (~140 combined).
 - Smaller leftovers: scalable vectors, raw value injection (the reserved
   (ptr N) shape), constant expressions on demand, address-spaced globals.
 

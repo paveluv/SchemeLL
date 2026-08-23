@@ -132,7 +132,7 @@
     GetInlineAsmDialect GetInlineAsmCanUnwind
     GetBlockAddressFunction GetBlockAddressBasicBlock
     HasPersonalityFn GetPersonalityFn
-    GetInitializer IsGlobalConstant
+    GetInitializer GetGlobalParent IsGlobalConstant
     HasMetadata GetFunctionCallConv GetAttributeCountAtIndex
     GetVisibility IsThreadLocal GetSection
     GetNumOperandBundles IsAtomicSingleThread IsPackedStruct
@@ -161,7 +161,10 @@
     ConstTrunc ConstAdd ConstNSWAdd ConstNUWAdd ConstSub ConstNSWSub
     ConstNUWSub ConstMul ConstNSWMul ConstNUWMul ConstXor
     IsAConstant IsExternallyInitialized HasPrefixData HasPrologueData
-    SetGC
+    SetGC SetGCString GetGC
+    CreateOperandBundle DisposeOperandBundle GetOperandBundleAtIndex
+    GetOperandBundleTag GetNumOperandBundleArgs GetOperandBundleArgAtIndex
+    BuildCallWithOperandBundles BuildInvokeWithOperandBundles
     GetTypeByName2 IsOpaqueStruct IsLiteralStruct ScalableVectorType
     ConstIntOfStringAndSize PrintValueToString AddGlobalInAddressSpace
     SetComdat SetDLLStorageClass ConstNamedStruct
@@ -724,6 +727,7 @@
   (define-getter HasPersonalityFn "LLVMHasPersonalityFn" (void*) int)
   (define-getter GetPersonalityFn "LLVMGetPersonalityFn" (void*) void*)
   (define-getter GetInitializer "LLVMGetInitializer" (void*) void*)
+  (define-getter GetGlobalParent "LLVMGetGlobalParent" (void*) void*)
   (define-getter IsGlobalConstant "LLVMIsGlobalConstant" (void*) int)
   (define-getter HasMetadata "LLVMHasMetadata" (void*) int)
   (define-getter GetFunctionCallConv "LLVMGetFunctionCallConv" (void*) unsigned-int)
@@ -822,6 +826,29 @@
   (define-getter HasPrologueData "LLVMHasPrologueData" (void*) int)
   (define-getter SetGC              ; void* so NULL can clear the gc name
     "LLVMSetGC" (void* void*) void)
+  (define SetGCString
+    (foreign-procedure "LLVMSetGC" (void* string) void))
+  (define-getter GetGC "LLVMGetGC" (void*) void*)
+  (define-getter CreateOperandBundle   ; (tag, tag-len, arg-array, count)
+    "LLVMCreateOperandBundle" (string size_t void* unsigned-int) void*)
+  (define DisposeOperandBundle
+    (foreign-procedure "LLVMDisposeOperandBundle" (void*) void))
+  (define-getter GetOperandBundleAtIndex   ; caller disposes the result
+    "LLVMGetOperandBundleAtIndex" (void* unsigned-int) void*)
+  (define-getter GetOperandBundleTag       ; (bundle, size_t* len-out)
+    "LLVMGetOperandBundleTag" (void* void*) void*)
+  (define-getter GetNumOperandBundleArgs
+    "LLVMGetNumOperandBundleArgs" (void*) unsigned-int)
+  (define-getter GetOperandBundleArgAtIndex
+    "LLVMGetOperandBundleArgAtIndex" (void* unsigned-int) void*)
+  (define BuildCallWithOperandBundles  ; (b, fnty, fn, args, n, bundles, nb, name)
+    (foreign-procedure "LLVMBuildCallWithOperandBundles"
+      (void* void* void* void* unsigned-int void* unsigned-int string) void*))
+  (define BuildInvokeWithOperandBundles
+    (foreign-procedure "LLVMBuildInvokeWithOperandBundles"
+      (void* void* void* void* unsigned-int void* void* void* unsigned-int
+        string)
+      void*))
   (define-getter GetTypeByName2     ; named struct lookup; NULL if absent
     "LLVMGetTypeByName2" (void* string) void*)
   (define-getter IsOpaqueStruct "LLVMIsOpaqueStruct" (void*) int)
