@@ -539,7 +539,8 @@
                      (if pers
                          (format "personality ~a ~a"
                                  (type->text (cadr pers))
-                                 (name->text (caddr pers)))
+                                 (operand->text env (cadr pers)
+                                                (caddr pers)))
                          "")
                      "{")
               "\n"

@@ -155,16 +155,41 @@
                                (string-length l))))
             l))))
 
+  (define (strip-code-model l)  ; remove `, code_model "..."` (no C API)
+    (let ([i (find-sub l ", code_model \"" 0)])
+      (if i
+          (let ([close (find-sub l "\"" (+ i 14))])
+            (if close
+                (string-append (substring l 0 i)
+                               (substring l (+ close 1) (string-length l)))
+                l))
+          l)))
+
+  (define (strip-preds-comment l)  ; `; preds = ...` reflects use-list
+    (let ([i (find-sub l "; preds = " 0)])   ; order, which is not modeled
+      (if i
+          (let rtrim ([j i])
+            (if (and (> j 0) (char=? (string-ref l (- j 1)) #\space))
+                (rtrim (- j 1))
+                (substring l 0 j)))
+          l)))
+
   (define (canonical-line l)
     (strip-global-attr
-      (strip-syncscope
-        (strip-comma-token
-          (strip-comma-token
-            (strip-token (strip-token (strip-token l "dso_local")
-                                      "swifterror")
-                         "inalloca")
-            "no_sanitize_address")
-          "no_sanitize_hwaddress"))))
+      (strip-preds-comment
+        (strip-code-model
+          (strip-syncscope
+            (strip-comma-token
+              (strip-comma-token
+                (strip-comma-token
+                  (strip-comma-token
+                    (strip-token (strip-token (strip-token l "dso_local")
+                                              "swifterror")
+                                 "inalloca")
+                    "no_sanitize_address")
+                  "no_sanitize_hwaddress")
+                "sanitize_address_dyninit")
+              "sanitize_memtag"))))))
 
   ;; printed module -> comparable text: drops module-identity lines,
   ;; ! metadata and $ comdat lines, blank lines; canonicalizes the rest
@@ -190,7 +215,11 @@
   ;; not-modeled buckets and are accounted there.
   (define (normalize-module! m)
     (let ([mp (ir:module-live-ptr m)])
-      (LLVMStripModuleDebugInfo mp)
+      ;; guarded: LLVM crashes stripping intentionally-malformed debug
+      ;; info (e.g. Verifier/verify-dwarf-no-operands.ll -- a DISubprogram
+      ;; with no operands); the leftover metadata then classifies the
+      ;; file honestly as unmodeled instruction metadata
+      (guard (e [#t #f]) (LLVMStripModuleDebugInfo mp))
       (LLVMSetTarget mp "")
       (LLVMSetDataLayout mp ""))
     (for-each normalize-global! (ir:module-globals m))

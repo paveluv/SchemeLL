@@ -165,13 +165,36 @@ Newest entries first. Format: date, Done / Decided / Next.
   beat direct calls. One render-unrepresentable PASS file (wasm
   funcref: callee in addrspace(20) needs the stripped datalayout).
 
+- Round 9 (2026-08-22): every BUG bucket emptied and MISMATCH extinct
+  (0 of 36488). Fixes, each a real defect: zero-length arrays [0 x T]
+  rejected by resolve-type; array lengths are uint64, not fixnums
+  ([2^64-1 x i32] exists); personality can be ANY ptr/int constant
+  (null, undef, i8 7), not just @function; forward references to EH
+  pad tokens -- freeze cannot take tokens, so the placeholder is a
+  parentless cleanuppad in the scratch block (also fixed a latent type
+  confusion: pad forward refs used ptr placeholders that RAUW would
+  reject); zero-destination indirectbr is legal; blockaddress inside
+  vector constants exposed an aggregate-vs-group disambiguation bug
+  ((ptr X) is a type only as (ptr (addrspace N))), and resolve-constant
+  now takes an element-resolver hook so instruction-position aggregates
+  can hold blockaddress; LLVMStripModuleDebugInfo segfaults on
+  malformed debug info (Verifier tests) -- guarded; ppc_fp128
+  losesInfo under-reports -- exactness now verified by print
+  comparison; digit-string GLOBAL names detected (locals already
+  were); calls through null/undef pointer constants in non-zero
+  address spaces detected (named callees carry their type and pass);
+  align 4294967296 (LLVM's max; GetAlignment truncates to 0) detected
+  textually by the harness; code_model and sanitize_memtag /
+  sanitize_address_dyninit normalized textually; `; preds =` comments
+  stripped from the comparison (use-list order is not modeled).
+  New golden entry edge-shapes locks the round in (206 checks).
+  Corpus: 28233 + 2263 renderer + 1 fixpoint = 30497 verified (83.6%).
+
 ### Next (coverage burn-down, by corpus statistics)
-- BUG build-fail: invalid type (152), global has no assigned name (54),
-  untyped forward refs (2), indirectbr shape (1) -- diagnose next.
-- Then: constant expressions (~1.2k), metadata-typed operands (~1.7k),
-  operand bundles (~321), global aliases (~262), fn alignment (~333,
-  modelable), no-op-cast files (~316, C API limitation), unnamed
-  identified structs (~89).
+- Constant expressions (~1.2k files; ConstGEP2 etc. already bound in
+  raw.sls), metadata-typed operands (~1.7k), fn alignment (~334,
+  modelable), operand bundles (~322), global aliases (~262), unnamed
+  identified structs (~89), module asm (~71).
 - Smaller leftovers: scalable vectors, raw value injection (the reserved
   (ptr N) shape), constant expressions on demand, address-spaced globals.
 

@@ -197,14 +197,20 @@
                ;; attributes to declarations it recognizes
                (n:normalize-module! m2)
                (let ([b (n:comparable-ir (ir:module->string m2))])
-                 (if (string=? a b)
-                     (begin
-                       (bucket! "PASS")
-                       (bench-render+parse! path prog build-dt))
-                     (begin
-                       (bucket! "MISMATCH (bug)")
-                       (set! failures
-                         (cons (cons path "MISMATCH") failures))))))))
+                 (cond
+                   [(string=? a b)
+                    (bucket! "PASS")
+                    (bench-render+parse! path prog build-dt)]
+                   ;; LLVM's maximum alignment; LLVMGetAlignment returns
+                   ;; 0 for it, indistinguishable from unset -- only the
+                   ;; parse-side text can witness the loss
+                   [(after-marker a "align 4294967296")
+                    (bucket!
+                      "not modeled: alignment of 2^32 (LLVMGetAlignment truncates it to 0)")]
+                   [else
+                    (bucket! "MISMATCH (bug)")
+                    (set! failures
+                      (cons (cons path "MISMATCH") failures))])))))
          (when m2 (guard (e [#t #f]) (ir:module-dispose! m2)))
          (when m (guard (e [#t #f]) (ir:module-dispose! m)))
          (ir:context-dispose! ctx)

@@ -959,6 +959,61 @@ compute:
              (unbuild-of-ir
                "@g = global i64 0\n@p = global i64 ptrtoint (ptr @g to i64)"))
 
+(check-entry! "edge-shapes"
+  '((= @z (global (array 0 i64) zeroinitializer))
+    (declare void (@ext))
+    (define void (@f (ptr %p))
+      (label %entry
+        (= %v (alloca (vector 2 ptr)))
+        (store ((vector 2 ptr) ((ptr (blockaddress @f %a))
+                                (ptr (blockaddress @f %b))))
+               (ptr %v))
+        (indirectbr (ptr %p) (label %a) (label %b)))
+      (label %a (indirectbr (ptr %p)))
+      (label %b (ret void)))
+    (define void (@g) (personality i8 7)
+      (label %entry
+        (invoke void (@ext) (label %ok) (label %pad)))
+      (label %cleanup
+        (cleanupret %cp caller))
+      (label %pad
+        (= %cp (cleanuppad none ()))
+        (br (label %cleanup)))
+      (label %ok (ret void))))
+  "@z = global [0 x i64] zeroinitializer
+
+declare void @ext()
+
+define void @f(ptr %p) {
+entry:
+  %v = alloca <2 x ptr>, align 16
+  store <2 x ptr> <ptr blockaddress(@f, %a), ptr blockaddress(@f, %b)>, ptr %v, align 16
+  indirectbr ptr %p, [label %a, label %b]
+
+a:                                                ; preds = %entry
+  indirectbr ptr %p, []
+
+b:                                                ; preds = %entry
+  ret void
+}
+
+define void @g() personality i8 7 {
+entry:
+  invoke void @ext()
+          to label %ok unwind label %pad
+
+cleanup:                                          ; preds = %pad
+  cleanupret from %cp unwind to caller
+
+pad:                                              ; preds = %entry
+  %cp = cleanuppad within none []
+  br label %cleanup
+
+ok:                                               ; preds = %entry
+  ret void
+}
+")
+
 (check-entry! "wide-floats"
   '((= @h (global half 2.0))
     (= @bf (global bfloat 2.0))

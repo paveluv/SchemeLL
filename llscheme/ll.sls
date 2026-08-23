@@ -116,8 +116,11 @@
           ;; reserved: (ptr N) in operand position will mean an
           ;; inttoptr'd address constant some day
           (ll-error "expected (ptr (addrspace N))" t)]
+         ;; lengths are uint64 in LLVM ([0 x T] and beyond-fixnum sizes
+         ;; are both legal), so exact integers, not fixnums
          [(and (eq? (car t) 'array) (= (length t) 3)
-               (fixnum? (cadr t)) (positive? (cadr t)))
+               (exact? (cadr t)) (integer? (cadr t))
+               (<= 0 (cadr t)) (< (cadr t) (expt 2 64)))
           (ir:array-type (resolve-type ctx (caddr t)) (cadr t))]
          [(and (eq? (car t) 'vector) (= (length t) 3)
                (fixnum? (cadr t)) (positive? (cadr t)))
@@ -144,7 +147,15 @@
   ;; per-element-typed aggregate constant, e.g. ((i64 1) (i32 2)) -- every
   ;; element a (type value) pair; disambiguated from a single typed operand
   ;; group by the first element's head never being a type constructor
-  (define type-heads '(struct packed-struct array vector scalable-vector fn ptr))
+  ;; heads that make a pair a TYPE form; ptr only as (ptr (addrspace N))
+  ;; -- (ptr X) with any other X is a ptr-typed operand group
+  (define (type-form? h)
+    (and (pair? h)
+         (case (car h)
+           [(struct packed-struct array vector scalable-vector fn) #t]
+           [(ptr) (and (pair? (cdr h)) (pair? (cadr h))
+                       (eq? (car (cadr h)) 'addrspace))]
+           [else #f])))
   (define (aggregate-literal? form)
     (and (pair? form)
          (for-all (lambda (e)
@@ -153,7 +164,7 @@
          (or (not (= (length form) 2))
              (let ([h (car form)])
                (and (pair? h)
-                    (not (memq (car h) type-heads))
+                    (not (type-form? h))
                     (not (local-name? (car h))))))))
 
   ;; ty types bare literals; #f when the position carries no type of its own
@@ -204,7 +215,8 @@
        (resolve-constant (fstate-ctx st) (fstate-globals st) ty form)]
       [(aggregate-literal? form)
        (unless ty (ll-error "aggregate constant needs a type annotation" form))
-       (resolve-constant (fstate-ctx st) (fstate-globals st) ty form)]
+       (resolve-constant (fstate-ctx st) (fstate-globals st) ty form
+                         (lambda (ety ef) (resolve-operand st ety ef)))]
       [(and (pair? form) (pair? (cdr form)) (null? (cddr form)))
        ;; typed operand group: (type value)
        (resolve-operand st (resolve-type (fstate-ctx st) (car form)) (cadr form))]
@@ -224,7 +236,12 @@
                                (fstate-scratch-set! st sb)
                                sb))])
             (ir:position-at-end! b scratch)
-            (let ([ph (ir:build-freeze b (ir:undef-value ty) "")])
+            ;; freeze cannot take a token; a token placeholder is a
+            ;; parentless cleanuppad in the scratch block instead
+            (let ([ph (if (eq? (ir:type-kind ty) 'token)
+                          (ir:build-cleanuppad
+                            b (ir:const-null ty) '() "")
+                          (ir:build-freeze b (ir:undef-value ty) ""))])
               (ir:position-at-end! b cur)
               (hashtable-set! (fstate-pending st) name ph)
               ph)))))
@@ -355,13 +372,12 @@
                       retty (map (lambda (g) (resolve-type ctx (car g))) groups))
                     retty avals)))))
 
-  ;; `within` parent of catchswitch/catchpad/cleanuppad: none | %pad
+  ;; `within` parent of catchswitch/catchpad/cleanuppad: none | %pad;
+  ;; token-typed, so forward references get token placeholders
   (define (parent-pad st ctx form)
     (if (eq? form 'none)
         (ir:const-null (ir:token-type ctx))
-        ;; the callee slot is ptr-typed: lets undef/null callees and
-        ;; forward references through
-        (resolve-operand st (ir:pointer-type (fstate-ctx st)) form)))
+        (resolve-operand st (ir:token-type ctx) form)))
 
   ;; unwind destination: the keyword operand `caller` -> #f, or (label %x)
   (define (unwind-dest st rest form)
@@ -667,13 +683,15 @@
                [(catchret)
                 ;; (catchret %pad (label %next))
                 (arity 2 "(catchret %pad (label %next))")
-                (ir:build-catchret b (resolve-operand st #f (car args))
-                                   (block-ref st (cadr args)))]
+                (ir:build-catchret
+                  b (resolve-operand st (ir:token-type ctx) (car args))
+                  (block-ref st (cadr args)))]
                [(cleanupret)
                 ;; (cleanupret %pad caller|(label %x))
                 (arity 2 "(cleanupret %pad caller|(label %x))")
-                (ir:build-cleanupret b (resolve-operand st #f (car args))
-                                     (unwind-dest st (cdr args) form))]
+                (ir:build-cleanupret
+                  b (resolve-operand st (ir:token-type ctx) (car args))
+                  (unwind-dest st (cdr args) form))]
                [(load)
                 (arity>= 2 "(load type (ptr p) ...)")
                 (let-values ([(ord attrs) (split-ordering (cddr args) form)])
@@ -811,7 +829,8 @@
                     cases)
                   sw)]
                [(indirectbr)
-                (arity>= 2 "(indirectbr (ptr address) (label %l) ...)")
+                ;; zero label destinations is legal (unreachable-like)
+                (arity>= 1 "(indirectbr (ptr address) (label %l) ...)")
                 (let ([ibr (ir:build-indirect-br b
                              (resolve-operand st #f (car args))
                              (length (cdr args)))])
@@ -894,11 +913,18 @@
   ;; initializers: literals, undef/zeroinitializer/null, @globals,
   ;; (c "bytes") / (cz "bytes"), and per-element-typed aggregates
   ;; like ((i64 1) (i32 2)) -- exactly how IR spells them.
-  (define (resolve-constant ctx globals ty form)
+  ;; elem-resolve (optional): resolver for aggregate elements -- the
+  ;; instruction path passes resolve-operand so elements may be
+  ;; blockaddress constants, which need the enclosing function's blocks
+  (define (resolve-constant ctx globals ty form . opt)
+    (define elem-resolve
+      (if (pair? opt)
+          (car opt)
+          (lambda (ety ef) (resolve-constant ctx globals ety ef))))
     (define (constant-group g)
       (unless (and (pair? g) (pair? (cdr g)) (null? (cddr g)))
         (ll-error "aggregate element must be (type constant)" g form))
-      (resolve-constant ctx globals (resolve-type ctx (car g)) (cadr g)))
+      (elem-resolve (resolve-type ctx (car g)) (cadr g)))
     (cond
       [(eq? form 'undef) (ir:undef-value ty)]
       [(eq? form 'poison) (ir:poison-value ty)]
@@ -1072,11 +1098,21 @@
                [builder (ir:make-builder ctx)])
           (when pers?
             (let ([p (car full-body)])
-              (unless (and (= (length p) 3) (global-name? (caddr p)))
-                (ll-error "expected (personality type @function)" p fname))
-              (ir:set-personality-fn! f
-                (or (hashtable-ref globals (caddr p) #f)
-                    (ll-error "unbound personality function" (caddr p))))))
+              (unless (= (length p) 3)
+                (ll-error "expected (personality type value)" p fname))
+              (let ([pty (resolve-type ctx (cadr p))] [pv (caddr p)])
+                (ir:set-personality-fn! f
+                  (cond
+                    [(global-name? pv)
+                     (or (hashtable-ref globals pv #f)
+                         (ll-error "unbound personality function" pv))]
+                    [(eq? pv 'null) (ir:const-null pty)]
+                    [(eq? pv 'undef) (ir:undef-value pty)]
+                    [(eq? pv 'poison) (ir:poison-value pty)]
+                    [(and (integer? pv) (exact? pv)) (ir:const-int pty pv)]
+                    [else (ll-error
+                            "expected (personality type @function|constant)"
+                            p fname)])))))
           (when (null? body)
             (ll-error "function body is empty" fname))
           (let ([st (make-fstate ctx builder globals (make-eq-hashtable)

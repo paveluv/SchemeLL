@@ -53,6 +53,8 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 | visibility | detected |
 | `externally_initialized` | detected |
 | global variable attributes (`@g = global i32 7 #0`) | undetected (no C API); normalized textually |
+| `code_model "small"/"large"` on globals | undetected (no C API in LLVM 19); normalized textually |
+| `sanitize_address_dyninit` / `sanitize_memtag` global sanitizer bits | undetected (no C API); normalized textually |
 | `unnamed_addr`, DLL storage, partitions | undetected; unnamed_addr is normalizer-stripped |
 
 ## Instructions
@@ -63,14 +65,15 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 | call-site attributes and call-site calling conventions | undetected |
 | operand bundles (`[ "deopt"(...) ]`) | detected |
 | `syncscope("singlethread")` on atomics | detected |
+| calls through null/undef pointer constants in non-zero address spaces (the untyped callee slot cannot carry the addrspace) | detected |
 | named syncscopes (`syncscope("agent")`, ...) | undetected (no C API in LLVM 19); the harness normalizes them textually |
 | `swifterror` / `inalloca` bits on alloca | undetected (no C API); normalized textually |
 | sanitizer metadata on globals (`no_sanitize_address`, ...) | undetected (no C API); normalized textually |
-| values explicitly named with digit strings (`%"0"`; inexpressible under the anonymity rule) | detected |
+| values explicitly named with digit strings (`%"0"`, `@"0"`; inexpressible under the anonymity rule) | detected (locals and globals) |
 | multi-index extractvalue/insertvalue (chain single-index forms instead) | detected |
 | instructions with all-constant operands (the C-API builder constant-folds them; no non-folding builder exists in the C API) | detected; `'tolerate-builder-folds` opts in, and the corpus render tier verifies such files strictly through `(llscheme ll render)` + LLVM's non-folding parser |
 | alloca in a non-zero address space (datalayout-driven; the C-API builder cannot produce them) | detected |
-| alignments of 2^32 or larger (LLVMGetAlignment truncates; the attribute is omitted) | undetected |
+| alignments of 2^32, LLVM's maximum (LLVMGetAlignment truncates to 0; the attribute is omitted) | detected textually by the corpus harness (the C API cannot see it) |
 | no-op casts, e.g. `bitcast ptr %x to ptr` (the C-API builder folds them away even on non-constants) | detected; same `'tolerate-builder-folds` / render-tier treatment |
 | metadata- and token-typed operands (`metadata !"..."` intrinsic arguments) | detected (as type kinds) |
 
@@ -88,6 +91,7 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 | constant expressions (`ptrtoint (ptr @g to i64)`, gep constexprs, ...) — opaque pointers made the common ones unnecessary; add on demand | detected (reports the constexpr opcode) |
 | fp constants not exactly representable as a double (fp128/x86_fp80 values; half/bfloat constants that fit a double ARE modeled) | detected |
 | blockaddress referencing another function | detected |
+| `; preds = ...` block comments reflect LLVM use-list order, which is not modeled | n/a (comments; stripped from the comparison) |
 | non-ASCII byte arrays are modeled — unbuild falls back from `(c "...")` to per-element `(i8 N)` groups, which LLVM re-canonicalizes to the identical constant | n/a (modeled) |
 
 ## Inline asm

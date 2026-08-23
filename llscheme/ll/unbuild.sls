@@ -249,6 +249,12 @@
            (when (and (not (= d d))   ; NaN
                       (not (eq? (ir:type-kind ty) 'double)))
              (not-modeled "non-double NaN constants (payload bits not round-trippable via double)"))
+           ;; ppc_fp128: LLVMConstRealGetDouble under-reports loss;
+           ;; trust only a print comparison against the rebuilt constant
+           (when (eq? (ir:type-kind ty) 'ppc-fp128)
+             (unless (string=? (ir:value->string c)
+                               (ir:value->string (LLVMConstReal ty d)))
+               (not-modeled "fp constants not exactly representable as double")))
            d)]
         [(or (isa? (LLVMIsAFunction c)) (isa? (LLVMIsAGlobalVariable c)))
          (global-sym st c)]     ; globals are ptr constants
@@ -398,6 +404,15 @@
     (let ([n (LLVMGetNumArgOperands ins)])
       (when (nz? (LLVMGetNumOperandBundles ins))
         (not-modeled "operand bundles"))
+      ;; the callee slot carries no type annotation in ll, so callees
+      ;; whose value NEEDS one (null/undef/poison) lose a non-zero
+      ;; address space; named callees carry their own type and are fine
+      (let ([cv (LLVMGetCalledValue ins)])
+        (when (and (not (zero? (LLVMGetPointerAddressSpace (LLVMTypeOf cv))))
+                   (or (isa? (LLVMIsAConstantPointerNull cv))
+                       (nz? (LLVMIsUndef cv))
+                       (nz? (LLVMIsPoison cv))))
+          (not-modeled "calls through pointer constants in non-zero address spaces")))
       (cons (operand st (LLVMGetCalledValue ins))
             (let loop ([i 0])
               (if (fx= i n)
@@ -698,9 +713,10 @@
                                 (local-name st p)))
                         params)
                  ,@variadic)
+               ;; the personality is any ptr constant: @fn, null, undef
                ,@(if (nz? (LLVMHasPersonalityFn f))
-                     `((personality ptr
-                         ,(global-sym st (LLVMGetPersonalityFn f))))
+                     `((personality
+                         ,@(group st (LLVMGetPersonalityFn f))))
                      '())
                ,@(map (lambda (bb)
                         `(label ,(local-name st bb)
@@ -763,6 +779,8 @@
     (let ([tbl (make-eqv-hashtable)] [n 0])
       (define (add! v)
         (let ([given (ir:value-name v)])
+          (when (and (not (string=? given "")) (all-digits? given))
+            (not-modeled "values explicitly named with digit strings"))
           (hashtable-set! tbl v
             (sigil-symbol "@"
               (if (string=? given "")
