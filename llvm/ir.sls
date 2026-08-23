@@ -25,7 +25,8 @@
     float-type double-type half-type bfloat-type fp128-type x86fp80-type
     ppcfp128-type
     pointer-type function-type struct-type array-type
-    vector-type
+    vector-type scalable-vector-type
+    named-type create-named-struct struct-set-body! value->string
     type-kind type-int-width type-return-type type-param-types type-vararg?
     type->string
     ;; functions / values
@@ -261,6 +262,19 @@
 
   (define (vector-type elem-type count) (LLVMVectorType elem-type count))
 
+  (define (scalable-vector-type elem-type count)
+    (LLVMScalableVectorType elem-type count))
+
+  ;; named (identified) struct types, registered in the context by name
+  (define (named-type ctx name)
+    (let ([ty (LLVMGetTypeByName2 (context-live-ptr ctx) name)])
+      (and (not (base:null-ptr? ty)) ty)))
+  (define (create-named-struct ctx name)
+    (LLVMStructCreateNamed (context-live-ptr ctx) name))
+  (define (struct-set-body! ty elems packed?)
+    (base:call-with-pointer-array elems
+      (lambda (arr n) (LLVMStructSetBody ty arr n (if packed? 1 0)))))
+
   ;; Index order matches the LLVMTypeKind enum in llvm-c-19/Core.h.
   (define type-kinds
     '#(void half float double x86-fp80 fp128 ppc-fp128 label integer function
@@ -336,7 +350,11 @@
   (define (declaration? f) (not (zero? (LLVMIsDeclaration f))))
 
   (define (const-int ty n)
-    (LLVMConstInt ty (bitwise-and n #xFFFFFFFFFFFFFFFF) (if (< n 0) 1 0)))
+    (if (and (>= n (- (expt 2 63))) (< n (expt 2 64)))
+        (LLVMConstInt ty (bitwise-and n #xFFFFFFFFFFFFFFFF) (if (< n 0) 1 0))
+        ;; wider than the C API's uint64: go through decimal text
+        (let ([s (number->string n)])
+          (LLVMConstIntOfStringAndSize ty s (string-length s) 10))))
 
   (define (const-real ty x) (LLVMConstReal ty (inexact x)))
   (define (const-null ty) (LLVMConstNull ty))
@@ -368,8 +386,15 @@
 
   ;; ---- module-level globals -------------------------------------------------
 
-  (define (add-global m ty name)
-    (LLVMAddGlobal (module-live-ptr m) ty name))
+  (define add-global
+    (case-lambda
+      [(m ty name) (LLVMAddGlobal (module-live-ptr m) ty name)]
+      [(m ty name addrspace)
+       (LLVMAddGlobalInAddressSpace (module-live-ptr m) ty name addrspace)]))
+
+  ;; a value's textual form, e.g. "i128 -5" (used for wide constants)
+  (define (value->string v)
+    (base:cstring->string/dispose (LLVMPrintValueToString v)))
 
   (define (set-initializer! g const) (LLVMSetInitializer g const))
   (define (set-global-constant! g) (LLVMSetGlobalConstant g 1))

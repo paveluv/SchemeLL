@@ -22,7 +22,7 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 | `target datalayout = "..."` | detected |
 | global aliases (`@a = alias ...`) | detected |
 | ifuncs (`@i = ifunc ...`) | detected |
-| named module metadata (`!llvm.module.flags`, `!llvm.ident`, ...) | detected |
+| named module metadata (`!llvm.module.flags`, `!llvm.ident`, ...) | detected; `(ll:unbuild m 'ignore-named-metadata)` opts out explicitly (the corpus harness does, stripping `!` lines from the comparison) |
 | module-level inline asm (`module asm "..."`) | detected |
 | comdat sections | undetected |
 | `source_filename` | ignored by design (module identity, not IR content) |
@@ -50,7 +50,6 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 | `thread_local` | detected |
 | sections | detected |
 | visibility | detected |
-| non-zero address spaces (`@g = addrspace(1) global ...`) | detected |
 | `externally_initialized` | detected |
 | global variable attributes (`@g = global i32 7 #0`) | undetected |
 | `unnamed_addr`, DLL storage, partitions | undetected; unnamed_addr is normalizer-stripped |
@@ -64,7 +63,6 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 | operand bundles (`[ "deopt"(...) ]`) | detected |
 | `syncscope("singlethread")` (and named syncscopes) on atomics | detected |
 | non-default alignment on atomicrmw/cmpxchg (ll rebuilds with the ABI default) | undetected |
-| poison shuffle-mask lanes (`<4 x i32> <i32 0, i32 poison, ...>`) | detected |
 | multi-index extractvalue/insertvalue (chain single-index forms instead) | detected |
 | instructions with all-constant operands (the C-API builder constant-folds them; no non-folding builder exists in the C API) | detected |
 | alloca in a non-zero address space (datalayout-driven; the C-API builder cannot produce them) | detected |
@@ -74,9 +72,7 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 
 | Construct | Detection |
 |---|---|
-| named struct types (`%struct.foo = type {...}`) | detected |
-| packed structs (`<{ ... }>`) | detected |
-| scalable vectors (`<vscale x 4 x i32>`) | detected |
+| unnamed identified struct types (`%0 = type {...}`) | detected |
 | `x86_mmx`, `x86_amx`, target extension types, `label`/`metadata`/`token` in type positions | detected |
 
 ## Constants
@@ -84,9 +80,7 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 | Construct | Detection |
 |---|---|
 | constant expressions (`ptrtoint (ptr @g to i64)`, gep constexprs, ...) — opaque pointers made the common ones unnecessary; add on demand | detected (reports the constexpr opcode) |
-| integer constants wider than 64 bits | detected |
 | fp constants not exactly representable as a double (fp128/x86_fp80 values; half/bfloat constants that fit a double ARE modeled) | detected |
-| aggregate constants in instruction-operand positions (only global initializers and landingpad clauses accept them) | detected |
 | blockaddress referencing another function | detected |
 | non-ASCII byte arrays are modeled — unbuild falls back from `(c "...")` to per-element `(i8 N)` groups, which LLVM re-canonicalizes to the identical constant | n/a (modeled) |
 
@@ -101,4 +95,9 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 
 - raw value injection: the reserved `(ptr N)` operand shape for inttoptr
   address constants (e.g. Scheme callback pointers).
-- address-spaced globals via the `(addrspace N)` attribute form.
+
+(Modeled since the first corpus rounds, 2026-08-22: named/packed struct
+types via `(type %name ...)` items, scalable vectors, function linkage,
+integer constants of any width, aggregate constants as instruction
+operands, poison shuffle-mask lanes, address-spaced globals, anonymous
+all-digit `%N` names.)

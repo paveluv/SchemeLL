@@ -91,13 +91,22 @@
          [(ppc_fp128) (ir:ppcfp128-type ctx)]
          [(void) (ir:void-type ctx)]
          [else
-          (let ([bits (int-bits t)])
-            (unless bits (ll-error "unknown type" t))
-            (ir:int-type ctx bits))])]
+          (if (local-name? t)
+              ;; %name: a named struct type from a (type %name ...) item
+              (or (ir:named-type ctx (strip-sigil t))
+                  (ll-error "unknown named type" t))
+              (let ([bits (int-bits t)])
+                (unless bits (ll-error "unknown type" t))
+                (ir:int-type ctx bits)))])]
       [(pair? t)
        (cond
          [(eq? (car t) 'struct)
           (ir:struct-type ctx (map (lambda (e) (resolve-type ctx e)) (cdr t)))]
+         [(eq? (car t) 'packed-struct)
+          (ir:struct-type ctx (map (lambda (e) (resolve-type ctx e)) (cdr t)) #t)]
+         [(and (eq? (car t) 'scalable-vector) (= (length t) 3)
+               (fixnum? (cadr t)) (positive? (cadr t)))
+          (ir:scalable-vector-type (resolve-type ctx (caddr t)) (cadr t))]
          [(and (eq? (car t) 'ptr) (= (length t) 2)
                (pair? (cadr t)) (eq? (caadr t) 'addrspace)
                (= (length (cadr t)) 2) (fixnum? (cadr (cadr t)))
@@ -131,6 +140,21 @@
             (mutable phis) (mutable scratch) pending))
 
   ;; ---- operands ------------------------------------------------------------------
+
+  ;; per-element-typed aggregate constant, e.g. ((i64 1) (i32 2)) -- every
+  ;; element a (type value) pair; disambiguated from a single typed operand
+  ;; group by the first element's head never being a type constructor
+  (define type-heads '(struct packed-struct array vector scalable-vector fn ptr))
+  (define (aggregate-literal? form)
+    (and (pair? form)
+         (for-all (lambda (e)
+                    (and (pair? e) (pair? (cdr e)) (null? (cddr e))))
+                  form)
+         (or (not (= (length form) 2))
+             (let ([h (car form)])
+               (and (pair? h)
+                    (not (memq (car h) type-heads))
+                    (not (local-name? (car h))))))))
 
   ;; ty types bare literals; #f when the position carries no type of its own
   ;; (then literals must come as a (type value) group).
@@ -175,6 +199,12 @@
       [(flonum? form)
        (unless ty (ll-error "float literal needs a type annotation" form))
        (ir:const-real ty form)]
+      [(and (pair? form) (memq (car form) '(c cz)))
+       (unless ty (ll-error "string constant needs a type annotation" form))
+       (resolve-constant (fstate-ctx st) (fstate-globals st) ty form)]
+      [(aggregate-literal? form)
+       (unless ty (ll-error "aggregate constant needs a type annotation" form))
+       (resolve-constant (fstate-ctx st) (fstate-globals st) ty form)]
       [(and (pair? form) (pair? (cdr form)) (null? (cddr form)))
        ;; typed operand group: (type value)
        (resolve-operand st (resolve-type (fstate-ctx st) (car form)) (cadr form))]
@@ -299,7 +329,9 @@
           (ir:inline-asm fnty (cadr form) (caddr form)
                          (and (memq 'sideeffect (cdddr form)) #t)
                          (and (memq 'alignstack (cdddr form)) #t)))
-        (resolve-operand st #f form)))
+        ;; the callee slot is ptr-typed: lets undef/null callees and
+        ;; forward references through
+        (resolve-operand st (ir:pointer-type (fstate-ctx st)) form)))
 
   ;; the type slot of call/invoke/callbr holds either the result type (the
   ;; call-site function type is then built from the argument groups) or a
@@ -327,7 +359,9 @@
   (define (parent-pad st ctx form)
     (if (eq? form 'none)
         (ir:const-null (ir:token-type ctx))
-        (resolve-operand st #f form)))
+        ;; the callee slot is ptr-typed: lets undef/null callees and
+        ;; forward references through
+        (resolve-operand st (ir:pointer-type (fstate-ctx st)) form)))
 
   ;; unwind destination: the keyword operand `caller` -> #f, or (label %x)
   (define (unwind-dest st rest form)
@@ -704,14 +738,21 @@
                 (arity 3 "(shufflevector (vec-type a) (vec-type b) (mask i ...))")
                 (let ([m (caddr args)])
                   (unless (and (pair? m) (eq? (car m) 'mask) (pair? (cdr m))
-                               (for-all fixnum? (cdr m)))
-                    (ll-error "shufflevector mask must be (mask int ...)" m form))
+                               (for-all (lambda (x)
+                                          (or (fixnum? x) (eq? x 'poison)))
+                                        (cdr m)))
+                    (ll-error "shufflevector mask must be (mask int|poison ...)"
+                              m form))
                   (let ([i32 (resolve-type ctx 'i32)])
                     (ir:build-shufflevector b
                       (resolve-operand st #f (car args))
                       (resolve-operand st #f (cadr args))
                       (ir:const-vector
-                        (map (lambda (i) (ir:const-int i32 i)) (cdr m)))
+                        (map (lambda (i)
+                               (if (eq? i 'poison)
+                                   (ir:poison-value i32)
+                                   (ir:const-int i32 i)))
+                             (cdr m)))
                       name)))]
                [(extractvalue)
                 (arity 2 "(extractvalue (agg-type v) index)")
@@ -890,6 +931,11 @@
       (unless (and (memq (car rhs) '(global constant)) (pair? (cdr rhs)))
         (ll-error "expected (global ...) or (constant ...)" item))
       (let* ([constant? (eq? (car rhs) 'constant)]
+             [as (let ([x (cadr rhs)])
+                   (and (pair? x) (eq? (car x) 'addrspace)
+                        (= (length x) 2) (fixnum? (cadr x))
+                        (cadr x)))]
+             [rhs (if as (cdr rhs) rhs)]
              [lk (and (symbol? (cadr rhs)) (assq (cadr rhs) linkages))]
              [rhs (if lk (cdr rhs) rhs)]
              [ty-form (cadr rhs)]
@@ -899,15 +945,42 @@
              [attrs (if init (cdr rest) rest)])
         (unless (for-all attr? attrs)
           (ll-error "malformed global attributes" attrs item))
-        (values name (and lk (cdr lk)) constant? ty-form init attrs))))
+        (values name (and lk (cdr lk)) constant? ty-form init attrs as))))
 
   ;; ---- module items ---------------------------------------------------------------------
 
   (define (item-kind item)
-    (unless (and (pair? item) (memq (car item) '(define declare =)))
-      (ll-error "unknown module item (expected define, declare or (= @name ...))"
+    (unless (and (pair? item) (memq (car item) '(define declare = type)))
+      (ll-error "unknown module item (expected define, declare, type or (= @name ...))"
                 item))
     (car item))
+
+  ;; (type %name (struct ...)|(packed-struct ...)|opaque) -- named struct
+  ;; types; created before anything resolves types, bodies filled second
+  ;; so structs may reference each other recursively
+  (define (check-type-item item)
+    (unless (and (= (length item) 3) (local-name? (cadr item))
+                 (or (eq? (caddr item) 'opaque)
+                     (and (pair? (caddr item))
+                          (memq (car (caddr item)) '(struct packed-struct)))))
+      (ll-error "expected (type %name (struct ...)|opaque)" item)))
+
+  (define (create-type-item! ctx item)
+    (when (eq? (car item) 'type)
+      (check-type-item item)
+      (let ([nm (strip-sigil (cadr item))])
+        (when (ir:named-type ctx nm)
+          (ll-error "duplicate named type" (cadr item)))
+        (ir:create-named-struct ctx nm))))
+
+  (define (fill-type-item! ctx item)
+    (when (eq? (car item) 'type)
+      (let ([body (caddr item)])
+        (unless (eq? body 'opaque)
+          (ir:struct-set-body!
+            (ir:named-type ctx (strip-sigil (cadr item)))
+            (map (lambda (e) (resolve-type ctx e)) (cdr body))
+            (eq? (car body) 'packed-struct))))))
 
   ;; (define|declare linkage? ret-type (@name ...) body ...)
   ;; -> (values ret-type-form name-sym rest linkage-int-or-#f body)
@@ -933,15 +1006,20 @@
   ;; and initializers may reference them in any order
   (define (declare-item! ctx m globals item)
     (let ([kind (item-kind item)])
-      (if (eq? kind '=)
-          (let-values ([(name lk constant? ty-form init attrs)
+      (if (eq? kind 'type)
+          (void)   ; handled by the type passes
+        (if (eq? kind '=)
+          (let-values ([(name lk constant? ty-form init attrs as)
                         (parse-global item)])
             (when (hashtable-ref globals name #f)
               (ll-error "duplicate global name" name))
             (hashtable-set! globals name
-                            (ir:add-global m (resolve-type ctx ty-form)
-                                           (llvm-name name))))
-          (declare-function! ctx m globals item kind))))
+                            (if as
+                                (ir:add-global m (resolve-type ctx ty-form)
+                                               (llvm-name name) as)
+                                (ir:add-global m (resolve-type ctx ty-form)
+                                               (llvm-name name)))))
+          (declare-function! ctx m globals item kind)))))
 
   (define (declare-function! ctx m globals item kind)
     (let-values ([(retty-form fname rest0 lk body) (item-signature item)])
@@ -964,7 +1042,7 @@
   ;; pass 2: set global initializers/linkage; emit the body of each define
   (define (emit-item! ctx m globals item)
     (when (eq? (item-kind item) '=)
-      (let-values ([(name lk constant? ty-form init attrs) (parse-global item)])
+      (let-values ([(name lk constant? ty-form init attrs as) (parse-global item)])
         (let ([g (hashtable-ref globals name #f)])
           (when lk (ir:set-linkage! g lk))
           (when constant? (ir:set-global-constant! g))
@@ -1030,6 +1108,8 @@
   (define (build ctx name prog)
     (let ([m (ir:make-module ctx name)]
           [globals (make-eq-hashtable)])
+      (for-each (lambda (item) (create-type-item! ctx item)) prog)
+      (for-each (lambda (item) (fill-type-item! ctx item)) prog)
       (for-each (lambda (item) (declare-item! ctx m globals item)) prog)
       (for-each (lambda (item) (emit-item! ctx m globals item)) prog)
       m))

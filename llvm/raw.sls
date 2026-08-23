@@ -154,6 +154,8 @@
     ConstBitCast ConstAddrSpaceCast
     IsAConstant IsExternallyInitialized HasPrefixData HasPrologueData
     SetGC
+    GetTypeByName2 IsOpaqueStruct IsLiteralStruct ScalableVectorType
+    ConstIntOfStringAndSize PrintValueToString AddGlobalInAddressSpace
     ;; IRReader.h + memory buffers from bytes
     ParseIRInContext CreateMemoryBufferWithMemoryRangeCopy
     ;; Transforms/PassBuilder.h (new pass manager)
@@ -772,6 +774,18 @@
   (define-getter HasPrologueData "LLVMHasPrologueData" (void*) int)
   (define-getter SetGC              ; void* so NULL can clear the gc name
     "LLVMSetGC" (void* void*) void)
+  (define-getter GetTypeByName2     ; named struct lookup; NULL if absent
+    "LLVMGetTypeByName2" (void* string) void*)
+  (define-getter IsOpaqueStruct "LLVMIsOpaqueStruct" (void*) int)
+  (define-getter IsLiteralStruct "LLVMIsLiteralStruct" (void*) int)
+  (define-getter ScalableVectorType
+    "LLVMScalableVectorType" (void* unsigned-int) void*)
+  (define-getter ConstIntOfStringAndSize ; big integers via decimal text
+    "LLVMConstIntOfStringAndSize" (void* string unsigned-int unsigned-8) void*)
+  (define-getter PrintValueToString  ; char*, dispose!
+    "LLVMPrintValueToString" (void*) void*)
+  (define-getter AddGlobalInAddressSpace
+    "LLVMAddGlobalInAddressSpace" (void* void* string unsigned-int) void*)
 
   ;; --- IRReader.h -----------------------------------------------------------------
   (define ParseIRInContext             ; (ctx, membuf, module* out, char** err) -> bool (true = failed); consumes membuf

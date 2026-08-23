@@ -126,23 +126,34 @@
        `(vector ,(LLVMGetVectorSize ty)
                 ,(unbuild-type (LLVMGetElementType ty)))]
       [(struct)
-       (when (base:cstring->string (LLVMGetStructName ty))
-         (not-modeled "named struct types" (ir:type->string ty)))
-       (when (nz? (LLVMIsPackedStruct ty))
-         (not-modeled "packed struct types" (ir:type->string ty)))
-       `(struct ,@(let loop ([i 0])
-                    (if (fx= i (CountStructElementTypes* ty))
-                        '()
-                        (cons (unbuild-type (LLVMStructGetTypeAtIndex ty i))
-                              (loop (fx+ i 1))))))]
+       (if (nz? (LLVMIsLiteralStruct ty))
+           `(,(if (nz? (LLVMIsPackedStruct ty)) 'packed-struct 'struct)
+             ,@(struct-fields ty))
+           ;; identified struct: reference by name, register a (type ...)
+           ;; item to be emitted at the top of the program
+           (let ([nm (base:cstring->string (LLVMGetStructName ty))])
+             (when (or (not nm) (string=? nm ""))
+               (not-modeled "unnamed identified struct types"))
+             (hashtable-set! (struct-registry) ty nm)
+             (sigil-symbol "%" nm)))]
       [(function)
        `(fn ,(unbuild-type (ir:type-return-type ty))
             ,@(map unbuild-type (ir:type-param-types ty))
             ,@(if (ir:type-vararg? ty) '(variadic) '()))]
-      [(scalable-vector) (not-modeled "scalable vector types")]
+      [(scalable-vector)
+       `(scalable-vector ,(LLVMGetVectorSize ty)
+                         ,(unbuild-type (LLVMGetElementType ty)))]
       [else (not-modeled "type kind" (ir:type-kind ty))]))
 
-  (define (CountStructElementTypes* ty) (LLVMCountStructElementTypes ty))
+  (define (struct-fields ty)
+    (let loop ([i 0])
+      (if (fx= i (LLVMCountStructElementTypes ty))
+          '()
+          (cons (unbuild-type (LLVMStructGetTypeAtIndex ty i))
+                (loop (fx+ i 1))))))
+
+  ;; identified structs encountered during a walk: ty -> name
+  (define struct-registry (make-parameter #f))
 
   ;; ---- names ---------------------------------------------------------------------
 
@@ -203,11 +214,22 @@
         [(nz? (LLVMIsUndef c)) 'undef]
         [(isa? (LLVMIsAConstantInt c))
          (let ([w (ir:type-int-width ty)])
-           (when (> w 64)
-             (not-modeled "integer constants wider than 64 bits"))
-           (if (= w 1)
-               (LLVMConstIntGetZExtValue c)   ; i1: 0/1, not 0/-1
-               (LLVMConstIntGetSExtValue c)))]
+           (cond
+             [(= w 1) (LLVMConstIntGetZExtValue c)]   ; i1: 0/1, not 0/-1
+             [(<= w 64) (LLVMConstIntGetSExtValue c)]
+             [else
+              ;; wider than the C API getters: read the printed form,
+              ;; e.g. "i128 -5" -> -5
+              (let* ([txt (ir:value->string c)]
+                     [sp (let loop ([i 0])
+                           (cond
+                             [(fx= i (string-length txt)) #f]
+                             [(char=? (string-ref txt i) #\space) i]
+                             [else (loop (fx+ i 1))]))]
+                     [n (and sp (string->number
+                                  (substring txt (fx+ sp 1)
+                                             (string-length txt))))])
+                (or n (not-modeled "unparsable wide integer constant" txt)))]))]
         [(isa? (LLVMIsAConstantFP c))
          (let-values ([(d lost) (const-double c)])
            (when lost
@@ -224,8 +246,6 @@
              (isa? (LLVMIsAConstantStruct c))
              (isa? (LLVMIsAConstantVector c))
              (isa? (LLVMIsAConstantDataVector c)))
-         (unless allow-aggregate?
-           (not-modeled "aggregate constants as instruction operands"))
          (aggregate-form st c ty)]
         [(isa? (LLVMIsAConstantExpr c))
          (not-modeled "constant expressions" (LLVMGetConstOpcode c))]
@@ -275,7 +295,7 @@
       [(or (isa? (LLVMIsAFunction v)) (isa? (LLVMIsAGlobalVariable v)))
        (global-sym st v)]
       [(isa? (LLVMIsAInlineAsm v)) (asm-form v)]
-      [else (constant-form st v #f)]))
+      [else (constant-form st v #t)]))
 
   (define (group st v)      ; typed operand group (type value)
     (list (unbuild-type (LLVMTypeOf v)) (operand st v)))
@@ -520,9 +540,9 @@
                                       (if (fx= i (LLVMGetNumMaskElements ins))
                                           '()
                                           (let ([m (LLVMGetMaskValue ins i)])
-                                            (when (= m (LLVMGetUndefMaskElem))
-                                              (not-modeled "poison shuffle mask lanes"))
-                                            (cons m (loop (fx+ i 1))))))))]
+                                            (cons (if (= m (LLVMGetUndefMaskElem))
+                                                      'poison m)
+                                                  (loop (fx+ i 1))))))))]
            [(extractvalue insertvalue)
             (when (> (LLVMGetNumIndices ins) 1)
               (not-modeled "multi-index extractvalue/insertvalue"))
@@ -671,9 +691,7 @@
     (unless (zero? (LLVMGetVisibility g))
       (not-modeled "visibility (hidden/protected)"))
     (let ([s (base:cstring->string (LLVMGetSection g))])
-      (when (and s (not (string=? s ""))) (not-modeled "sections")))
-    (unless (zero? (LLVMGetPointerAddressSpace (LLVMTypeOf g)))
-      (not-modeled "globals in non-zero address spaces")))
+      (when (and s (not (string=? s ""))) (not-modeled "sections"))))
 
   (define (unbuild-global gnames g)
     (check-global-decorations g)
@@ -683,6 +701,8 @@
            [align (LLVMGetAlignment g)])
       `(= ,(hashtable-ref gnames g #f)
           (,(if (nz? (LLVMIsGlobalConstant g)) 'constant 'global)
+           ,@(let ([as (LLVMGetPointerAddressSpace (LLVMTypeOf g))])
+               (if (zero? as) '() `((addrspace ,as))))
            ;; external is the default and stays implicit -- except on
            ;; declarations, where ll (like IR) spells it out
            ,@(if (zero? lk)
@@ -696,7 +716,7 @@
 
   ;; ---- the module ------------------------------------------------------------------------
 
-  (define (check-module-decorations m)
+  (define (check-module-decorations m ignore-named-metadata?)
     (let ([mp (ir:module-live-ptr m)])
       (let ([t (base:cstring->string (LLVMGetTarget mp))])
         (when (and t (not (string=? t ""))) (not-modeled "target triple")))
@@ -706,7 +726,8 @@
         (not-modeled "global aliases"))
       (unless (base:null-ptr? (LLVMGetFirstGlobalIFunc mp))
         (not-modeled "ifuncs"))
-      (unless (base:null-ptr? (LLVMGetFirstNamedMetadata mp))
+      (unless (or ignore-named-metadata?
+                  (base:null-ptr? (LLVMGetFirstNamedMetadata mp)))
         (not-modeled "named module metadata"))
       (unless (string=? "" (out-string LLVMGetModuleInlineAsm mp))
         (not-modeled "module-level inline asm"))))
@@ -725,11 +746,44 @@
       (for-each add! (ir:module-functions m))
       tbl))
 
-  ;; module record -> ll program
-  (define (unbuild m)
-    (check-module-decorations m)
-    (let ([gnames (module-gnames m)])
-      (append
-        (map (lambda (g) (unbuild-global gnames g)) (ir:module-globals m))
-        (map (lambda (f) (unbuild-function gnames f))
-             (ir:module-functions m))))))
+  ;; every identified struct met during the walk becomes a (type ...) item;
+  ;; emitting bodies can register further structs, so iterate to a fixpoint
+  (define (type-items)
+    (let loop ([done '()] [acc '()])
+      (let* ([reg (struct-registry)]
+             [pending (let-values ([(ks vs) (hashtable-entries reg)])
+                        (filter (lambda (kv) (not (member kv done)))
+                                (map cons (vector->list ks)
+                                     (vector->list vs))))])
+        (if (null? pending)
+            (list-sort (lambda (a b) (string<? (symbol->string (cadr a))
+                                               (symbol->string (cadr b))))
+                       acc)
+            (loop (append pending done)
+                  (append
+                    (map (lambda (kv)
+                           (let ([ty (car kv)] [nm (cdr kv)])
+                             `(type ,(sigil-symbol "%" nm)
+                                    ,(if (nz? (LLVMIsOpaqueStruct ty))
+                                         'opaque
+                                         `(,(if (nz? (LLVMIsPackedStruct ty))
+                                                'packed-struct 'struct)
+                                           ,@(struct-fields ty))))))
+                         pending)
+                    acc))))))
+
+  ;; module record -> ll program. opts: 'ignore-named-metadata makes the
+  ;; walk tolerate named module metadata WITHOUT representing it (the
+  ;; corpus harness strips it from the comparison; plain unbuild stays
+  ;; strict so the tool never silently loses it).
+  (define (unbuild m . opts)
+    (parameterize ([struct-registry (make-eqv-hashtable)])
+      (check-module-decorations m (memq 'ignore-named-metadata opts))
+      (let ([gnames (module-gnames m)])
+        (let ([items
+               (append
+                 (map (lambda (g) (unbuild-global gnames g))
+                      (ir:module-globals m))
+                 (map (lambda (f) (unbuild-function gnames f))
+                      (ir:module-functions m)))])
+          (append (type-items) items))))))

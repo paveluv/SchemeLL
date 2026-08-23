@@ -121,11 +121,16 @@
           (loop))))
     (get-output-string out)))
 
-(define ctx (ir:make-context))
+(define ctx (ir:make-context))   ; for the strictness probes below
 
+;; named struct types are registered per context, so each module gets a
+;; fresh context to keep names collision-free across entries
 (define (check-entry! name prog golden)
-  (let* ([built (ll:build ctx name prog)]
-         [parsed (ir:parse-ir ctx name golden)]
+  (let* ([bctx (ir:make-context)]
+         [pctx (ir:make-context)]
+         [rctx (ir:make-context)]
+         [built (ll:build bctx name prog)]
+         [parsed (ir:parse-ir pctx name golden)]
          [built-text (ir-body (ir:module->string built))]
          [golden-text (ir-body (ir:module->string parsed))])
     (ir:verify-module built)
@@ -138,7 +143,7 @@
     ;; unbuild self-test: parse the golden, unbuild it back to ll data,
     ;; rebuild, and demand the same canonical print
     (let* ([prog (ll:unbuild parsed)]
-           [rebuilt (ll:build ctx (string-append name "-u") prog)]
+           [rebuilt (ll:build rctx (string-append name "-u") prog)]
            [rebuilt-text (ir-body (ir:module->string rebuilt))])
       (unless (string=? rebuilt-text golden-text)
         (printf "~%--- unbuilt+rebuilt (~a) ---~%~a--- golden ---~%~a---~%"
@@ -147,7 +152,10 @@
                (string=? rebuilt-text golden-text))
       (ir:module-dispose! rebuilt))
     (ir:module-dispose! built)
-    (ir:module-dispose! parsed)))
+    (ir:module-dispose! parsed)
+    (ir:context-dispose! bctx)
+    (ir:context-dispose! pctx)
+    (ir:context-dispose! rctx)))
 
 ;; ---- the corpus ------------------------------------------------------------------
 
@@ -927,9 +935,9 @@ compute:
 (t:check-exn "unbuild rejects instruction metadata"
              (unbuild-of-ir
                "define void @f() {\nentry:\n  ret void, !x !0\n}\n!0 = !{}"))
-(t:check-exn "unbuild rejects named struct types"
+(t:check-exn "unbuild rejects unnamed identified struct types"
              (unbuild-of-ir
-               "%pair = type { i64, i64 }\ndefine void @f(ptr %p) {\nentry:\n  %v = load %pair, ptr %p\n  ret void\n}"))
+               "%0 = type { i64, i64 }\ndefine void @f(ptr %p) {\nentry:\n  %v = load %0, ptr %p\n  ret void\n}"))
 (t:check-exn "unbuild rejects target triple"
              (unbuild-of-ir "target triple = \"x86_64-pc-linux-gnu\"\n"))
 (t:check-exn "unbuild rejects calling conventions"
@@ -937,6 +945,63 @@ compute:
 (t:check-exn "unbuild rejects constant expressions"
              (unbuild-of-ir
                "@g = global i64 0\n@p = global i64 ptrtoint (ptr @g to i64)"))
+
+(check-entry! "named-types"
+  '((type %pair (struct i64 i32))
+    (type %node (struct i64 ptr))
+    (type %packed (packed-struct i8 i64))
+    (define i64 (@first (ptr %p))
+      (label %entry
+        (= %v (load %pair (ptr %p)))
+        (= %f (extractvalue (%pair %v) 0))
+        (= %n (load %node (ptr %p)))
+        (= %next (extractvalue (%node %n) 1))
+        (= %pk (load %packed (ptr %p)))
+        (= %pv (extractvalue (%packed %pk) 1))
+        (= %o (load ptr (ptr %next)))
+        (= %r (add i64 %f %pv))
+        (ret i64 %r)))
+    (= @wide (global i128 170141183460469231731687303715884105727))
+    (= @spaced (global (addrspace 1) i64 7))
+    (define (vector 4 i32) (@lanes ((vector 4 i32) %v))
+      (label %entry
+        (= %s (shufflevector ((vector 4 i32) %v) ((vector 4 i32) poison)
+                             (mask 0 poison 1 poison)))
+        (ret (vector 4 i32) %s)))
+    (define (scalable-vector 2 i64) (@sv ((scalable-vector 2 i64) %v))
+      (label %entry
+        (ret (scalable-vector 2 i64) %v))))
+  "%pair = type { i64, i32 }
+%node = type { i64, ptr }
+%packed = type <{ i8, i64 }>
+
+@wide = global i128 170141183460469231731687303715884105727
+@spaced = addrspace(1) global i64 7
+
+define i64 @first(ptr %p) {
+entry:
+  %v = load %pair, ptr %p
+  %f = extractvalue %pair %v, 0
+  %n = load %node, ptr %p
+  %next = extractvalue %node %n, 1
+  %pk = load %packed, ptr %p
+  %pv = extractvalue %packed %pk, 1
+  %o = load ptr, ptr %next
+  %r = add i64 %f, %pv
+  ret i64 %r
+}
+
+define <4 x i32> @lanes(<4 x i32> %v) {
+entry:
+  %s = shufflevector <4 x i32> %v, <4 x i32> poison, <4 x i32> <i32 0, i32 poison, i32 1, i32 poison>
+  ret <4 x i32> %s
+}
+
+define <vscale x 2 x i64> @sv(<vscale x 2 x i64> %v) {
+entry:
+  ret <vscale x 2 x i64> %v
+}
+")
 
 ;; ---- the ledger check (level 1) -----------------------------------------------------
 

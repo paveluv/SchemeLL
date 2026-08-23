@@ -57,6 +57,15 @@ its environment but leaves the LLVM value unnamed, so LLVM's own
 printer reproduces the numbering (a value explicitly named "0" via the
 API would print as `%"0"` and is not expressible).
 
+Corpus rounds 2-3 (2026-08-22) added: named struct types --
+`(type %name (struct ...))`, `(type %name (packed-struct ...))`,
+`(type %name opaque)` module items, referenced as `%name` in type
+positions (created before bodies are filled, so mutual recursion works);
+`(packed-struct ...)` literal types; `(scalable-vector N TY)`;
+`(addrspace N)` groups on globals; integer constants of any width
+(>64-bit go through decimal text); aggregate and string constants as
+instruction operands; `poison` shuffle-mask lanes.
+
 First layer of the llscheme DSL tower:
 a notation for LLVM IR that is ordinary Scheme data/syntax, sitting directly
 on top of (llvm ir).
