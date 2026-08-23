@@ -956,8 +956,9 @@ compute:
 ;; recursion) instead of base:error -- this hung rather than raised
 (t:check-exn "render raises (not loops) on unknown items"
              (render:sll->ll '((bogus-item))))
-(t:check-exn "unbuild rejects module-level inline asm"
-             (unbuild-of-ir "module asm \"nop\"\n"))
+(t:check-exn "unbuild rejects Intel-dialect inline asm"
+             (unbuild-of-ir
+               "define void @f() {\nentry:\n  call void asm inteldialect \"nop\", \"\"()\n  ret void\n}"))
 (t:check-exn "unbuild rejects calling conventions"
              (unbuild-of-ir "define fastcc void @f() {\nentry:\n  ret void\n}"))
 (t:check-exn "unbuild rejects nuw+nsw constexpr binops (no C constructor)"
@@ -996,6 +997,53 @@ compute:
     (ir:context-dispose! pctx)
     (ir:context-dispose! rctx)
     (ir:context-dispose! xctx)))
+
+(check-entry! "round14"
+  '((datalayout "e-A5")
+    (module-asm ".globl marker\nmarker:")
+    (= @ext (global externally_initialized i32 0))
+    ;; NaN payloads travel as folded bitcast constexprs (bit-exact)
+    (= @nan (global half (bitcast i16 31745 half)))
+    (declare i32 (@resolvee i32))
+    (define ptr (@resolver)
+      (label %entry (ret ptr @resolvee)))
+    (= @fast_op (ifunc (fn i32 i32) (ptr @resolver)))
+    (define i64 (@atomics ((ptr (addrspace 5)) %p) (i64 %v))
+      (label %entry
+        (= %spill (alloca i64 (align 8) (addrspace 5)))
+        (store atomic singlethread (i64 %v) ((ptr (addrspace 5)) %p)
+               seq_cst (align 8))
+        (= %old (atomicrmw volatile singlethread add
+                           ((ptr (addrspace 5)) %p) (i64 1)
+                           monotonic (align 8)))
+        (fence singlethread acquire)
+        (ret i64 %old))))
+  "target datalayout = \"e-A5\"
+
+module asm \".globl marker\"
+module asm \"marker:\"
+
+@ext = externally_initialized global i32 0
+@nan = global half 0xH7C01
+
+@fast_op = ifunc i32 (i32), ptr @resolver
+
+declare i32 @resolvee(i32)
+
+define ptr @resolver() {
+entry:
+  ret ptr @resolvee
+}
+
+define i64 @atomics(ptr addrspace(5) %p, i64 %v) {
+entry:
+  %spill = alloca i64, align 8, addrspace(5)
+  store atomic i64 %v, ptr addrspace(5) %p syncscope(\"singlethread\") seq_cst, align 8
+  %old = atomicrmw volatile add ptr addrspace(5) %p, i64 1 syncscope(\"singlethread\") monotonic, align 8
+  fence syncscope(\"singlethread\") acquire
+  ret i64 %old
+}
+")
 
 (check-entry! "gc-bundles"
   '((datalayout "e-m:e-p:64:64-i64:64-ni:1")

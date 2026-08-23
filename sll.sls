@@ -452,8 +452,8 @@
   (define exact-flag-ops '(udiv sdiv lshr ashr))
 
   (define flag-symbols
-    '(nsw nuw exact disjoint nneg volatile atomic weak inbounds nusw
-       tail musttail notail
+    '(nsw nuw exact disjoint nneg volatile atomic weak singlethread
+       inbounds nusw tail musttail notail
        reassoc nnan ninf nsz arcp contract afn fast))
 
   ;; split leading flag symbols from the rest of an instruction's arguments
@@ -488,6 +488,10 @@
                       (require-flag-op op '(load store) flag form) mask]
                      [(weak) (require-flag-op op '(cmpxchg) flag form)
                       (ir:set-weak! v) mask]
+                     [(singlethread)
+                      (require-flag-op op '(load store fence atomicrmw cmpxchg)
+                                       flag form)
+                      (ir:set-atomic-single-thread! v) mask]
                      [(tail) (require-flag-op op '(call) flag form)
                       (ir:set-tail-call-kind! v 1) mask]
                      [(musttail) (require-flag-op op '(call) flag form)
@@ -547,11 +551,19 @@
   (define (apply-attrs! v attrs form)
     (for-each
       (lambda (a)
-        (if (and (pair? a) (eq? (car a) 'align)
-                 (pair? (cdr a)) (null? (cddr a))
-                 (fixnum? (cadr a)) (positive? (cadr a)))
-            (ir:set-alignment! v (cadr a))
-            (error "unknown attribute" a form)))
+        (cond
+          [(and (pair? a) (eq? (car a) 'align)
+                (pair? (cdr a)) (null? (cddr a))
+                (fixnum? (cadr a)) (positive? (cadr a)))
+           (ir:set-alignment! v (cadr a))]
+          [(and (pair? a) (eq? (car a) 'addrspace)
+                (pair? (cdr a)) (null? (cddr a)) (fixnum? (cadr a)))
+           ;; the builder places allocas in the datalayout's A space;
+           ;; the annotation is declarative -- verify it landed there
+           (unless (= (cadr a) (ir:value-address-space v))
+             (error "alloca address space must match the datalayout's alloca space"
+                    a form))]
+          [else (error "unknown attribute" a form)]))
       attrs))
 
   ;; ---- instruction emission ------------------------------------------------------------
@@ -614,9 +626,13 @@
                                          (fstate-phis st)))
                   ph)]
                [(call)
-                ;; (call type (callee (type arg) ...) (bundle "tag" ...) ...)
+                ;; (call (addrspace n)? type (callee args...) bundles...)
                 (arity>= 2 "(call type (callee (type arg) ...) bundles...)")
-                (let ([app (cadr args)])
+                (let* ([args (if (and (pair? (car args))
+                                      (eq? (caar args) 'addrspace))
+                                 (cdr args)   ; the callee value carries it
+                                 args)]
+                       [app (cadr args)])
                   (unless (pair? app)
                     (error "call expects an application group (callee args...)"
                            form))
@@ -778,7 +794,8 @@
                 (let* ([ty (resolve-type ctx (car args))]
                        [rest (cdr args)]
                        [count (and (pair? rest) (pair? (car rest))
-                                   (not (eq? (caar rest) 'align))
+                                   (not (memq (caar rest)
+                                              '(align addrspace)))
                                    (car rest))]
                        [attrs (if count (cdr rest) rest)]
                        [v (if count
@@ -1062,7 +1079,8 @@
   ;; the head, linkage is a modifier after it (like instruction flags);
   ;; no initializer only for external/extern_weak declarations
   (define (parse-global item)
-    ;; -> (values name linkage-int-or-#f constant? type-form init-form attrs)
+    ;; -> (values name linkage-int-or-#f constant? type-form init-form
+    ;;            attrs addrspace-or-#f externally-initialized?)
     (unless (and (= (length item) 3) (global-name? (cadr item))
                  (pair? (caddr item)))
       (error "expected (= @name (global|constant ...))" item))
@@ -1078,6 +1096,8 @@
              [rhs (if as (cdr rhs) rhs)]
              [lk (and (symbol? (cadr rhs)) (assq (cadr rhs) linkages))]
              [rhs (if lk (cdr rhs) rhs)]
+             [ext-init? (eq? (cadr rhs) 'externally_initialized)]
+             [rhs (if ext-init? (cdr rhs) rhs)]
              [ty-form (cadr rhs)]
              [rest (cddr rhs)]
              [attr? (lambda (f) (and (pair? f) (eq? (car f) 'align)))]
@@ -1085,14 +1105,16 @@
              [attrs (if init (cdr rest) rest)])
         (unless (for-all attr? attrs)
           (error "malformed global attributes" attrs item))
-        (values name (and lk (cdr lk)) constant? ty-form init attrs as))))
+        (values name (and lk (cdr lk)) constant? ty-form init attrs as
+                ext-init?))))
 
   ;; ---- module items ---------------------------------------------------------------------
 
   (define (item-kind item)
     (unless (and (pair? item)
-                 (memq (car item) '(define declare = type datalayout triple)))
-      (error "unknown module item (expected define, declare, type, datalayout, triple or (= @name ...))"
+                 (memq (car item)
+                       '(define declare = type datalayout triple module-asm)))
+      (error "unknown module item (expected define, declare, type, datalayout, triple, module-asm or (= @name ...))"
              item))
     (car item))
 
@@ -1149,12 +1171,17 @@
     (and (eq? (item-kind item) '=)
          (pair? (caddr item)) (eq? (car (caddr item)) 'alias)))
 
+  (define (ifunc-item? item)
+    (and (eq? (item-kind item) '=)
+         (pair? (caddr item)) (eq? (car (caddr item)) 'ifunc)))
+
   (define (declare-item! ctx m globals item)
     (let ([kind (item-kind item)])
-      (if (or (memq kind '(type datalayout triple)) (alias-item? item))
+      (if (or (memq kind '(type datalayout triple module-asm))
+              (alias-item? item) (ifunc-item? item))
           (void)   ; types have their own passes; aliases come after
         (if (eq? kind '=)
-          (let-values ([(name lk constant? ty-form init attrs as)
+          (let-values ([(name lk constant? ty-form init attrs as ext-init?)
                         (parse-global item)])
             (when (hashtable-ref globals name #f)
               (error "duplicate global name" name))
@@ -1204,10 +1231,13 @@
 
   ;; pass 2: set global initializers/linkage; emit the body of each define
   (define (emit-item! ctx m globals item)
-    (when (and (eq? (item-kind item) '=) (not (alias-item? item)))
-      (let-values ([(name lk constant? ty-form init attrs as) (parse-global item)])
+    (when (and (eq? (item-kind item) '=)
+               (not (alias-item? item)) (not (ifunc-item? item)))
+      (let-values ([(name lk constant? ty-form init attrs as ext-init?)
+                    (parse-global item)])
         (let ([g (hashtable-ref globals name #f)])
           (when lk (ir:set-linkage! g lk))
+          (when ext-init? (ir:set-externally-initialized! g))
           (when constant? (ir:set-global-constant! g))
           (if init
               (ir:set-initializer! g
@@ -1291,6 +1321,38 @@
                item))
       (values (cadr item) lk (car rest) (cadr rest))))
 
+  ;; (= @i (ifunc linkage? fn-type (ptr @resolver))) -- same two-phase
+  ;; scheme as aliases (creation order = print order)
+  (define (ifunc-parts ctx item)
+    (let* ([rest (cdr (caddr item))]
+           [lk (and (pair? rest) (symbol? (car rest))
+                    (assq (car rest) linkages))]
+           [rest (if lk (cdr rest) rest)])
+      (unless (and (= (length rest) 2) (pair? (cadr rest))
+                   (= (length (cadr rest)) 2))
+        (error "expected (= @name (ifunc linkage? fn-type (ptr resolver)))"
+               item))
+      (values (cadr item) lk (car rest) (cadr rest))))
+
+  (define (create-ifunc! ctx m globals item)
+    (when (ifunc-item? item)
+      (let-values ([(name lk fnty-form g) (ifunc-parts ctx item)])
+        (when (hashtable-ref globals name #f)
+          (error "duplicate global name" name))
+        (let ([i (ir:add-ifunc m (llvm-name name)
+                               (resolve-type ctx fnty-form)
+                               (ir:const-null (ir:pointer-type ctx)))])
+          (when lk (ir:set-linkage! i (cdr lk)))
+          (hashtable-set! globals name i)))))
+
+  (define (patch-ifunc! ctx m globals item)
+    (when (ifunc-item? item)
+      (let-values ([(name lk fnty-form g) (ifunc-parts ctx item)])
+        (ir:ifunc-set-resolver!
+          (hashtable-ref globals name #f)
+          (resolve-constant ctx globals (resolve-type ctx (car g))
+                            (cadr g))))))
+
   (define (create-alias! ctx m globals item)
     (when (alias-item? item)
       (let-values ([(name lk vty-form g) (alias-parts ctx item)])
@@ -1320,13 +1382,16 @@
           (when (pair? item)
             (case (car item)
               [(datalayout) (ir:set-data-layout! m (cadr item))]
-              [(triple) (ir:set-target! m (cadr item))])))
+              [(triple) (ir:set-target! m (cadr item))]
+              [(module-asm) (ir:set-module-asm! m (cadr item))])))
         prog)
       (for-each (lambda (item) (create-type-item! ctx item)) prog)
       (for-each (lambda (item) (fill-type-item! ctx item)) prog)
       (for-each (lambda (item) (declare-item! ctx m globals item)) prog)
       (for-each (lambda (item) (create-alias! ctx m globals item)) prog)
+      (for-each (lambda (item) (create-ifunc! ctx m globals item)) prog)
       (for-each (lambda (item) (patch-alias! ctx m globals item)) prog)
+      (for-each (lambda (item) (patch-ifunc! ctx m globals item)) prog)
       (for-each (lambda (item) (emit-item! ctx m globals item)) prog)
       m))
 

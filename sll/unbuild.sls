@@ -219,6 +219,46 @@
         (foreign-free out)
         (values d lost))))
 
+  ;; fp constants a double cannot carry (NaN payloads, fp80/fp128
+  ;; values): fold the constant through its integer bits -- bitcast
+  ;; constexprs fold bit-exactly in both directions for every float
+  ;; type except ppc_fp128
+  (define (fp-bits-form c ty)
+    (let ([w (case (ir:type-kind ty)
+               [(half bfloat) 16]
+               [(float) 32]
+               [(double) 64]
+               [(x86-fp80) 80]
+               [(fp128) 128]
+               [else #f])])
+      (unless w
+        (not-modeled "fp constants not exactly representable as double"))
+      (let ([ic (LLVMConstBitCast
+                  c (LLVMIntTypeInContext (LLVMGetTypeContext ty) w))])
+        (unless (isa? (LLVMIsAConstantInt ic))
+          (not-modeled "fp constants not exactly representable as double"))
+        (let ([bits (if (<= w 64)
+                        (bitwise-and (LLVMConstIntGetSExtValue ic)
+                                     (- (bitwise-arithmetic-shift-left 1 w) 1))
+                        ;; wider than the C getters: via the printed form
+                        (let* ([txt (ir:value->string ic)]
+                               [sp (let loop ([i 0])
+                                     (cond
+                                       [(fx= i (string-length txt)) #f]
+                                       [(char=? (string-ref txt i) #\space) i]
+                                       [else (loop (fx+ i 1))]))]
+                               [n (and sp (string->number
+                                            (substring txt (fx+ sp 1)
+                                                       (string-length txt))))])
+                          (unless n
+                            (not-modeled "unparsable wide integer constant"
+                                         txt))
+                          (mod n (bitwise-arithmetic-shift-left 1 w))))])
+          `(bitcast ,(string->symbol
+                       (string-append "i" (number->string w)))
+                    ,bits
+                    ,(unbuild-type ty))))))
+
   ;; aggregate constants are only expressible in sll where per-element-typed
   ;; groups are accepted (global initializers, landingpad clauses)
   (define (constant-form st c allow-aggregate?)
@@ -246,18 +286,16 @@
                 (or n (not-modeled "unparsable wide integer constant" txt)))]))]
         [(isa? (LLVMIsAConstantFP c))
          (let-values ([(d lost) (const-double c)])
-           (when lost
-             (not-modeled "fp constants not exactly representable as double"))
-           (when (and (not (= d d))   ; NaN
-                      (not (eq? (ir:type-kind ty) 'double)))
-             (not-modeled "non-double NaN constants (payload bits not round-trippable via double)"))
-           ;; ppc_fp128: LLVMConstRealGetDouble under-reports loss;
-           ;; trust only a print comparison against the rebuilt constant
-           (when (eq? (ir:type-kind ty) 'ppc-fp128)
-             (unless (string=? (ir:value->string c)
-                               (ir:value->string (LLVMConstReal ty d)))
-               (not-modeled "fp constants not exactly representable as double")))
-           d)]
+           (cond
+             [(and (not lost)
+                   (or (= d d) (eq? (ir:type-kind ty) 'double))
+                   ;; ppc_fp128: LLVMConstRealGetDouble under-reports
+                   ;; loss; trust only a rebuilt-print comparison
+                   (or (not (eq? (ir:type-kind ty) 'ppc-fp128))
+                       (string=? (ir:value->string c)
+                                 (ir:value->string (LLVMConstReal ty d)))))
+              d]
+             [else (fp-bits-form c ty)]))]
         [(or (isa? (LLVMIsAFunction c)) (isa? (LLVMIsAGlobalVariable c))
              (isa? (LLVMIsAGlobalAlias c)))
          (global-sym st c)]     ; globals are ptr constants
@@ -461,19 +499,14 @@
 
   (define (memory-flags v atomic?)
     (append (if (nz? (LLVMGetVolatile v)) '(volatile) '())
-            (if atomic? '(atomic) '())))
+            (if atomic? '(atomic) '())
+            (if (nz? (LLVMIsAtomicSingleThread v)) '(singlethread) '())))
 
-  (define (ordering-tail v)   ; atomic load/store: ordering + singlethread check
+  (define (ordering-tail v)   ; atomic load/store ordering
     (let ([o (ir:instruction-ordering v)])
       (if (zero? o)
           (values '() #f)
-          (begin
-            (single-thread-check v)
-            (values (list (enum-name ordering-names o "ordering")) #t)))))
-
-  (define (single-thread-check v)
-    (when (nz? (LLVMIsAtomicSingleThread v))
-      (not-modeled "syncscope(\"singlethread\") atomics")))
+          (values (list (enum-name ordering-names o "ordering")) #t))))
 
   ;; GetAlignment returns 0 both for "unset" and for alignments >= 2^32
   ;; (a C API truncation); omit the attribute in either case
@@ -483,15 +516,16 @@
 
   ;; ---- instructions ------------------------------------------------------------------
 
-  ;; the A<n> component of a datalayout string (default alloca space)
-  (define (dl-alloca-addrspace dl)
+  ;; the <letter><n> component of a datalayout string (A = alloca
+  ;; space, P = program space); no C API exposes these
+  (define (dl-component dl letter)
     (if (not dl)
         0
         (let ([n (string-length dl)])
           (let loop ([i 0])
             (cond
               [(>= i n) 0]
-              [(and (char=? (string-ref dl i) #\A)
+              [(and (char=? (string-ref dl i) letter)
                     (or (zero? i) (char=? (string-ref dl (- i 1)) #\-))
                     (< (+ i 1) n)
                     (char-numeric? (string-ref dl (+ i 1))))
@@ -502,6 +536,8 @@
                               (- (char->integer (string-ref dl j)) 48)))
                      v))]
               [else (loop (+ i 1))])))))
+  (define (dl-alloca-addrspace dl) (dl-component dl #\A))
+  (define (dl-program-addrspace dl) (dl-component dl #\P))
 
   (define (block-label st bb) `(label ,(local-name st bb)))
 
@@ -535,6 +571,18 @@
                                       (aloop (fx+ j 1)))))])
               (LLVMDisposeOperandBundle bref)
               (cons `(bundle ,tag ,@bargs) (loop (fx+ i 1))))))))
+
+  ;; a callee through a pointer outside the program address space needs
+  ;; IR's `call addrspace(N)` spelling (only render consumes this; the
+  ;; builder takes the space from the callee value itself)
+  (define (callee-addrspace-marker st ins)
+    (let ([as (LLVMGetPointerAddressSpace
+                (LLVMTypeOf (LLVMGetCalledValue ins)))]
+          [pas (dl-program-addrspace
+                 (base:cstring->string
+                   (LLVMGetDataLayoutStr
+                     (LLVMGetGlobalParent (ustate-fnptr st)))))])
+      (if (= as pas) '() `((addrspace ,as)))))
 
   (define (application st ins)
     (let ([n (LLVMGetNumArgOperands ins)])
@@ -653,6 +701,7 @@
                        [(0) '()] [(1) '(tail)] [(2) '(musttail)]
                        [else '(notail)])
                    ,@(fmf-flags ins)
+                   ,@(callee-addrspace-marker st ins)
                    ,(call-type-slot (LLVMGetCalledFunctionType ins))
                    ,(application st ins)
                    ,@(bundle-forms st ins))]
@@ -673,16 +722,14 @@
                             '()
                             (cons (successor st ins i) (loop (fx+ i 1))))))]
            [(alloca)
-            (unless (zero? (LLVMGetPointerAddressSpace ty))
-              (not-modeled "alloca in a non-zero address space"))
             ;; the C-API builder always allocates in the datalayout's
-            ;; alloca space (A); an AS0 alloca under a non-zero A default
-            ;; cannot be built
-            (let ([dl (base:cstring->string
+            ;; alloca space (A); only allocas THERE can be rebuilt
+            (let ([as (LLVMGetPointerAddressSpace ty)]
+                  [dl (base:cstring->string
                         (LLVMGetDataLayoutStr
                           (LLVMGetGlobalParent (ustate-fnptr st))))])
-              (unless (zero? (dl-alloca-addrspace dl))
-                (not-modeled "alloca in address space 0 under a datalayout with a non-zero alloca space")))
+              (unless (= as (dl-alloca-addrspace dl))
+                (not-modeled "alloca outside the datalayout's alloca address space (the C-API builder always uses A)")))
             `(alloca ,(unbuild-type (LLVMGetAllocatedType ins))
                      ,@(let ([count (op0)])
                          ;; the printer elides only an i32-typed constant 1
@@ -691,7 +738,9 @@
                                   (= 32 (ir:type-int-width (LLVMTypeOf count))))
                              '()
                              (list (group st count))))
-                     ,@(align-attr ins))]
+                     ,@(align-attr ins)
+                     ,@(let ([as (LLVMGetPointerAddressSpace ty)])
+                         (if (zero? as) '() `((addrspace ,as)))))]
            [(load)
             (let-values ([(ord atomic?) (ordering-tail ins)])
               `(load ,@(memory-flags ins atomic?) ,(unbuild-type ty)
@@ -732,11 +781,11 @@
                   `(extractvalue ,(group st (op0)) ,idx)
                   `(insertvalue ,(group st (op0)) ,(group st (op1)) ,idx)))]
            [(fence)
-            (single-thread-check ins)
-            `(fence ,(enum-name ordering-names (ir:instruction-ordering ins)
+            `(fence ,@(if (nz? (LLVMIsAtomicSingleThread ins))
+                          '(singlethread) '())
+                    ,(enum-name ordering-names (ir:instruction-ordering ins)
                                 "ordering"))]
            [(atomicrmw)
-            (single-thread-check ins)
             `(atomicrmw ,@(memory-flags ins #f)
                         ,(enum-name rmw-names (ir:atomicrmw-binop ins)
                                     "atomicrmw operation")
@@ -745,7 +794,6 @@
                                     (ir:instruction-ordering ins) "ordering")
                         ,@(align-attr ins))]
            [(cmpxchg)
-            (single-thread-check ins)
             `(cmpxchg ,@(if (nz? (LLVMGetWeak ins)) '(weak) '())
                       ,@(memory-flags ins #f)
                       ,(group st (op0)) ,(group st (op1)) ,(group st (op2))
@@ -817,8 +865,13 @@
   ;; ---- functions -----------------------------------------------------------------------
 
   (define (check-function-decorations f nparams)
-    (unless (zero? (LLVMGetPointerAddressSpace (LLVMTypeOf f)))
-      (not-modeled "functions in non-zero program address spaces"))
+    ;; both the parser and LLVMAddFunction place functions in the
+    ;; datalayout's program space (P); only functions THERE rebuild
+    (unless (= (LLVMGetPointerAddressSpace (LLVMTypeOf f))
+               (dl-program-addrspace
+                 (base:cstring->string
+                   (LLVMGetDataLayoutStr (LLVMGetGlobalParent f)))))
+      (not-modeled "functions outside the datalayout's program address space"))
     (when (nz? (LLVMHasPrefixData f)) (not-modeled "function prefix data"))
     (when (nz? (LLVMHasPrologueData f)) (not-modeled "function prologue data"))
     (unless (zero? (LLVMGetFunctionCallConv f))
@@ -879,8 +932,6 @@
   ;; ---- globals --------------------------------------------------------------------------
 
   (define (check-global-decorations g)
-    (when (nz? (LLVMIsExternallyInitialized g))
-      (not-modeled "externally_initialized globals"))
     (when (nz? (LLVMIsThreadLocal g)) (not-modeled "thread_local globals"))
     (unless (zero? (LLVMGetVisibility g))
       (not-modeled "visibility (hidden/protected)"))
@@ -902,6 +953,8 @@
            ,@(if (zero? lk)
                  (if (base:null-ptr? init) '(external) '())
                  (list (enum-name linkage-names lk "linkage")))
+           ,@(if (nz? (LLVMIsExternallyInitialized g))
+                 '(externally_initialized) '())
            ,(unbuild-type (LLVMGlobalGetValueType g))
            ,@(if (base:null-ptr? init)
                  '()
@@ -916,17 +969,16 @@
         (let ([d (base:cstring->string (LLVMGetDataLayoutStr mp))])
           (if (and d (not (string=? d ""))) `((datalayout ,d)) '()))
         (let ([t (base:cstring->string (LLVMGetTarget mp))])
-          (if (and t (not (string=? t ""))) `((triple ,t)) '())))))
+          (if (and t (not (string=? t ""))) `((triple ,t)) '()))
+        (let ([a (out-string LLVMGetModuleInlineAsm mp)])
+          (if (string=? a "") '() `((module-asm ,a)))))))
 
   (define (check-module-decorations m ignore-named-metadata?)
     (let ([mp (ir:module-live-ptr m)])
-      (unless (base:null-ptr? (LLVMGetFirstGlobalIFunc mp))
-        (not-modeled "ifuncs"))
       (unless (or ignore-named-metadata?
                   (base:null-ptr? (LLVMGetFirstNamedMetadata mp)))
         (not-modeled "named module metadata"))
-      (unless (string=? "" (out-string LLVMGetModuleInlineAsm mp))
-        (not-modeled "module-level inline asm"))))
+    ))
 
   ;; unnamed globals/functions get their print slot numbers, like locals
   (define (module-gnames m)
@@ -942,6 +994,7 @@
                   given)))))
       (for-each add! (ir:module-globals m))
       (for-each add! (ir:module-aliases m))
+      (for-each add! (ir:module-ifuncs m))
       (for-each add! (ir:module-functions m))
       tbl))
 
@@ -954,6 +1007,15 @@
           [(> (+ i m) n) #f]
           [(string=? (substring s i (+ i m)) sub) #t]
           [else (loop (+ i 1))]))))
+
+  (define (unbuild-ifunc gnames i)
+    (let ([st (make-ustate (make-eqv-hashtable) gnames base:null-ptr)]
+          [lk (ir:linkage i)])
+      `(= ,(hashtable-ref gnames i #f)
+          (ifunc ,@(if (zero? lk) '()
+                       (list (enum-name linkage-names lk "linkage")))
+                 ,(unbuild-type (LLVMGlobalGetValueType i))
+                 ,(group st (ir:ifunc-resolver i))))))
 
   (define (unbuild-alias gnames a)
     (unless (zero? (LLVMGetPointerAddressSpace (LLVMTypeOf a)))
@@ -1012,6 +1074,8 @@
                       (ir:module-globals m))
                  (map (lambda (a) (unbuild-alias gnames a))
                       (ir:module-aliases m))
+                 (map (lambda (i) (unbuild-ifunc gnames i))
+                      (ir:module-ifuncs m))
                  (map (lambda (f) (unbuild-function gnames f))
                       (ir:module-functions m)))])
           ;; target strings first: the parser rejects `target` lines

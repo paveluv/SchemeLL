@@ -132,14 +132,16 @@
     GetInlineAsmDialect GetInlineAsmCanUnwind
     GetBlockAddressFunction GetBlockAddressBasicBlock
     HasPersonalityFn GetPersonalityFn
-    GetInitializer GetGlobalParent IsGlobalConstant
+    GetInitializer GetGlobalParent GetTypeContext IsGlobalConstant
     HasMetadata GetFunctionCallConv GetAttributeCountAtIndex
     GetVisibility IsThreadLocal GetSection
     GetNumOperandBundles IsAtomicSingleThread IsPackedStruct
     GetBasicBlockName
     GetFirstGlobalAlias GetNextGlobalAlias AddAlias2 AliasGetAliasee
     AliasSetAliasee
-    GetFirstGlobalIFunc GetFirstNamedMetadata
+    GetFirstGlobalIFunc GetNextGlobalIFunc AddGlobalIFunc
+    GetGlobalIFuncResolver SetGlobalIFuncResolver SetModuleInlineAsm2
+    GetFirstNamedMetadata
     GetModuleInlineAsm GetTarget GetDataLayoutStr
     ;; normalization (stripping constructs sll does not model)
     StripModuleDebugInfo
@@ -161,7 +163,7 @@
     ConstTrunc ConstAdd ConstNSWAdd ConstNUWAdd ConstSub ConstNSWSub
     ConstNUWSub ConstMul ConstNSWMul ConstNUWMul ConstXor
     IsAConstant IsExternallyInitialized HasPrefixData HasPrologueData
-    SetGC SetGCString GetGC
+    SetGC SetGCString GetGC SetAtomicSingleThread SetExternallyInitialized
     CreateOperandBundle DisposeOperandBundle GetOperandBundleAtIndex
     GetOperandBundleTag GetNumOperandBundleArgs GetOperandBundleArgAtIndex
     BuildCallWithOperandBundles BuildInvokeWithOperandBundles
@@ -728,6 +730,7 @@
   (define-getter GetPersonalityFn "LLVMGetPersonalityFn" (void*) void*)
   (define-getter GetInitializer "LLVMGetInitializer" (void*) void*)
   (define-getter GetGlobalParent "LLVMGetGlobalParent" (void*) void*)
+  (define-getter GetTypeContext "LLVMGetTypeContext" (void*) void*)
   (define-getter IsGlobalConstant "LLVMIsGlobalConstant" (void*) int)
   (define-getter HasMetadata "LLVMHasMetadata" (void*) int)
   (define-getter GetFunctionCallConv "LLVMGetFunctionCallConv" (void*) unsigned-int)
@@ -744,6 +747,15 @@
   (define-getter AddAlias2           ; (module, value-type, addrspace, aliasee, name)
     "LLVMAddAlias2" (void* void* unsigned-int void* string) void*)
   (define-getter AliasGetAliasee "LLVMAliasGetAliasee" (void*) void*)
+  (define-getter GetNextGlobalIFunc "LLVMGetNextGlobalIFunc" (void*) void*)
+  (define-getter AddGlobalIFunc      ; (m, name, len, fnty, addrspace, resolver)
+    "LLVMAddGlobalIFunc" (void* string size_t void* unsigned-int void*) void*)
+  (define-getter GetGlobalIFuncResolver
+    "LLVMGetGlobalIFuncResolver" (void*) void*)
+  (define SetGlobalIFuncResolver
+    (foreign-procedure "LLVMSetGlobalIFuncResolver" (void* void*) void))
+  (define SetModuleInlineAsm2
+    (foreign-procedure "LLVMSetModuleInlineAsm2" (void* string size_t) void))
   (define AliasSetAliasee
     (foreign-procedure "LLVMAliasSetAliasee" (void* void*) void))
   (define-getter GetFirstGlobalIFunc "LLVMGetFirstGlobalIFunc" (void*) void*)
@@ -829,6 +841,10 @@
   (define SetGCString
     (foreign-procedure "LLVMSetGC" (void* string) void))
   (define-getter GetGC "LLVMGetGC" (void*) void*)
+  (define SetAtomicSingleThread
+    (foreign-procedure "LLVMSetAtomicSingleThread" (void* int) void))
+  (define SetExternallyInitialized
+    (foreign-procedure "LLVMSetExternallyInitialized" (void* int) void))
   (define-getter CreateOperandBundle   ; (tag, tag-len, arg-array, count)
     "LLVMCreateOperandBundle" (string size_t void* unsigned-int) void*)
   (define DisposeOperandBundle

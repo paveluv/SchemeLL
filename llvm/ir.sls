@@ -42,7 +42,10 @@
     const-array const-struct const-named-struct const-string struct-name
     const-cast const-binop const-gep
     add-alias alias-aliasee alias-set-aliasee! module-aliases
+    add-ifunc ifunc-resolver ifunc-set-resolver! module-ifuncs
+    set-module-asm!
     metadata-type md-string md-node metadata-value
+    value-address-space set-atomic-single-thread! set-externally-initialized!
     set-gc! gc-name set-target! set-data-layout!
     create-operand-bundle dispose-operand-bundle!
     build-call-bundles build-invoke-bundles
@@ -388,6 +391,10 @@
   ;; ---- gc / module target strings ----------------------------------------
 
   (define (set-gc! f name) (LLVMSetGCString f name))
+  (define (value-address-space v)   ; of a pointer-typed value
+    (LLVMGetPointerAddressSpace (LLVMTypeOf v)))
+  (define (set-atomic-single-thread! v) (LLVMSetAtomicSingleThread v 1))
+  (define (set-externally-initialized! g) (LLVMSetExternallyInitialized g 1))
   (define (gc-name f) (base:cstring->string (LLVMGetGC f)))
   (define (set-target! m s) (LLVMSetTarget (module-live-ptr m) s))
   (define (set-data-layout! m s) (LLVMSetDataLayout (module-live-ptr m) s))
@@ -443,6 +450,18 @@
   (define (module-aliases m)
     (ptr-chain LLVMGetFirstGlobalAlias LLVMGetNextGlobalAlias
                (module-live-ptr m)))
+  (define (add-ifunc m name fnty resolver)
+    (LLVMAddGlobalIFunc (module-live-ptr m) name
+                        (bytevector-length (string->utf8 name))
+                        fnty 0 resolver))
+  (define (ifunc-resolver i) (LLVMGetGlobalIFuncResolver i))
+  (define (ifunc-set-resolver! i r) (LLVMSetGlobalIFuncResolver i r))
+  (define (module-ifuncs m)
+    (ptr-chain LLVMGetFirstGlobalIFunc LLVMGetNextGlobalIFunc
+               (module-live-ptr m)))
+  (define (set-module-asm! m s)
+    (LLVMSetModuleInlineAsm2 (module-live-ptr m) s
+                             (bytevector-length (string->utf8 s))))
 
   ;; ---- constant expressions -------------------------------------------
   ;; constructed via ConstantExpr::get, which folds symmetrically with

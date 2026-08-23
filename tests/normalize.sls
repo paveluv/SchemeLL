@@ -170,6 +170,19 @@
                 l))
           l)))
 
+  (define (strip-partition l)   ; `[,] partition "..."` (no C API)
+    (let ([i (or (find-sub l ", partition \"" 0)
+                 (find-sub l " partition \"" 0))])
+      (if i
+          (let ([open (find-sub l "\"" i)])
+            (let ([close (find-sub l "\"" (+ open 1))])
+              (if close
+                  (string-append (substring l 0 i)
+                                 (substring l (+ close 1)
+                                            (string-length l)))
+                  l)))
+          l)))
+
   (define (strip-preds-comment l)  ; `; preds = ...` reflects use-list
     (let ([i (find-sub l "; preds = " 0)])   ; order, which is not modeled
       (if i
@@ -182,19 +195,20 @@
   (define (canonical-line l)
     (strip-global-attr
       (strip-preds-comment
-        (strip-code-model
-          (strip-syncscope
-            (strip-comma-token
+        (strip-partition
+          (strip-code-model
+            (strip-syncscope
               (strip-comma-token
                 (strip-comma-token
                   (strip-comma-token
-                    (strip-token (strip-token (strip-token l "dso_local")
-                                              "swifterror")
-                                 "inalloca")
-                    "no_sanitize_address")
-                  "no_sanitize_hwaddress")
-                "sanitize_address_dyninit")
-              "sanitize_memtag"))))))
+                    (strip-comma-token
+                      (strip-token (strip-token (strip-token l "dso_local")
+                                                "swifterror")
+                                   "inalloca")
+                      "no_sanitize_address")
+                    "no_sanitize_hwaddress")
+                  "sanitize_address_dyninit")
+                "sanitize_memtag")))))))
 
   ;; printed module -> comparable text: drops module-identity lines,
   ;; ! metadata and $ comdat lines, blank lines; canonicalizes the rest

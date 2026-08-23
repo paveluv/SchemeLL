@@ -263,11 +263,34 @@ Newest entries first. Format: date, Done / Decided / Next.
   verified (94.0% of all, 96.2% of parseable); bundle (~334) and
   token (~293) buckets gone. 219 checks.
 
+- Round 14 (2026-08-23): seven features. Address spaces: allocas in
+  the datalayout's A space and functions in its P space round-trip
+  (both the parser and the builder apply those defaults -- verified
+  empirically; detections relaxed to "outside the default", A/P
+  sniffed from the DL string); allocas carry an (addrspace N)
+  annotation; calls through pointers outside the program space get an
+  (addrspace N) marker rendered as IR's `call addrspace(N)`.
+  syncscope("singlethread") modeled as a `singlethread` flag
+  (SetAtomicSingleThread). externally_initialized modeled.
+  fp constants a double cannot carry (NaN payloads, fp80/fp128
+  values) travel as folded bitcast constexprs -- bitcast folds
+  bit-exactly IN BOTH DIRECTIONS for every float type except
+  ppc_fp128, so unbuild extracts bits via fp->int folding and emits
+  (bitcast i16 31745 half); killed the NaN (93) and most of the
+  fp-inexact bucket. ifuncs modeled ((= @i (ifunc fn-type (ptr
+  @resolver))), two-phase like aliases). module asm modeled
+  ((module-asm "...") item; render re-splits lines). partition "..."
+  normalized textually (no C API). round14 golden covers all seven
+  (223 checks). Corpus: 31888 + 2720 renderer + 2 fixpoint = 34610
+  verified (94.9% of all, 97.0% of parseable).
+
 ### Next (coverage burn-down, by corpus statistics)
-- Residual constexpr kinds (~246), alloca addrspace (~200), unnamed
-  identified structs (~121), all-constant folding residue (~95), NaN
-  payloads (~93), module asm (~74), cross-function blockaddress (~66),
-  target-ext/x86-mmx/x86-amx type kinds (~140 combined).
+- Residual constexpr kinds (~246), alloca outside DL-A (~157, C API
+  gap), unnamed identified structs (~122), all-constant folding
+  residue (~85), cross-function blockaddress (~67), target-ext /
+  x86-mmx / x86-amx type kinds (~142), constant kind (~39, grew as
+  files unblocked -- diagnose), multi-index extractvalue/insertvalue
+  (~39), digit-string names (~32).
 - Smaller leftovers: scalable vectors, raw value injection (the reserved
   (ptr N) shape), constant expressions on demand, address-spaced globals.
 

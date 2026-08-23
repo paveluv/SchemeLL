@@ -273,8 +273,8 @@
     '(trunc zext sext fptoui fptosi uitofp sitofp fptrunc fpext
        ptrtoint inttoptr bitcast addrspacecast))
   (define flag-words   ; leading modifiers an sll instruction may carry
-    '(nsw nuw exact disjoint nneg volatile atomic weak inbounds nusw
-       tail musttail notail
+    '(nsw nuw exact disjoint nneg volatile atomic weak singlethread
+       inbounds nusw tail musttail notail
        reassoc nnan ninf nsz arcp contract afn fast))
 
   (define (span-flags rest)
@@ -294,9 +294,11 @@
   (define (tail-text rest)
     (apply string-append
            (map (lambda (x)
-                  (if (symbol? x)
-                      (format " ~a" x)
-                      (format ", align ~a" (cadr x))))
+                  (cond
+                    [(symbol? x) (format " ~a" x)]
+                    [(eq? (car x) 'addrspace)
+                     (format ", addrspace(~a)" (cadr x))]
+                    [else (format ", align ~a" (cadr x))]))
                 rest)))
 
   (define (app->text env tyslot app forward-varargs?)
@@ -337,6 +339,10 @@
   (define (memory-flags-text flags)
     (words (if (memq 'atomic flags) "atomic" "")
            (if (memq 'volatile flags) "volatile" "")))
+
+  ;; syncscope goes between the operands and the ordering token
+  (define (sync-text flags)
+    (if (memq 'singlethread flags) " syncscope(\"singlethread\")" ""))
 
   (define (op->text env f)
     (let ([op (car f)])
@@ -398,6 +404,12 @@
                            [(memq 'notail flags) "notail"]
                            [else ""])
                      "call"
+                     (if (and (pair? (car args))
+                              (eq? (caar args) 'addrspace))
+                         (let ([as (cadr (car args))])
+                           (set! args (cdr args))
+                           (format "addrspace(~a)" as))
+                         "")
                      (flags-text (filter (lambda (x)
                                            (not (memq x '(tail musttail notail))))
                                          flags))
@@ -484,26 +496,28 @@
              [(extractvalue) (format "extractvalue ~a, ~a" (g 0) (cadr args))]
              [(insertvalue)
               (format "insertvalue ~a, ~a, ~a" (g 0) (g 1) (caddr args))]
-             [(fence) (format "fence ~a" (car args))]
+             [(fence) (format "fence~a ~a" (sync-text flags) (car args))]
              [(atomicrmw)
               (words "atomicrmw" (memory-flags-text flags)
                      (symbol->string (car args))
                      (string-append
-                       (format "~a, ~a ~a" (g 1) (group->text env (caddr args))
-                               (cadddr args))
+                       (format "~a, ~a~a ~a" (g 1)
+                               (group->text env (caddr args))
+                               (sync-text flags) (cadddr args))
                        (tail-text (cddddr args))))]
              [(cmpxchg)
               (words "cmpxchg"
                      (if (memq 'weak flags) "weak" "")
                      (memory-flags-text flags)
                      (string-append
-                       (format "~a, ~a, ~a ~a ~a" (g 0) (g 1) (g 2)
+                       (format "~a, ~a, ~a~a ~a ~a" (g 0) (g 1) (g 2)
+                               (sync-text flags)
                                (cadddr args) (car (cddddr args)))
                        (tail-text (cdr (cddddr args)))))]
              [(alloca)
               (let* ([rest (cdr args)]
                      [count (and (pair? rest) (pair? (car rest))
-                                 (not (eq? (caar rest) 'align))
+                                 (not (memq (caar rest) '(align addrspace)))
                                  (car rest))]
                      [attrs (if count (cdr rest) rest)])
                 (string-append
@@ -514,11 +528,13 @@
               (words "load" (memory-flags-text flags)
                      (string-append
                        (format "~a, ~a" (ty) (g 1))
+                       (sync-text flags)
                        (tail-text (cddr args))))]
              [(store)
               (words "store" (memory-flags-text flags)
                      (string-append
                        (format "~a, ~a" (g 0) (g 1))
+                       (sync-text flags)
                        (tail-text (cddr args))))]
              [(getelementptr)
               (words "getelementptr" (flags-text flags)
@@ -541,6 +557,16 @@
     '(external available_externally linkonce linkonce_odr weak weak_odr
        appending internal private extern_weak common))
 
+  (define (ifunc->text env item)
+    (let* ([rest (cdr (caddr item))]
+           [lk (and (symbol? (car rest)) (memq (car rest) linkage-words)
+                    (car rest))]
+           [rest (if lk (cdr rest) rest)])
+      (words (format "~a =" (name->text (cadr item)))
+             (if lk (symbol->string lk) "")
+             "ifunc" (type->text (car rest))
+             (format ", ~a" (group->text env (cadr rest))))))
+
   (define (alias->text env item)
     ;; (= @a (alias linkage? value-type (ptr aliasee)))
     (let* ([rest (cdr (caddr item))]
@@ -562,6 +588,8 @@
            [lk (and (symbol? (car rest)) (memq (car rest) linkage-words)
                     (car rest))]
            [rest (if lk (cdr rest) rest)]
+           [ext-init? (eq? (car rest) 'externally_initialized)]
+           [rest (if ext-init? (cdr rest) rest)]
            [ty (car rest)] [rest (cdr rest)]
            [init (and (pair? rest)
                       (not (and (pair? (car rest)) (eq? (caar rest) 'align)))
@@ -571,6 +599,7 @@
         (words (format "~a =" (name->text name))
                (if lk (symbol->string lk) "")
                (if as (format "addrspace(~a)" as) "")
+               (if ext-init? "externally_initialized" "")
                (symbol->string kind)
                (type->text ty)
                (if init (operand->text env ty init) ""))
@@ -680,10 +709,25 @@
                         (format "target datalayout = ~s" (cadr item))]
                        [(triple)
                         (format "target triple = ~s" (cadr item))]
+                       [(module-asm)
+                        ;; one `module asm` directive per stored line
+                        (let ([p (open-string-input-port (cadr item))]
+                              [out '()])
+                          (let loop ()
+                            (let ([l (get-line p)])
+                              (if (eof-object? l)
+                                  (join "\n"
+                                        (map (lambda (x)
+                                               (string-append "module asm "
+                                                              (quoted x)))
+                                             (reverse out)))
+                                  (begin (set! out (cons l out))
+                                         (loop))))))]
                        [(type) (type-item->text item)]
-                       [(=) (if (eq? (car (caddr item)) 'alias)
-                                (alias->text env item)
-                                (global->text env item))]
+                       [(=) (case (car (caddr item))
+                              [(alias) (alias->text env item)]
+                              [(ifunc) (ifunc->text env item)]
+                              [else (global->text env item)])]
                        [(define declare) (function->text env item)]
                        [else (error "cannot render module item" item)]))
                    prog))
