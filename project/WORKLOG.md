@@ -142,7 +142,7 @@ Newest entries first. Format: date, Done / Decided / Next.
   Second chance: (sll:unbuild m 'tolerate-builder-folds) + stability
   check over our own print. Corpus: 28024 strict + 1826 modulo-folding
   = 29850 verified (81.8%). Escape hatches ranked for the residue:
-  textual ll->IR backend parsed by LLVM (zero-glue, exact; roadmapped),
+  textual sll->ll backend parsed by LLVM (zero-glue, exact; roadmapped),
   upstream C API patch, C shim (rejected: breaks zero-glue).
 
 - (sll render): sll->llual-IR printer in pure Scheme (no LLVM

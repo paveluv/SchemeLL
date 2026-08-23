@@ -1,6 +1,6 @@
 ;;; Coverage harness, levels 1+2 of project/coverage-plan.md.
 ;;;
-;;; Level 2: every corpus entry is an (name ll-program golden-IR) pair;
+;;; Level 2: every corpus entry is an (name sll-program golden-IR) pair;
 ;;; both sides go through LLVM's canonical printer and must match exactly.
 ;;; While comparing, every emitted instruction is observed via
 ;;; LLVMGetInstructionOpcode (and icmp/fcmp predicates via their getters).
