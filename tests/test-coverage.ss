@@ -959,6 +959,35 @@ compute:
              (unbuild-of-ir
                "@g = global i64 0\n@p = global i64 add nuw nsw (i64 ptrtoint (ptr @g to i64), i64 1)"))
 
+(check-entry! "aliases"
+  '((= @g (global i64 7))
+    (= @a (alias i64 (ptr @g)))
+    (= @b (alias internal i64 (ptr @a)))
+    ;; a zero-offset gep aliasee folds to the plain global (symmetric
+    ;; ConstantExpr::get folding, same on the parse side)
+    (= @elt (alias i32 (ptr (getelementptr inbounds i64 (ptr @g) (i64 0)))))
+    (declare i32 (@ext i32) (align 16))
+    (define internal i64 (@f) (align 32)
+      (label %entry
+        (= %v (load i64 (ptr @a)))
+        (ret i64 %v)))
+    (= @fa (alias (fn i64) (ptr @f))))
+  "@g = global i64 7
+
+@a = alias i64, ptr @g
+@b = internal alias i64, ptr @a
+@elt = alias i32, ptr @g
+@fa = alias i64 (), ptr @f
+
+declare i32 @ext(i32) align 16
+
+define internal i64 @f() align 32 {
+entry:
+  %v = load i64, ptr @a, align 4
+  ret i64 %v
+}
+")
+
 (check-entry! "constexprs"
   '((= @g (global i64 0))
     (type %pair (struct i64 i32))

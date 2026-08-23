@@ -205,12 +205,28 @@ Newest entries first. Format: date, Done / Decided / Next.
   29014 + 2495 renderer + 2 fixpoint = 31511 verified (86.4%),
   +1k files this round; constexpr bucket 1171 -> 239.
 
+- Round 11 (2026-08-22): function alignment and global aliases
+  MODELED. Alignment: (align N) after the signature, before
+  (personality ...), on both define and declare; applied in the
+  declare pass. Aliases: (= @a (alias linkage? value-type (ptr
+  aliasee))), aliasee any ptr constant incl. constexprs; created in
+  TWO phases -- all aliases first with a null placeholder aliasee
+  (LLVM prints creation order, so program order must be creation
+  order), then patched via LLVMAliasSetAliasee (alias-to-alias in any
+  order). GlobalAlias recognized as an operand (IsAGlobalAlias);
+  aliases normalized like globals; thread_local aliases detected
+  textually (accessors unwrap GlobalVariable). Personalities
+  generalized to ANY constant via resolve-constant (a corpus file has
+  personality ptr inttoptr(i64 1 to ptr)). New aliases golden entry
+  (212 checks). Corpus: 29432 + 2557 renderer + 2 fixpoint = 31991
+  verified (87.7%); the fn-alignment (~337) and alias (~262) buckets
+  are gone.
+
 ### Next (coverage burn-down, by corpus statistics)
-- Metadata-typed operands (~1.7k, mostly intrinsic calls), fn
-  alignment (~337, modelable), operand bundles (~325), global aliases
-  (~262), residual constexpr kinds (~239), alloca addrspace (~196),
-  all-constant folding residue (~124), unnamed identified structs
-  (~104), module asm (~71).
+- Metadata-typed operands (~1.7k, mostly intrinsic calls), operand
+  bundles (~329), token type kind (~289), residual constexpr kinds
+  (~239), alloca addrspace (~196), all-constant folding residue
+  (~125), unnamed identified structs (~116), module asm (~74).
 - Smaller leftovers: scalable vectors, raw value injection (the reserved
   (ptr N) shape), constant expressions on demand, address-spaced globals.
 

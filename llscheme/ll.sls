@@ -1088,10 +1088,14 @@
 
   ;; pass 1: create every function and global variable up front, so bodies
   ;; and initializers may reference them in any order
+  (define (alias-item? item)
+    (and (eq? (item-kind item) '=)
+         (pair? (caddr item)) (eq? (car (caddr item)) 'alias)))
+
   (define (declare-item! ctx m globals item)
     (let ([kind (item-kind item)])
-      (if (eq? kind 'type)
-          (void)   ; handled by the type passes
+      (if (or (eq? kind 'type) (alias-item? item))
+          (void)   ; types have their own passes; aliases come after
         (if (eq? kind '=)
           (let-values ([(name lk constant? ty-form init attrs as)
                         (parse-global item)])
@@ -1121,11 +1125,19 @@
           (let ([f (ir:add-function m (llvm-name fname)
                                     (ir:function-type retty ptys variadic?))])
             (when lk (ir:set-linkage! f lk))
+            ;; optional (align N) right after the signature
+            (when (and (pair? body) (pair? (car body))
+                       (eq? (caar body) 'align))
+              (let ([a (car body)])
+                (unless (and (= (length a) 2) (fixnum? (cadr a))
+                             (positive? (cadr a)))
+                  (ll-error "expected (align bytes)" a fname))
+                (ir:set-alignment! f (cadr a))))
             (hashtable-set! globals fname f))))))
 
   ;; pass 2: set global initializers/linkage; emit the body of each define
   (define (emit-item! ctx m globals item)
-    (when (eq? (item-kind item) '=)
+    (when (and (eq? (item-kind item) '=) (not (alias-item? item)))
       (let-values ([(name lk constant? ty-form init attrs as) (parse-global item)])
         (let ([g (hashtable-ref globals name #f)])
           (when lk (ir:set-linkage! g lk))
@@ -1139,8 +1151,13 @@
                           name)))
           (apply-attrs! g attrs item))))
     (when (eq? (item-kind item) 'define)
-      (let-values ([(retty-form fname params lk full-body) (item-signature item)])
+      (let-values ([(retty-form fname params lk full-body0) (item-signature item)])
         (let* ([f (hashtable-ref globals fname #f)]
+               ;; (align N) was applied in the declare pass; skip it here
+               [full-body (if (and (pair? full-body0) (pair? (car full-body0))
+                                   (eq? (caar full-body0) 'align))
+                              (cdr full-body0)
+                              full-body0)]
                ;; optional (personality type @fn) before the first block,
                ;; as in `define ... personality ptr @pers {`
                [pers? (and (pair? full-body) (pair? (car full-body))
@@ -1151,19 +1168,10 @@
             (let ([p (car full-body)])
               (unless (= (length p) 3)
                 (ll-error "expected (personality type value)" p fname))
-              (let ([pty (resolve-type ctx (cadr p))] [pv (caddr p)])
-                (ir:set-personality-fn! f
-                  (cond
-                    [(global-name? pv)
-                     (or (hashtable-ref globals pv #f)
-                         (ll-error "unbound personality function" pv))]
-                    [(eq? pv 'null) (ir:const-null pty)]
-                    [(eq? pv 'undef) (ir:undef-value pty)]
-                    [(eq? pv 'poison) (ir:poison-value pty)]
-                    [(and (integer? pv) (exact? pv)) (ir:const-int pty pv)]
-                    [else (ll-error
-                            "expected (personality type @function|constant)"
-                            p fname)])))))
+              ;; any constant: @fn, null, undef, integers, constexprs
+              (ir:set-personality-fn! f
+                (resolve-constant ctx globals (resolve-type ctx (cadr p))
+                                  (caddr p)))))
           (when (null? body)
             (ll-error "function body is empty" fname))
           (let ([st (make-fstate ctx builder globals (make-eq-hashtable)
@@ -1199,12 +1207,49 @@
 
   ;; Build an ll program (a list of module items) into a fresh (llvm ir)
   ;; module in the given context.
+  ;; (= @a (alias linkage? value-type (ptr aliasee))). Two phases so
+  ;; that (a) aliases print in program order (LLVM prints creation
+  ;; order) and (b) aliases may reference aliases in any order: create
+  ;; each with a null aliasee first, then patch the aliasees.
+  (define (alias-parts ctx item)
+    (let* ([rhs (caddr item)]
+           [rest (cdr rhs)]
+           [lk (and (pair? rest) (symbol? (car rest))
+                    (assq (car rest) linkages))]
+           [rest (if lk (cdr rest) rest)])
+      (unless (and (= (length rest) 2) (pair? (cadr rest))
+                   (= (length (cadr rest)) 2))
+        (ll-error "expected (= @name (alias linkage? type (ptr aliasee)))"
+                  item))
+      (values (cadr item) lk (car rest) (cadr rest))))
+
+  (define (create-alias! ctx m globals item)
+    (when (alias-item? item)
+      (let-values ([(name lk vty-form g) (alias-parts ctx item)])
+        (when (hashtable-ref globals name #f)
+          (ll-error "duplicate global name" name))
+        (let ([a (ir:add-alias m (resolve-type ctx vty-form)
+                               (ir:const-null (ir:pointer-type ctx))
+                               (llvm-name name))])
+          (when lk (ir:set-linkage! a (cdr lk)))
+          (hashtable-set! globals name a)))))
+
+  (define (patch-alias! ctx m globals item)
+    (when (alias-item? item)
+      (let-values ([(name lk vty-form g) (alias-parts ctx item)])
+        (ir:alias-set-aliasee!
+          (hashtable-ref globals name #f)
+          (resolve-constant ctx globals (resolve-type ctx (car g))
+                            (cadr g))))))
+
   (define (build ctx name prog)
     (let ([m (ir:make-module ctx name)]
           [globals (make-eq-hashtable)])
       (for-each (lambda (item) (create-type-item! ctx item)) prog)
       (for-each (lambda (item) (fill-type-item! ctx item)) prog)
       (for-each (lambda (item) (declare-item! ctx m globals item)) prog)
+      (for-each (lambda (item) (create-alias! ctx m globals item)) prog)
+      (for-each (lambda (item) (patch-alias! ctx m globals item)) prog)
       (for-each (lambda (item) (emit-item! ctx m globals item)) prog)
       m))
 

@@ -41,6 +41,7 @@
     const-vector block-address
     const-array const-struct const-named-struct const-string struct-name
     const-cast const-binop const-gep
+    add-alias alias-aliasee alias-set-aliasee! module-aliases
     packed-struct-type?
     ;; module-level globals
     add-global set-initializer! set-global-constant! set-linkage! linkage
@@ -379,6 +380,16 @@
   (define (struct-name ty)
     (let ([s (base:cstring->string (LLVMGetStructName ty))])
       (and s (not (string=? s "")) s)))
+
+  ;; ---- global aliases ---------------------------------------------------
+
+  (define (add-alias m value-ty aliasee name)
+    (LLVMAddAlias2 (module-live-ptr m) value-ty 0 aliasee name))
+  (define (alias-aliasee a) (LLVMAliasGetAliasee a))
+  (define (alias-set-aliasee! a v) (LLVMAliasSetAliasee a v))
+  (define (module-aliases m)
+    (ptr-chain LLVMGetFirstGlobalAlias LLVMGetNextGlobalAlias
+               (module-live-ptr m)))
 
   ;; ---- constant expressions -------------------------------------------
   ;; constructed via ConstantExpr::get, which folds symmetrically with

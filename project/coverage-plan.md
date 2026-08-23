@@ -46,11 +46,12 @@ file is render-unrepresentable (WebAssembly funcref: a call through
 ptr addrspace(20) needs the stripped datalayout to parse). Constant expressions were
 modeled in round 10 (grammar: instruction forms nested in operand
 position; +1k files). Rounds 9-10 emptied every BUG bucket and the
-MISMATCH bucket. As of round 10: 29014 strict + 2495 renderer + 2
-fixpoint = 31511 verified (86.4% of all, 88.3% of parseable). Largest
-remaining buckets: metadata-typed operands (~1.7k), fn alignment
-(~337), operand bundles (~325), aliases (~262), residual constexpr
-kinds (~239), alloca addrspace (~196). "100% coverage" is meaningless without a
+MISMATCH bucket. Round 11 modeled function
+alignment and global aliases. As of round 11: 29432 strict + 2557
+renderer + 2 fixpoint = 31991 verified (87.7% of all, 89.6% of
+parseable). Largest remaining buckets: metadata-typed operands
+(~1.7k), operand bundles (~329), token type kind (~289), residual
+constexpr kinds (~239), alloca addrspace (~196). "100% coverage" is meaningless without a
 machine-checkable oracle and an explicit scope. This plan defines both, and
 three verification levels that turn coverage from a claim into a test that
 fails.

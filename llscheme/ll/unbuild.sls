@@ -256,7 +256,8 @@
                                (ir:value->string (LLVMConstReal ty d)))
                (not-modeled "fp constants not exactly representable as double")))
            d)]
-        [(or (isa? (LLVMIsAFunction c)) (isa? (LLVMIsAGlobalVariable c)))
+        [(or (isa? (LLVMIsAFunction c)) (isa? (LLVMIsAGlobalVariable c))
+             (isa? (LLVMIsAGlobalAlias c)))
          (global-sym st c)]     ; globals are ptr constants
         [(isa? (LLVMIsAConstantPointerNull c)) 'null]
         [(isa? (LLVMIsAConstantAggregateZero c)) 'zeroinitializer]
@@ -302,14 +303,8 @@
         [(eq? op 'getelementptr)
          ;; inrange(lo, hi) has no C API accessor at all; the printed
          ;; form is the only witness
-         (let* ([txt (ir:value->string c)]
-                [n (string-length txt)])
-           (let loop ([i 0])
-             (cond
-               [(> (+ i 8) n) #f]
-               [(string=? (substring txt i (+ i 8)) "inrange(")
-                (not-modeled "inrange annotations on gep constant expressions (no C API)")]
-               [else (loop (+ i 1))])))
+         (when (text-contains? (ir:value->string c) "inrange(")
+           (not-modeled "inrange annotations on gep constant expressions (no C API)"))
          `(getelementptr ,@(gep-flag-syms c)
                          ,(unbuild-type (LLVMGetGEPSourceElementType c))
                          ,(grp (opn 0))
@@ -360,7 +355,8 @@
     (cond
       [(isa? (LLVMIsAArgument v)) (local-name st v)]
       [(isa? (LLVMIsAInstruction v)) (local-name st v)]
-      [(or (isa? (LLVMIsAFunction v)) (isa? (LLVMIsAGlobalVariable v)))
+      [(or (isa? (LLVMIsAFunction v)) (isa? (LLVMIsAGlobalVariable v))
+           (isa? (LLVMIsAGlobalAlias v)))
        (global-sym st v)]
       [(isa? (LLVMIsAInlineAsm v)) (asm-form v)]
       [else (constant-form st v #t)]))
@@ -720,8 +716,6 @@
   (define (check-function-decorations f nparams)
     (unless (zero? (LLVMGetPointerAddressSpace (LLVMTypeOf f)))
       (not-modeled "functions in non-zero program address spaces"))
-    (unless (zero? (LLVMGetAlignment f))
-      (not-modeled "alignment on functions"))
     (when (nz? (LLVMHasPrefixData f)) (not-modeled "function prefix data"))
     (when (nz? (LLVMHasPrologueData f)) (not-modeled "function prologue data"))
     (unless (zero? (LLVMGetFunctionCallConv f))
@@ -750,7 +744,8 @@
           `(declare ,@lk-part
                     ,(unbuild-type (ir:type-return-type fnty))
                     (,gname ,@(map unbuild-type (ir:type-param-types fnty))
-                            ,@variadic))
+                            ,@variadic)
+                    ,@(align-attr f))
           (let ([st (make-ustate (function-names f) gnames f)])
             `(define ,@lk-part
                ,(unbuild-type (ir:type-return-type fnty))
@@ -760,6 +755,7 @@
                                 (local-name st p)))
                         params)
                  ,@variadic)
+               ,@(align-attr f)
                ;; the personality is any ptr constant: @fn, null, undef
                ,@(if (nz? (LLVMHasPersonalityFn f))
                      `((personality
@@ -811,8 +807,6 @@
         (when (and t (not (string=? t ""))) (not-modeled "target triple")))
       (let ([d (base:cstring->string (LLVMGetDataLayoutStr mp))])
         (when (and d (not (string=? d ""))) (not-modeled "target datalayout")))
-      (unless (base:null-ptr? (LLVMGetFirstGlobalAlias mp))
-        (not-modeled "global aliases"))
       (unless (base:null-ptr? (LLVMGetFirstGlobalIFunc mp))
         (not-modeled "ifuncs"))
       (unless (or ignore-named-metadata?
@@ -834,8 +828,34 @@
                   (let ([s (number->string n)]) (set! n (+ n 1)) s)
                   given)))))
       (for-each add! (ir:module-globals m))
+      (for-each add! (ir:module-aliases m))
       (for-each add! (ir:module-functions m))
       tbl))
+
+  ;; ---- aliases ----------------------------------------------------------------------
+
+  (define (text-contains? s sub)
+    (let ([n (string-length s)] [m (string-length sub)])
+      (let loop ([i 0])
+        (cond
+          [(> (+ i m) n) #f]
+          [(string=? (substring s i (+ i m)) sub) #t]
+          [else (loop (+ i 1))]))))
+
+  (define (unbuild-alias gnames a)
+    (unless (zero? (LLVMGetPointerAddressSpace (LLVMTypeOf a)))
+      (not-modeled "aliases in non-zero address spaces"))
+    ;; the thread-local accessors unwrap GlobalVariable, so an alias's
+    ;; thread_local bit is only witnessed textually
+    (when (text-contains? (ir:value->string a) " thread_local")
+      (not-modeled "thread_local aliases (no C API accessor)"))
+    (let ([st (make-ustate (make-eqv-hashtable) gnames base:null-ptr)]
+          [lk (ir:linkage a)])
+      `(= ,(hashtable-ref gnames a #f)
+          (alias ,@(if (zero? lk) '()
+                       (list (enum-name linkage-names lk "linkage")))
+                 ,(unbuild-type (LLVMGlobalGetValueType a))
+                 ,(group st (ir:alias-aliasee a))))))
 
   ;; every identified struct met during the walk becomes a (type ...) item;
   ;; emitting bodies can register further structs, so iterate to a fixpoint
@@ -876,6 +896,8 @@
                (append
                  (map (lambda (g) (unbuild-global gnames g))
                       (ir:module-globals m))
+                 (map (lambda (a) (unbuild-alias gnames a))
+                      (ir:module-aliases m))
                  (map (lambda (f) (unbuild-function gnames f))
                       (ir:module-functions m)))])
           (append (type-items) items))))))

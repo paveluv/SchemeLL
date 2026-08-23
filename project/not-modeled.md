@@ -20,7 +20,8 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 |---|---|
 | `target triple = "..."` | detected |
 | `target datalayout = "..."` | detected |
-| global aliases (`@a = alias ...`) | detected |
+| aliases in non-zero address spaces | detected |
+| `thread_local` aliases (the thread-local accessors unwrap GlobalVariable) | detected (textually, from the printed alias) |
 | ifuncs (`@i = ifunc ...`) | detected |
 | named module metadata (`!llvm.module.flags`, `!llvm.ident`, ...) | detected; `(ll:unbuild m 'ignore-named-metadata)` opts out explicitly (the corpus harness does, stripping `!` lines from the comparison) |
 | module-level inline asm (`module asm "..."`) | detected |
@@ -36,7 +37,6 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 | sections (`section "..."`) | detected |
 | visibility (`hidden` / `protected`) | detected |
 | `dso_local` | undetected; the corpus harness normalizes it textually (no C API accessor in LLVM 19) |
-| alignment on function definitions/declarations (`define ... align 8`) | detected |
 | `unnamed_addr` / `local_unnamed_addr` | undetected |
 | DLL storage class (`dllimport`/`dllexport`) | undetected; the corpus normalizer strips it |
 | garbage-collector name (`gc "..."`) | undetected; the corpus normalizer strips it |

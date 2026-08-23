@@ -90,6 +90,12 @@
         (for-each normalize-instruction! (ir:block-instructions bb)))
       (ir:function-blocks f)))
 
+  (define (normalize-alias! a)
+    (LLVMGlobalClearMetadata a)
+    (LLVMSetDLLStorageClass a 0)
+    (LLVMSetVisibility a 0)
+    (LLVMSetUnnamedAddress a 0))
+
   (define (normalize-global! g)
     (LLVMGlobalClearMetadata g)
     (LLVMSetComdat g base:null-ptr)
@@ -223,4 +229,5 @@
       (LLVMSetTarget mp "")
       (LLVMSetDataLayout mp ""))
     (for-each normalize-global! (ir:module-globals m))
+    (for-each normalize-alias! (ir:module-aliases m))
     (for-each normalize-function! (ir:module-functions m))))

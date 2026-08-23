@@ -512,6 +512,17 @@
     '(external available_externally linkonce linkonce_odr weak weak_odr
        appending internal private extern_weak common))
 
+  (define (alias->text env item)
+    ;; (= @a (alias linkage? value-type (ptr aliasee)))
+    (let* ([rest (cdr (caddr item))]
+           [lk (and (symbol? (car rest)) (memq (car rest) linkage-words)
+                    (car rest))]
+           [rest (if lk (cdr rest) rest)])
+      (words (format "~a =" (name->text (cadr item)))
+             (if lk (symbol->string lk) "")
+             "alias" (type->text (car rest))
+             (format ", ~a" (group->text env (cadr rest))))))
+
   (define (global->text env item)
     ;; (= @g (global|constant (addrspace N)? linkage? ty init? attrs))
     (let* ([name (cadr item)] [rhs (caddr item)]
@@ -555,8 +566,16 @@
            [ty (car rest)] [sig (cadr rest)] [body (cddr rest)])
       (if (eq? kind 'declare)
           (words "declare" (if lk (symbol->string lk) "")
-                 (type->text ty) (signature->text env sig #f))   ; bare types
-          (let* ([pers (and (pair? body) (pair? (car body))
+                 (type->text ty) (signature->text env sig #f)   ; bare types
+                 (if (and (pair? body) (pair? (car body))
+                          (eq? (caar body) 'align))
+                     (format "align ~a" (cadr (car body)))
+                     ""))
+          (let* ([algn (and (pair? body) (pair? (car body))
+                            (eq? (caar body) 'align)
+                            (car body))]
+                 [body (if algn (cdr body) body)]
+                 [pers (and (pair? body) (pair? (car body))
                             (eq? (caar body) 'personality)
                             (car body))]
                  [blocks (if pers (cdr body) body)]
@@ -566,6 +585,7 @@
             (string-append
               (words "define" (if lk (symbol->string lk) "")
                      (type->text ty) (signature->text env sig #t)
+                     (if algn (format "align ~a" (cadr algn)) "")
                      (if pers
                          (format "personality ~a ~a"
                                  (type->text (cadr pers))
@@ -609,7 +629,9 @@
               (map (lambda (item)
                      (case (car item)
                        [(type) (type-item->text item)]
-                       [(=) (global->text env item)]
+                       [(=) (if (eq? (car (caddr item)) 'alias)
+                                (alias->text env item)
+                                (global->text env item))]
                        [(define declare) (function->text env item)]
                        [else (r-error "cannot render module item" item)]))
                    prog))

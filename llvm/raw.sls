@@ -102,7 +102,7 @@
     GetBufferStart GetBufferSize DisposeMemoryBuffer
     ;; generic value/type inspection (read-only; used by ll:unbuild)
     GetOperand GetNumOperands GetNumArgOperands
-    IsAInstruction IsAArgument IsAFunction IsAGlobalVariable
+    IsAInstruction IsAArgument IsAFunction IsAGlobalVariable IsAGlobalAlias
     IsAConstantInt IsAConstantFP IsAConstantExpr IsAConstantPointerNull
     IsAConstantAggregateZero IsAConstantDataArray IsAConstantArray
     IsAConstantStruct IsAConstantVector IsAConstantDataVector
@@ -133,7 +133,9 @@
     GetVisibility IsThreadLocal GetSection
     GetNumOperandBundles IsAtomicSingleThread IsPackedStruct
     GetBasicBlockName
-    GetFirstGlobalAlias GetFirstGlobalIFunc GetFirstNamedMetadata
+    GetFirstGlobalAlias GetNextGlobalAlias AddAlias2 AliasGetAliasee
+    AliasSetAliasee
+    GetFirstGlobalIFunc GetFirstNamedMetadata
     GetModuleInlineAsm GetTarget GetDataLayoutStr
     ;; normalization (stripping constructs ll does not model)
     StripModuleDebugInfo
@@ -630,6 +632,7 @@
   (define-getter IsAArgument "LLVMIsAArgument" (void*) void*)
   (define-getter IsAFunction "LLVMIsAFunction" (void*) void*)
   (define-getter IsAGlobalVariable "LLVMIsAGlobalVariable" (void*) void*)
+  (define-getter IsAGlobalAlias "LLVMIsAGlobalAlias" (void*) void*)
   (define-getter IsAConstantInt "LLVMIsAConstantInt" (void*) void*)
   (define-getter IsAConstantFP "LLVMIsAConstantFP" (void*) void*)
   (define-getter IsAConstantExpr "LLVMIsAConstantExpr" (void*) void*)
@@ -711,6 +714,12 @@
   (define-getter IsPackedStruct "LLVMIsPackedStruct" (void*) int)
   (define-getter GetBasicBlockName "LLVMGetBasicBlockName" (void*) void*)
   (define-getter GetFirstGlobalAlias "LLVMGetFirstGlobalAlias" (void*) void*)
+  (define-getter GetNextGlobalAlias "LLVMGetNextGlobalAlias" (void*) void*)
+  (define-getter AddAlias2           ; (module, value-type, addrspace, aliasee, name)
+    "LLVMAddAlias2" (void* void* unsigned-int void* string) void*)
+  (define-getter AliasGetAliasee "LLVMAliasGetAliasee" (void*) void*)
+  (define AliasSetAliasee
+    (foreign-procedure "LLVMAliasSetAliasee" (void* void*) void))
   (define-getter GetFirstGlobalIFunc "LLVMGetFirstGlobalIFunc" (void*) void*)
   (define-getter GetFirstNamedMetadata "LLVMGetFirstNamedMetadata" (void*) void*)
   (define-getter GetModuleInlineAsm "LLVMGetModuleInlineAsm" (void* void*) void*)
