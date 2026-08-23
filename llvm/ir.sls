@@ -46,7 +46,8 @@
     set-module-asm!
     metadata-type md-string md-node metadata-value
     value-address-space set-atomic-single-thread! set-externally-initialized!
-    literal-struct-type?
+    literal-struct-type? const-splat
+    x86mmx-type x86amx-type target-ext-type
     set-gc! gc-name set-target! set-data-layout!
     create-operand-bundle dispose-operand-bundle!
     build-call-bundles build-invoke-bundles
@@ -394,6 +395,24 @@
   (define (set-gc! f name) (LLVMSetGCString f name))
   (define (literal-struct-type? ty)
     (not (zero? (LLVMIsLiteralStruct ty))))
+
+  ;; splat constant for a (possibly scalable) vector type: the
+  ;; insertelement+shufflevector constexpr chain LLVM 19 spells
+  ;; `splat (ty elem)`; folds to a plain vector for fixed types
+  (define (const-splat vty elem)
+    (let* ([cx (LLVMGetTypeContext vty)]
+           [i32 (LLVMIntTypeInContext cx 32)]
+           [i64 (LLVMIntTypeInContext cx 64)]
+           [n (LLVMGetVectorSize vty)]
+           [scalable? (eq? (type-kind vty) 'scalable-vector)]
+           [mask-ty (if scalable?
+                        (LLVMScalableVectorType i32 n)
+                        (LLVMVectorType i32 n))]
+           [poison (LLVMGetPoison vty)])
+      (LLVMConstShuffleVector
+        (LLVMConstInsertElement poison elem (LLVMConstInt i64 0 0))
+        poison
+        (LLVMConstNull mask-ty))))
   (define (value-address-space v)   ; of a pointer-typed value
     (LLVMGetPointerAddressSpace (LLVMTypeOf v)))
   (define (set-atomic-single-thread! v) (LLVMSetAtomicSingleThread v 1))
@@ -435,6 +454,20 @@
 
   (define (metadata-type ctx)
     (LLVMMetadataTypeInContext (context-live-ptr ctx)))
+  (define (x86mmx-type ctx) (LLVMX86MMXTypeInContext (context-live-ptr ctx)))
+  (define (x86amx-type ctx) (LLVMX86AMXTypeInContext (context-live-ptr ctx)))
+  (define (target-ext-type ctx name type-params int-params)
+    (base:call-with-pointer-array type-params
+      (lambda (tarr tn)
+        (let ([iarr (foreign-alloc (fxmax 4 (fx* 4 (length int-params))))])
+          (do ([ps int-params (cdr ps)] [i 0 (fx+ i 1)])
+              ((null? ps))
+            (foreign-set! 'unsigned-32 iarr (fx* 4 i) (car ps)))
+          (let ([ty (LLVMTargetExtTypeInContext
+                      (context-live-ptr ctx) name tarr tn
+                      iarr (length int-params))])
+            (foreign-free iarr)
+            ty)))))
   (define (md-string ctx s)   ; -> MetadataRef; the length is in BYTES
     (LLVMMDStringInContext2 (context-live-ptr ctx) s
                             (bytevector-length (string->utf8 s))))
@@ -614,13 +647,13 @@
                              dests ndests arr n base:null-ptr 0 name))))))
 
   ;; a callable inline-asm value of the given function type
-  (define (inline-asm fn-type asm-text constraints side-effects? align-stack?)
+  (define (inline-asm fn-type asm-text constraints side-effects? align-stack?
+                      intel? can-throw?)
     (LLVMGetInlineAsm fn-type
                       asm-text (bytevector-length (string->utf8 asm-text))
                       constraints (bytevector-length (string->utf8 constraints))
                       (if side-effects? 1 0) (if align-stack? 1 0)
-                      0    ; dialect: AT&T
-                      0))  ; can-throw: no
+                      (if intel? 1 0) (if can-throw? 1 0)))
 
   (define (token-type ctx) (LLVMTokenTypeInContext (context-live-ptr ctx)))
 

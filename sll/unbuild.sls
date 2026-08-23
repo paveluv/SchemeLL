@@ -152,6 +152,21 @@
                          ,(unbuild-type (LLVMGetElementType ty)))]
       [(metadata) 'metadata]
       [(token) 'token]
+      [(x86-mmx) 'x86_mmx]
+      [(x86-amx) 'x86_amx]
+      [(target-ext)
+       `(target-ext ,(base:cstring->string (LLVMGetTargetExtTypeName ty))
+                    ,@(let loop ([i 0])
+                        (if (fx= i (LLVMGetTargetExtTypeNumTypeParams ty))
+                            '()
+                            (cons (unbuild-type
+                                    (LLVMGetTargetExtTypeTypeParam ty i))
+                                  (loop (fx+ i 1)))))
+                    ,@(let loop ([i 0])
+                        (if (fx= i (LLVMGetTargetExtTypeNumIntParams ty))
+                            '()
+                            (cons (LLVMGetTargetExtTypeIntParam ty i)
+                                  (loop (fx+ i 1))))))]
       [else (not-modeled (string-append "type kind: " (symbol->string (ir:type-kind ty))))]))
 
   (define (struct-fields ty)
@@ -362,6 +377,19 @@
                              (if (fx= i (LLVMGetNumOperands c))
                                  '()
                                  (cons (grp (opn i)) (loop (fx+ i 1))))))]
+        [(eq? op 'shufflevector)
+         ;; the splat chain: shufflevector(insertelement(poison, e, 0),
+         ;; poison, zeroinitializer). Constexprs are uniqued, so an
+         ;; exact reconstruction from the candidate element proves the
+         ;; shape (the C API cannot read a constexpr shuffle's mask)
+         (let ([op0 (opn 0)])
+           (unless (and (isa? (LLVMIsAConstantExpr op0))
+                        (= (LLVMGetConstOpcode op0) 51))  ; insertelement
+             (not-modeled "constant expressions" op))
+           (let ([elem (LLVMGetOperand op0 1)])
+             (unless (eqv? c (ir:const-splat ty elem))
+               (not-modeled "constant expressions" op))
+             `(splat ,(grp elem))))]
         [else (not-modeled "constant expressions" op)])))
 
   (define (aggregate-form st c ty)
@@ -466,14 +494,12 @@
     (list (unbuild-type (LLVMTypeOf v)) (operand st v)))
 
   (define (asm-form v)
-    (unless (zero? (LLVMGetInlineAsmDialect v))
-      (not-modeled "Intel-dialect inline asm"))
-    (when (nz? (LLVMGetInlineAsmCanUnwind v))
-      (not-modeled "unwinding inline asm (asm unwind)"))
     `(asm ,(out-string LLVMGetInlineAsmAsmString v)
           ,(out-string LLVMGetInlineAsmConstraintString v)
           ,@(if (nz? (LLVMGetInlineAsmHasSideEffects v)) '(sideeffect) '())
-          ,@(if (nz? (LLVMGetInlineAsmNeedsAlignedStack v)) '(alignstack) '())))
+          ,@(if (nz? (LLVMGetInlineAsmNeedsAlignedStack v)) '(alignstack) '())
+          ,@(if (zero? (LLVMGetInlineAsmDialect v)) '() '(inteldialect))
+          ,@(if (nz? (LLVMGetInlineAsmCanUnwind v)) '(unwind) '())))
 
   ;; ---- instruction flags ------------------------------------------------------------
 

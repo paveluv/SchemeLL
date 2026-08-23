@@ -108,6 +108,15 @@
          [(packed-struct)
           (if (null? (cdr t)) "<{}>"
               (format "<{ ~a }>" (join ", " (map type->text (cdr t)))))]
+         [(target-ext)
+          (format "target(~a)"
+                  (join ", "
+                        (cons (quoted (cadr t))
+                              (map (lambda (x)
+                                     (if (integer? x)
+                                         (number->string x)
+                                         (type->text x)))
+                                   (cddr t)))))]
          [(fn)
           (let-values ([(parts variadic?) (split-variadic (cdr t))])
             (format "~a (~a)" (type->text (car parts))
@@ -209,6 +218,8 @@
                 (format "!{~a}"
                         (join ", " (map (lambda (e) (md->text (cadr e)))
                                         x)))))]
+         [(splat)
+          (format "splat (~a)" (group->text env (cadr v)))]
          [(trunc ptrtoint inttoptr bitcast addrspacecast)
           ;; constexpr cast: op (src-ty VAL to dst-ty)
           (format "~a (~a ~a to ~a)" (car v) (type->text (cadr v))
@@ -332,6 +343,8 @@
     (words "asm"
            (if (memq 'sideeffect (cdddr a)) "sideeffect" "")
            (if (memq 'alignstack (cdddr a)) "alignstack" "")
+           (if (memq 'inteldialect (cdddr a)) "inteldialect" "")
+           (if (memq 'unwind (cdddr a)) "unwind" "")
            (format "~a, ~a" (quoted-bytes (cadr a) #f)
                    (quoted-bytes (caddr a) #f))))
 

@@ -310,6 +310,27 @@ Newest entries first. Format: date, Done / Decided / Next.
   renderer + 2 fixpoint = 34866 verified (95.6% of all, 97.6% of
   parseable).
 
+- Round 16 (2026-08-23): splat constants, Intel/unwinding asm, and
+  the exotic types. `splat (i32 7)` is LLVM 19's spelling of scalable
+  splats (shufflevector-of-insertelement constexprs; fixed-vector ones
+  fold to plain vectors) -- modeled as (splat (ty elem)); since the C
+  API cannot read a constexpr shuffle's mask, unbuild verifies the
+  shape by reconstructing the splat and POINTER-comparing (constexprs
+  are uniqued). Killed most of the constexpr bucket (247 -> 15).
+  Inline asm's dialect and can-throw are just LLVMGetInlineAsm
+  parameters: (asm "T" "C" sideeffect? alignstack? inteldialect?
+  unwind?) fully modeled. x86_mmx / x86_amx type symbols and
+  target-ext types ((target-ext "spirv.Image" void 0 1) -- type
+  params then int params, as in IR) modeled with the full 19 C API
+  reader/constructor set. Corpus: 32438 + 2843 renderer + 2 fixpoint
+  = 35283 verified (96.7% of all, 98.8% of parseable). The remaining
+  426 bucket files are nearly all C-API gaps (alloca outside DL-A 157,
+  folding 45+6, dso_local_equivalent/no_cfi 44, cyclic/distinct md 27,
+  fn outside DL-P 21, inrange 21, ppc_fp128 10, prefix/prologue 13,
+  max-align 7, thread_local aliases 6, value-as-md 6) or grammar
+  choices (digit-string names 32); a handful of stragglers (alias AS
+  4, callbr bundles 1, splat residue 15) are modelable followups.
+
 ### Next (coverage burn-down, by corpus statistics)
 - Residual constexpr kinds (~247, diagnose composition), constant
   kind (~39, mostly dso_local_equivalent/no_cfi -- exclusions),

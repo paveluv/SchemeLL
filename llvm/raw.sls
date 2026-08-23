@@ -107,6 +107,10 @@
     IsAMDNode IsAMDString IsAValueAsMetadata
     MDStringInContext2 MDNodeInContext2 MetadataAsValue2 GetMDString
     GetMDNodeNumOperands GetMDNodeOperands MetadataTypeInContext
+    X86MMXTypeInContext X86AMXTypeInContext TargetExtTypeInContext
+    GetTargetExtTypeName GetTargetExtTypeNumTypeParams
+    GetTargetExtTypeTypeParam GetTargetExtTypeNumIntParams
+    GetTargetExtTypeIntParam
     IsAConstantInt IsAConstantFP IsAConstantExpr IsAConstantPointerNull
     IsAConstantAggregateZero IsAConstantDataArray IsAConstantArray
     IsAConstantStruct IsAConstantVector IsAConstantDataVector
@@ -162,6 +166,7 @@
     ConstPtrToInt ConstIntToPtr ConstBitCast ConstAddrSpaceCast
     ConstTrunc ConstAdd ConstNSWAdd ConstNUWAdd ConstSub ConstNSWSub
     ConstNUWSub ConstMul ConstNSWMul ConstNUWMul ConstXor
+    ConstInsertElement ConstShuffleVector
     IsAConstant IsExternallyInitialized HasPrefixData HasPrologueData
     SetGC SetGCString GetGC SetAtomicSingleThread SetExternallyInitialized
     CreateOperandBundle DisposeOperandBundle GetOperandBundleAtIndex
@@ -660,6 +665,21 @@
   (define GetMDNodeOperands              ; fills a ValueRef array
     (foreign-procedure "LLVMGetMDNodeOperands" (void* void*) void))
   (define-getter MetadataTypeInContext "LLVMMetadataTypeInContext" (void*) void*)
+  (define-getter X86MMXTypeInContext "LLVMX86MMXTypeInContext" (void*) void*)
+  (define-getter X86AMXTypeInContext "LLVMX86AMXTypeInContext" (void*) void*)
+  (define-getter TargetExtTypeInContext   ; (ctx, name, ty*, n, uint*, n)
+    "LLVMTargetExtTypeInContext"
+    (void* string void* unsigned-int void* unsigned-int) void*)
+  (define-getter GetTargetExtTypeName
+    "LLVMGetTargetExtTypeName" (void*) void*)
+  (define-getter GetTargetExtTypeNumTypeParams
+    "LLVMGetTargetExtTypeNumTypeParams" (void*) unsigned-int)
+  (define-getter GetTargetExtTypeTypeParam
+    "LLVMGetTargetExtTypeTypeParam" (void* unsigned-int) void*)
+  (define-getter GetTargetExtTypeNumIntParams
+    "LLVMGetTargetExtTypeNumIntParams" (void*) unsigned-int)
+  (define-getter GetTargetExtTypeIntParam
+    "LLVMGetTargetExtTypeIntParam" (void* unsigned-int) unsigned-int)
   (define-getter IsAConstantInt "LLVMIsAConstantInt" (void*) void*)
   (define-getter IsAConstantFP "LLVMIsAConstantFP" (void*) void*)
   (define-getter IsAConstantExpr "LLVMIsAConstantExpr" (void*) void*)
@@ -830,6 +850,10 @@
   (define-getter ConstNSWMul "LLVMConstNSWMul" (void* void*) void*)
   (define-getter ConstNUWMul "LLVMConstNUWMul" (void* void*) void*)
   (define-getter ConstXor "LLVMConstXor" (void* void*) void*)
+  (define-getter ConstInsertElement
+    "LLVMConstInsertElement" (void* void* void*) void*)
+  (define-getter ConstShuffleVector
+    "LLVMConstShuffleVector" (void* void* void*) void*)
 
   (define-getter IsAConstant "LLVMIsAConstant" (void*) void*)
   (define-getter IsExternallyInitialized

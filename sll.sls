@@ -92,6 +92,8 @@
          [(void) (ir:void-type ctx)]
          [(metadata) (ir:metadata-type ctx)]
          [(token) (ir:token-type ctx)]
+         [(x86_mmx) (ir:x86mmx-type ctx)]
+         [(x86_amx) (ir:x86amx-type ctx)]
          [else
           (if (local-name? t)
               ;; %name: a named struct type from a (type %name ...) item
@@ -127,6 +129,23 @@
          [(and (eq? (car t) 'vector) (= (length t) 3)
                (fixnum? (cadr t)) (positive? (cadr t)))
           (ir:vector-type (resolve-type ctx (caddr t)) (cadr t))]
+         [(eq? (car t) 'target-ext)
+          ;; (target-ext "name" TYPE-PARAM ... INT-PARAM ...)
+          (unless (and (>= (length t) 2) (string? (cadr t)))
+            (error "expected (target-ext \"name\" params...)" t))
+          (let loop ([ps (cddr t)] [tys '()])
+            (if (or (null? ps) (integer? (car ps)))
+                (begin
+                  (unless (for-all (lambda (x)
+                                     (and (integer? x) (exact? x) (>= x 0)))
+                                   ps)
+                    (error "target-ext int params must trail the type params"
+                           t))
+                  (ir:target-ext-type ctx (cadr t)
+                                      (map (lambda (x) (resolve-type ctx x))
+                                           (reverse tys))
+                                      ps))
+                (loop (cdr ps) (cons (car ps) tys))))]
          [(eq? (car t) 'fn)
           (let-values ([(parts variadic?) (split-variadic (cdr t))])
             (unless (pair? parts)
@@ -154,7 +173,8 @@
   (define (type-form? h)
     (and (pair? h)
          (case (car h)
-           [(struct packed-struct array vector scalable-vector fn) #t]
+           [(struct packed-struct array vector scalable-vector fn
+              target-ext) #t]
            [(ptr) (and (pair? (cdr h)) (pair? (cadr h))
                        (eq? (car (cadr h)) 'addrspace))]
            [else #f])))
@@ -253,8 +273,9 @@
                           (resolve-md-ref (fstate-ctx st) form))]
       [(and (pair? form)
             (memq (car form) '(trunc ptrtoint inttoptr bitcast addrspacecast
-                                add sub mul xor getelementptr)))
-       ;; a constant expression in operand position; self-typed
+                                add sub mul xor getelementptr splat)))
+       ;; a constant expression in operand position; splat is typed by
+       ;; its context, the rest are self-typed
        (resolve-constant (fstate-ctx st) (fstate-globals st) ty form
                          (lambda (ety ef) (resolve-operand st ety ef)))]
       [(aggregate-literal? form)
@@ -405,12 +426,16 @@
         (begin
           (unless (and (>= (length form) 3) (string? (cadr form))
                        (string? (caddr form))
-                       (for-all (lambda (f) (memq f '(sideeffect alignstack)))
+                       (for-all (lambda (f)
+                                  (memq f '(sideeffect alignstack
+                                             inteldialect unwind)))
                                 (cdddr form)))
             (error "expected (asm \"template\" \"constraints\" flag ...)" form))
           (ir:inline-asm fnty (cadr form) (caddr form)
                          (and (memq 'sideeffect (cdddr form)) #t)
-                         (and (memq 'alignstack (cdddr form)) #t)))
+                         (and (memq 'alignstack (cdddr form)) #t)
+                         (and (memq 'inteldialect (cdddr form)) #t)
+                         (and (memq 'unwind (cdddr form)) #t)))
         ;; the callee slot is ptr-typed: lets undef/null callees and
         ;; forward references through
         (resolve-operand st (ir:pointer-type (fstate-ctx st)) form)))
@@ -1082,6 +1107,12 @@
               (ir:const-binop (car form) nuw nsw
                               (elem-resolve ety (cadr rest))
                               (elem-resolve ety (caddr rest))))]))]
+      [(and (pair? form) (eq? (car form) 'splat))
+       ;; splat constant: (splat (elem-type elem)); ty is the vector type
+       (unless (and ty (= (length form) 2) (pair? (cadr form))
+                    (= (length (cadr form)) 2))
+         (error "expected (splat (element-type element))" form))
+       (ir:const-splat ty (constant-group (cadr form)))]
       [(and (pair? form) (eq? (car form) 'getelementptr))
        ;; constexpr gep: (getelementptr flags? src-type (ty ptr) (ty i)...)
        (let loop ([rest (cdr form)] [flags 0])

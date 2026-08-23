@@ -959,9 +959,9 @@ compute:
 ;; recursion) instead of base:error -- this hung rather than raised
 (t:check-exn "render raises (not loops) on unknown items"
              (render:sll->ll '((bogus-item))))
-(t:check-exn "unbuild rejects Intel-dialect inline asm"
+(t:check-exn "unbuild rejects function prefix data"
              (unbuild-of-ir
-               "define void @f() {\nentry:\n  call void asm inteldialect \"nop\", \"\"()\n  ret void\n}"))
+               "define void @f() prefix i32 7 {\nentry:\n  ret void\n}"))
 (t:check-exn "unbuild rejects calling conventions"
              (unbuild-of-ir "define fastcc void @f() {\nentry:\n  ret void\n}"))
 (t:check-exn "unbuild rejects nuw+nsw constexpr binops (no C constructor)"
