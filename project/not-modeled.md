@@ -38,8 +38,8 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 | `dso_local` | undetected |
 | `unnamed_addr` / `local_unnamed_addr` | undetected |
 | DLL storage class (`dllimport`/`dllexport`) | undetected |
-| garbage-collector name (`gc "..."`) | undetected |
-| prefix / prologue data | undetected |
+| garbage-collector name (`gc "..."`) | undetected; the corpus normalizer strips it |
+| prefix / prologue data | detected |
 | functions in non-zero program address spaces | undetected |
 | intrinsic declarations acquiring auto-upgraded attributes | detected (via the attribute check) |
 
@@ -51,7 +51,9 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 | sections | detected |
 | visibility | detected |
 | non-zero address spaces (`@g = addrspace(1) global ...`) | detected |
-| `unnamed_addr`, `externally_initialized`, DLL storage, partitions | undetected |
+| `externally_initialized` | detected |
+| global variable attributes (`@g = global i32 7 #0`) | undetected |
+| `unnamed_addr`, DLL storage, partitions | undetected; unnamed_addr is normalizer-stripped |
 
 ## Instructions
 
@@ -64,6 +66,9 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 | non-default alignment on atomicrmw/cmpxchg (ll rebuilds with the ABI default) | undetected |
 | poison shuffle-mask lanes (`<4 x i32> <i32 0, i32 poison, ...>`) | detected |
 | multi-index extractvalue/insertvalue (chain single-index forms instead) | detected |
+| instructions with all-constant operands (the C-API builder constant-folds them; no non-folding builder exists in the C API) | detected |
+| alloca in a non-zero address space (datalayout-driven; the C-API builder cannot produce them) | detected |
+| alignments of 2^32 or larger (LLVMGetAlignment truncates; the attribute is omitted) | undetected |
 
 ## Types
 

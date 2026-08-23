@@ -47,6 +47,16 @@ ReplaceAllUsesWith and erased at end of function. Not yet supported
 made the common ones unnecessary; add on demand) and raw value
 injection (the reserved `(ptr N)` operand shape).
 
+Corpus-driven additions (2026-08-22, step 6b): function linkage --
+`(define internal i64 (@f ...) ...)`, `(declare extern_weak ...)`, the
+same optional keyword-operand slot as globals; zero-incoming phis
+(legal parse-level IR in dead blocks); and the anonymity rule: all-digit
+`%names` (`%0`, `%42`) are positional/anonymous, exactly as in textual
+IR where digits are slot numbers, not names -- ll:build binds them in
+its environment but leaves the LLVM value unnamed, so LLVM's own
+printer reproduces the numbering (a value explicitly named "0" via the
+API would print as `%"0"` and is not expressible).
+
 First layer of the llscheme DSL tower:
 a notation for LLVM IR that is ordinary Scheme data/syntax, sitting directly
 on top of (llvm ir).

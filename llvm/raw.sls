@@ -135,6 +135,25 @@
     GetBasicBlockName
     GetFirstGlobalAlias GetFirstGlobalIFunc GetFirstNamedMetadata
     GetModuleInlineAsm GetTarget GetDataLayoutStr
+    ;; normalization (stripping constructs ll does not model)
+    StripModuleDebugInfo
+    InstructionGetAllMetadataOtherThanDebugLoc
+    ValueMetadataEntriesGetKind DisposeValueMetadataEntries
+    SetMetadata GlobalClearMetadata
+    GetAttributesAtIndex IsEnumAttribute IsStringAttribute
+    GetEnumAttributeKind GetStringAttributeKind
+    RemoveEnumAttributeAtIndex RemoveStringAttributeAtIndex
+    GetCallSiteAttributeCount GetCallSiteAttributes
+    RemoveCallSiteEnumAttribute RemoveCallSiteStringAttribute
+    SetInstructionCallConv GetInstructionCallConv
+    SetUnnamedAddress SetVisibility SetSection SetThreadLocal
+    ;; named struct types
+    StructCreateNamed StructSetBody
+    ;; constant expressions
+    ConstGEP2 ConstInBoundsGEP2 ConstPtrToInt ConstIntToPtr
+    ConstBitCast ConstAddrSpaceCast
+    IsAConstant IsExternallyInitialized HasPrefixData HasPrologueData
+    SetGC
     ;; IRReader.h + memory buffers from bytes
     ParseIRInContext CreateMemoryBufferWithMemoryRangeCopy
     ;; Transforms/PassBuilder.h (new pass manager)
@@ -692,6 +711,67 @@
   (define-getter GetModuleInlineAsm "LLVMGetModuleInlineAsm" (void* void*) void*)
   (define-getter GetTarget "LLVMGetTarget" (void*) void*)
   (define-getter GetDataLayoutStr "LLVMGetDataLayoutStr" (void*) void*)
+
+  ;; normalization (stripping constructs ll does not model)
+  (define-getter StripModuleDebugInfo "LLVMStripModuleDebugInfo" (void*) int)
+  (define-getter InstructionGetAllMetadataOtherThanDebugLoc
+    "LLVMInstructionGetAllMetadataOtherThanDebugLoc" (void* void*) void*)
+  (define-getter ValueMetadataEntriesGetKind
+    "LLVMValueMetadataEntriesGetKind" (void* unsigned-int) unsigned-int)
+  (define-getter DisposeValueMetadataEntries
+    "LLVMDisposeValueMetadataEntries" (void*) void)
+  (define-getter SetMetadata          ; NULL node clears the kind
+    "LLVMSetMetadata" (void* unsigned-int void*) void)
+  (define-getter GlobalClearMetadata "LLVMGlobalClearMetadata" (void*) void)
+  (define-getter GetAttributesAtIndex ; (fn, index, attr-array out)
+    "LLVMGetAttributesAtIndex" (void* unsigned-int void*) void)
+  (define-getter IsEnumAttribute "LLVMIsEnumAttribute" (void*) int)
+  (define-getter IsStringAttribute "LLVMIsStringAttribute" (void*) int)
+  (define-getter GetEnumAttributeKind "LLVMGetEnumAttributeKind" (void*) unsigned-int)
+  (define-getter GetStringAttributeKind ; (attr, unsigned* len out)
+    "LLVMGetStringAttributeKind" (void* void*) void*)
+  (define-getter RemoveEnumAttributeAtIndex
+    "LLVMRemoveEnumAttributeAtIndex" (void* unsigned-int unsigned-int) void)
+  (define-getter RemoveStringAttributeAtIndex
+    "LLVMRemoveStringAttributeAtIndex" (void* unsigned-int string unsigned-int) void)
+  (define-getter GetCallSiteAttributeCount
+    "LLVMGetCallSiteAttributeCount" (void* unsigned-int) unsigned-int)
+  (define-getter GetCallSiteAttributes
+    "LLVMGetCallSiteAttributes" (void* unsigned-int void*) void)
+  (define-getter RemoveCallSiteEnumAttribute
+    "LLVMRemoveCallSiteEnumAttribute" (void* unsigned-int unsigned-int) void)
+  (define-getter RemoveCallSiteStringAttribute
+    "LLVMRemoveCallSiteStringAttribute" (void* unsigned-int string unsigned-int) void)
+  (define-getter SetInstructionCallConv
+    "LLVMSetInstructionCallConv" (void* unsigned-int) void)
+  (define-getter GetInstructionCallConv
+    "LLVMGetInstructionCallConv" (void*) unsigned-int)
+  (define-getter SetUnnamedAddress    ; 0 = no unnamed_addr
+    "LLVMSetUnnamedAddress" (void* int) void)
+  (define-getter SetVisibility "LLVMSetVisibility" (void* int) void)
+  (define-getter SetSection "LLVMSetSection" (void* string) void)
+  (define-getter SetThreadLocal "LLVMSetThreadLocal" (void* int) void)
+  ;; named struct types
+  (define-getter StructCreateNamed "LLVMStructCreateNamed" (void* string) void*)
+  (define-getter StructSetBody      ; (struct-type, elem-array, count, packed?)
+    "LLVMStructSetBody" (void* void* unsigned-int int) void)
+  ;; constant expressions
+  (define-getter ConstGEP2          ; (elem-type, ptr-const, index-array, count)
+    "LLVMConstGEP2" (void* void* void* unsigned-int) void*)
+  (define-getter ConstInBoundsGEP2
+    "LLVMConstInBoundsGEP2" (void* void* void* unsigned-int) void*)
+  (define-getter ConstPtrToInt "LLVMConstPtrToInt" (void* void*) void*)
+  (define-getter ConstIntToPtr "LLVMConstIntToPtr" (void* void*) void*)
+  (define-getter ConstBitCast "LLVMConstBitCast" (void* void*) void*)
+  (define-getter ConstAddrSpaceCast "LLVMConstAddrSpaceCast" (void* void*) void*)
+
+  (define-getter IsAConstant "LLVMIsAConstant" (void*) void*)
+  (define-getter IsExternallyInitialized
+    "LLVMIsExternallyInitialized" (void*) int)
+  (define-getter HasPrefixData "LLVMHasPrefixData" (void*) int)
+  (define-getter HasPrologueData "LLVMHasPrologueData" (void*) int)
+  (define-getter SetGC              ; void* so NULL can clear the gc name
+    "LLVMSetGC" (void* void*) void)
 
   ;; --- IRReader.h -----------------------------------------------------------------
   (define ParseIRInContext             ; (ctx, membuf, module* out, char** err) -> bool (true = failed); consumes membuf

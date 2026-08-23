@@ -1,13 +1,19 @@
 CHEZ ?= scheme
 LIBDIRS = .
 
-.PHONY: test repl build format clean
+.PHONY: test repl build corpus format clean
 
 test:
 	$(CHEZ) --libdirs $(LIBDIRS) --script tests/run.ss
 
 repl:
 	$(CHEZ) --libdirs $(LIBDIRS)
+
+# Level-3 coverage: round-trip LLVM's own test corpus through ll
+# (needs reference/llvm-project, see project/RULES.md)
+CORPUS_DIR = reference/llvm-project/llvm/test
+corpus:
+	$(CHEZ) --libdirs $(LIBDIRS) --script tests/corpus.ss $(CORPUS_DIR)
 
 # Format all tracked Scheme sources in place (prints the files it changed)
 format:

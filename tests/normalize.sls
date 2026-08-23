@@ -1,0 +1,108 @@
+;;; (tests normalize) -- strip constructs ll does not model from a parsed
+;;; module, so the corpus round-trip measures what ll DOES model on files
+;;; that also use what it doesn't (see project/coverage-plan.md, level 3).
+;;; Every strip below corresponds to a row in project/not-modeled.md;
+;;; modeling a construct later means deleting its strip here, at which
+;;; point thousands of corpus files start testing it.
+;;; Import as: (prefix (tests normalize) n:)
+(library (tests normalize)
+  (export normalize-module!)
+  (import (chezscheme)
+          (prefix (llvm base) base:)
+          (prefix (llvm raw) LLVM)
+          (prefix (llvm ir) ir:))
+
+  (define function-index 4294967295)   ; LLVMAttributeIndex ~0U
+
+  ;; strip every attribute at one index of a function or call site
+  (define (strip-attrs-at! v idx count-at get-at remove-enum remove-string)
+    (let ([n (count-at v idx)])
+      (unless (zero? n)
+        (let ([arr (foreign-alloc (fx* 8 n))])
+          (get-at v idx arr)
+          (do ([i 0 (fx+ i 1)])
+              ((fx= i n))
+            (let ([a (foreign-ref 'unsigned-64 arr (fx* 8 i))])
+              (if (zero? (LLVMIsStringAttribute a))
+                  ;; enum and type attributes both carry an enum kind
+                  (remove-enum v idx (LLVMGetEnumAttributeKind a))
+                  (let-values ([(kp klen)
+                                (base:call-with-out-ptr
+                                  (lambda (out)
+                                    (LLVMGetStringAttributeKind a out)))])
+                    (let ([k (base:cstring->string/len kp klen)])
+                      (remove-string v idx k (string-length k)))))))
+          (foreign-free arr)))))
+
+  (define (strip-fn-attrs! f nparams)
+    (do ([i -1 (+ i 1)])
+        ((> i nparams))
+      (strip-attrs-at! f (if (= i -1) function-index i)
+                       LLVMGetAttributeCountAtIndex
+                       LLVMGetAttributesAtIndex
+                       LLVMRemoveEnumAttributeAtIndex
+                       LLVMRemoveStringAttributeAtIndex)))
+
+  (define (strip-callsite-attrs! c nargs)
+    (do ([i -1 (+ i 1)])
+        ((> i nargs))
+      (strip-attrs-at! c (if (= i -1) function-index i)
+                       LLVMGetCallSiteAttributeCount
+                       LLVMGetCallSiteAttributes
+                       LLVMRemoveCallSiteEnumAttribute
+                       LLVMRemoveCallSiteStringAttribute)))
+
+  ;; clear non-debug metadata attachments (debug ones go with
+  ;; StripModuleDebugInfo at the module level)
+  (define (strip-instruction-metadata! ins)
+    (let ([nout (foreign-alloc 8)])
+      (foreign-set! 'unsigned-64 nout 0 0)
+      (let* ([entries (LLVMInstructionGetAllMetadataOtherThanDebugLoc ins nout)]
+             [n (foreign-ref 'unsigned-64 nout 0)])
+        (foreign-free nout)
+        (do ([i 0 (fx+ i 1)])
+            ((fx= i n))
+          (LLVMSetMetadata ins (LLVMValueMetadataEntriesGetKind entries i)
+                           base:null-ptr))
+        (unless (base:null-ptr? entries)
+          (LLVMDisposeValueMetadataEntries entries)))))
+
+  (define call-opcodes '(45 5 67))     ; call, invoke, callbr
+
+  (define (normalize-instruction! ins)
+    (strip-instruction-metadata! ins)
+    (when (memv (ir:instruction-opcode ins) call-opcodes)
+      (LLVMSetInstructionCallConv ins 0)
+      (strip-callsite-attrs! ins (LLVMGetNumArgOperands ins))))
+
+  (define (normalize-function! f)
+    (LLVMGlobalClearMetadata f)
+    (LLVMSetGC f base:null-ptr)
+    (LLVMSetFunctionCallConv f 0)
+    (LLVMSetVisibility f 0)
+    (LLVMSetSection f "")
+    (LLVMSetUnnamedAddress f 0)
+    (strip-fn-attrs! f (length (ir:function-params f)))
+    (for-each
+      (lambda (bb)
+        (for-each normalize-instruction! (ir:block-instructions bb)))
+      (ir:function-blocks f)))
+
+  (define (normalize-global! g)
+    (LLVMGlobalClearMetadata g)
+    (LLVMSetVisibility g 0)
+    (LLVMSetSection g "")
+    (LLVMSetUnnamedAddress g 0)
+    (LLVMSetThreadLocal g 0))
+
+  ;; NOT strippable via the C API (LLVM 19): dso_local, comdat,
+  ;; externally_initialized, DLL storage, gc names, prefix/prologue data,
+  ;; named module metadata. Files using them land in the mismatch or
+  ;; not-modeled buckets and are accounted there.
+  (define (normalize-module! m)
+    (let ([mp (ir:module-live-ptr m)])
+      (LLVMStripModuleDebugInfo mp)
+      (LLVMSetTarget mp "")
+      (LLVMSetDataLayout mp ""))
+    (for-each normalize-global! (ir:module-globals m))
+    (for-each normalize-function! (ir:module-functions m))))

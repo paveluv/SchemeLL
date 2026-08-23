@@ -93,6 +93,10 @@ A dangling pointer takes down the whole Chez session, so:
 ## Procedures
 
 - Run tests: `make test` (runs `scheme --libdirs . --script tests/run.ss`).
+- Corpus round-trip (coverage level 3): `make corpus` (needs
+  `reference/llvm-project`; `CORPUS_DIR=...` to scope to a subdirectory).
+  Buckets and strategy: `project/coverage-plan.md`; the normalizer lives
+  in `tests/normalize.sls`.
 - REPL with libraries visible: `make repl`.
 - Tests write temp files only under `tests/tmp/` (gitignored).
 - Work tracking lives in `project/WORKLOG.md`: dated entries, "Done / Decided / Next".
@@ -107,7 +111,7 @@ exact command/URL to recreate it.
 
 | Path | How to (re)create | Purpose |
 |------|-------------------|---------|
-| `reference/llvm-project/` | `git clone --depth 1 --branch llvmorg-19.1.7 https://github.com/llvm/llvm-project.git reference/llvm-project` | LLVM sources: C API implementation (`llvm/lib/*/`*-c*`.cpp`), ORC internals, docs (`llvm/docs/`). |
+| `reference/llvm-project/` | `git clone --depth 1 --branch llvmorg-19.1.7 --filter=blob:none --sparse https://github.com/llvm/llvm-project.git reference/llvm-project && cd reference/llvm-project && git sparse-checkout set llvm/test` | LLVM's regression corpus for `make corpus` (36k .ll files); widen the sparse checkout for sources/docs when needed. |
 | `reference/ChezScheme/` | `git clone --depth 1 --branch v10.0.0 https://github.com/cisco/ChezScheme.git reference/ChezScheme` | Chez sources, incl. FFI implementation. |
 | `reference/csug/` | `wget -r -np -k -P reference/csug https://cisco.github.io/ChezScheme/csug10.0/csug.html` | Chez Scheme User's Guide (FFI chapter: `foreign.html`). |
 | `reference/nanopass/` | `git clone https://github.com/nanopass/nanopass-framework-scheme.git reference/nanopass` | Nanopass framework, for layer 3. |

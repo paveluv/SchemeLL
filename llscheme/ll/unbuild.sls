@@ -341,7 +341,11 @@
     (when (nz? (LLVMIsAtomicSingleThread v))
       (not-modeled "syncscope(\"singlethread\") atomics")))
 
-  (define (align-attr v) `((align ,(LLVMGetAlignment v))))
+  ;; GetAlignment returns 0 both for "unset" and for alignments >= 2^32
+  ;; (a C API truncation); omit the attribute in either case
+  (define (align-attr v)
+    (let ([a (LLVMGetAlignment v)])
+      (if (zero? a) '() `((align ,a)))))
 
   ;; ---- instructions ------------------------------------------------------------------
 
@@ -366,6 +370,24 @@
                   (cons (group st (LLVMGetOperand ins i))
                         (loop (fx+ i 1))))))))
 
+  ;; opcodes the C-API builder constant-folds when every operand is a
+  ;; constant -- unrebuildable as instructions, so flagged honestly
+  (define foldable-ops
+    '(add fadd sub fsub mul fmul udiv sdiv fdiv urem srem frem
+       shl lshr ashr and or xor fneg
+       trunc zext sext fptoui fptosi uitofp sitofp fptrunc fpext
+       ptrtoint inttoptr bitcast addrspacecast
+       icmp fcmp select getelementptr
+       extractelement insertelement shufflevector
+       extractvalue insertvalue))
+
+  (define (all-constant-operands? ins)
+    (let ([n (LLVMGetNumOperands ins)])
+      (let loop ([i 0])
+        (or (fx= i n)
+            (and (isa? (LLVMIsAConstant (LLVMGetOperand ins i)))
+                 (loop (fx+ i 1)))))))
+
   (define (insn-form st ins)
     (when (nz? (LLVMHasMetadata ins))
       (not-modeled "instruction metadata (!dbg, !tbaa, ...)"))
@@ -375,6 +397,8 @@
       (define (op0) (LLVMGetOperand ins 0))
       (define (op1) (LLVMGetOperand ins 1))
       (define (op2) (LLVMGetOperand ins 2))
+      (when (and (memq op foldable-ops) (all-constant-operands? ins))
+        (not-modeled "instructions with all-constant operands (the C-API builder folds them)"))
       (cond
         [(memq op binop-names)
          `(,op ,@(int-flags ins op) ,@(fmf-flags ins)
@@ -456,10 +480,14 @@
                             '()
                             (cons (successor st ins i) (loop (fx+ i 1))))))]
            [(alloca)
+            (unless (zero? (LLVMGetPointerAddressSpace ty))
+              (not-modeled "alloca in a non-zero address space"))
             `(alloca ,(unbuild-type (LLVMGetAllocatedType ins))
                      ,@(let ([count (op0)])
+                         ;; the printer elides only an i32-typed constant 1
                          (if (and (isa? (LLVMIsAConstantInt count))
-                                  (= 1 (LLVMConstIntGetZExtValue count)))
+                                  (= 1 (LLVMConstIntGetZExtValue count))
+                                  (= 32 (ir:type-int-width (LLVMTypeOf count))))
                              '()
                              (list (group st count))))
                      ,@(align-attr ins))]
@@ -586,6 +614,8 @@
   ;; ---- functions -----------------------------------------------------------------------
 
   (define (check-function-decorations f nparams)
+    (when (nz? (LLVMHasPrefixData f)) (not-modeled "function prefix data"))
+    (when (nz? (LLVMHasPrologueData f)) (not-modeled "function prologue data"))
     (unless (zero? (LLVMGetFunctionCallConv f))
       (not-modeled "non-C calling conventions" (LLVMGetFunctionCallConv f)))
     (unless (zero? (LLVMGetVisibility f))
@@ -605,12 +635,17 @@
            [variadic (if (ir:type-vararg? fnty) '(variadic) '())]
            [gname (hashtable-ref gnames f #f)])
       (check-function-decorations f (length params))
-      (if (ir:declaration? f)
-          `(declare ,(unbuild-type (ir:type-return-type fnty))
+      (let ([lk-part (let ([lk (ir:linkage f)])
+                       (if (zero? lk) '()
+                           (list (enum-name linkage-names lk "linkage"))))])
+        (if (ir:declaration? f)
+          `(declare ,@lk-part
+                    ,(unbuild-type (ir:type-return-type fnty))
                     (,gname ,@(map unbuild-type (ir:type-param-types fnty))
                             ,@variadic))
           (let ([st (make-ustate (function-names f) gnames f)])
-            `(define ,(unbuild-type (ir:type-return-type fnty))
+            `(define ,@lk-part
+               ,(unbuild-type (ir:type-return-type fnty))
                (,gname
                  ,@(map (lambda (p)
                           (list (unbuild-type (LLVMTypeOf p))
@@ -625,11 +660,13 @@
                         `(label ,(local-name st bb)
                            ,@(map (lambda (ins) (instruction-form st ins))
                                   (ir:block-instructions bb))))
-                      (ir:function-blocks f)))))))
+                      (ir:function-blocks f))))))))
 
   ;; ---- globals --------------------------------------------------------------------------
 
   (define (check-global-decorations g)
+    (when (nz? (LLVMIsExternallyInitialized g))
+      (not-modeled "externally_initialized globals"))
     (when (nz? (LLVMIsThreadLocal g)) (not-modeled "thread_local globals"))
     (unless (zero? (LLVMGetVisibility g))
       (not-modeled "visibility (hidden/protected)"))

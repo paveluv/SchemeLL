@@ -43,6 +43,21 @@
     (let ([s (symbol->string x)])
       (substring s 1 (string-length s))))
 
+  ;; All-digit names (%0, %42) are positional/anonymous, as in textual IR
+  ;; where digits are slot numbers, not names: ll binds them in its own
+  ;; environment but leaves the LLVM value unnamed, so LLVM's printer
+  ;; reproduces the numbering itself.
+  (define (anonymous-name? s)
+    (and (> (string-length s) 0)
+         (let loop ([i 0])
+           (or (fx= i (string-length s))
+               (and (char-numeric? (string-ref s i))
+                    (loop (fx+ i 1)))))))
+
+  (define (llvm-name x)   ; %sym -> the name to give LLVM ("" = unnamed)
+    (let ([s (strip-sigil x)])
+      (if (anonymous-name? s) "" s)))
+
   ;; ---- types -----------------------------------------------------------------
 
   (define (int-bits t)   ; i1, i8, ..., iN -> N; anything else -> #f
@@ -228,7 +243,7 @@
     (when (hashtable-ref (fstate-blocks st) name #f)
       (ll-error "duplicate label" name (fstate-fname st)))
     (hashtable-set! (fstate-blocks st) name
-                    (ir:append-block (fstate-ctx st) f (strip-sigil name))))
+                    (ir:append-block (fstate-ctx st) f (llvm-name name))))
 
   ;; ---- the opcode tables ----------------------------------------------------------------
 
@@ -503,7 +518,7 @@
                                (resolve-operand st (resolve-type ctx (car args)) (cadr args))
                                name)]
                [(phi)
-                (arity>= 2 "(phi type [value %label] ...)")
+                (arity>= 1 "(phi type (value %label) ...)")   ; zero-incoming phis are legal parse-level IR
                 ;; emit empty; incoming resolves at end of function, when
                 ;; every value and label is bound (IR's only forward value ref)
                 (let ([ph (ir:build-phi b (resolve-type ctx (car args)) name)])
@@ -801,7 +816,7 @@
          (when (hashtable-ref (fstate-locals st) lhs #f)
            (ll-error "duplicate local name" lhs (fstate-fname st)))
          (hashtable-set! (fstate-locals st) lhs
-                         (emit-op st rhs (strip-sigil lhs))))]
+                         (emit-op st rhs (llvm-name lhs))))]
       [else (emit-op st form "")]))
 
   (define (fixup-phis! st)
@@ -894,13 +909,20 @@
                 item))
     (car item))
 
-  (define (item-signature item)  ; -> (values ret-type-form name-sym rest)
+  ;; (define|declare linkage? ret-type (@name ...) body ...)
+  ;; -> (values ret-type-form name-sym rest linkage-int-or-#f body)
+  (define (item-signature item)
     (unless (>= (length item) 3)
       (ll-error "malformed module item" item))
-    (let ([sig (caddr item)])
-      (unless (and (pair? sig) (global-name? (car sig)))
-        (ll-error "function signature must be (@name ...)" item))
-      (values (cadr item) (car sig) (cdr sig))))
+    (let* ([lk (and (symbol? (cadr item)) (assq (cadr item) linkages))]
+           [item (if lk (cdr item) item)])
+      (unless (>= (length item) 3)
+        (ll-error "malformed module item" item))
+      (let ([sig (caddr item)])
+        (unless (and (pair? sig) (global-name? (car sig)))
+          (ll-error "function signature must be (@name ...)" item))
+        (values (cadr item) (car sig) (cdr sig) (and lk (cdr lk))
+                (cdddr item)))))
 
   (define (check-param p item)
     (unless (and (pair? p) (pair? (cdr p)) (null? (cddr p))
@@ -918,11 +940,11 @@
               (ll-error "duplicate global name" name))
             (hashtable-set! globals name
                             (ir:add-global m (resolve-type ctx ty-form)
-                                           (strip-sigil name))))
+                                           (llvm-name name))))
           (declare-function! ctx m globals item kind))))
 
   (define (declare-function! ctx m globals item kind)
-    (let-values ([(retty-form fname rest0) (item-signature item)])
+    (let-values ([(retty-form fname rest0 lk body) (item-signature item)])
       (let-values ([(rest variadic?) (split-variadic rest0)])
         (when (hashtable-ref globals fname #f)
           (ll-error "duplicate global name" fname))
@@ -934,10 +956,10 @@
                                (resolve-type ctx (car p)))
                              rest)]
                        [(declare) (map (lambda (t) (resolve-type ctx t)) rest)])])
-          (hashtable-set! globals fname
-                          (ir:add-function m (strip-sigil fname)
-                                           (ir:function-type retty ptys
-                                                             variadic?)))))))
+          (let ([f (ir:add-function m (llvm-name fname)
+                                    (ir:function-type retty ptys variadic?))])
+            (when lk (ir:set-linkage! f lk))
+            (hashtable-set! globals fname f))))))
 
   ;; pass 2: set global initializers/linkage; emit the body of each define
   (define (emit-item! ctx m globals item)
@@ -955,9 +977,8 @@
                           name)))
           (apply-attrs! g attrs item))))
     (when (eq? (item-kind item) 'define)
-      (let-values ([(retty-form fname params) (item-signature item)])
+      (let-values ([(retty-form fname params lk full-body) (item-signature item)])
         (let* ([f (hashtable-ref globals fname #f)]
-               [full-body (cdddr item)]
                ;; optional (personality type @fn) before the first block,
                ;; as in `define ... personality ptr @pers {`
                [pers? (and (pair? full-body) (pair? (car full-body))
@@ -984,7 +1005,8 @@
                         [pv (ir:function-param f i)])
                     (when (hashtable-ref (fstate-locals st) pname #f)
                       (ll-error "duplicate parameter name" pname fname))
-                    (ir:set-value-name! pv (strip-sigil pname))
+                    (let ([nm (llvm-name pname)])
+                      (unless (string=? nm "") (ir:set-value-name! pv nm)))
                     (hashtable-set! (fstate-locals st) pname pv)
                     (loop (cdr ps) (+ i 1)))))
               ;; every body form is a block group; the first is the entry
