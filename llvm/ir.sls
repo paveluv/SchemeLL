@@ -40,6 +40,7 @@
     const-int const-real const-null undef-value poison-value
     const-vector block-address
     const-array const-struct const-named-struct const-string struct-name
+    const-cast const-binop const-gep
     packed-struct-type?
     ;; module-level globals
     add-global set-initializer! set-global-constant! set-linkage! linkage
@@ -378,6 +379,38 @@
   (define (struct-name ty)
     (let ([s (base:cstring->string (LLVMGetStructName ty))])
       (and s (not (string=? s "")) s)))
+
+  ;; ---- constant expressions -------------------------------------------
+  ;; constructed via ConstantExpr::get, which folds symmetrically with
+  ;; the parser (unlike the IRBuilder's instruction folding)
+
+  (define (const-cast op v ty)
+    ((case op
+       [(trunc) LLVMConstTrunc]
+       [(ptrtoint) LLVMConstPtrToInt]
+       [(inttoptr) LLVMConstIntToPtr]
+       [(bitcast) LLVMConstBitCast]
+       [(addrspacecast) LLVMConstAddrSpaceCast]
+       [else (base:error 'const-cast "not a constexpr cast opcode" op)])
+     v ty))
+
+  ;; the C API has no combined nuw+nsw constructors
+  (define (const-binop op nuw? nsw? a b)
+    ((case op
+       [(add) (cond [nsw? LLVMConstNSWAdd] [nuw? LLVMConstNUWAdd]
+                    [else LLVMConstAdd])]
+       [(sub) (cond [nsw? LLVMConstNSWSub] [nuw? LLVMConstNUWSub]
+                    [else LLVMConstSub])]
+       [(mul) (cond [nsw? LLVMConstNSWMul] [nuw? LLVMConstNUWMul]
+                    [else LLVMConstMul])]
+       [(xor) LLVMConstXor]
+       [else (base:error 'const-binop "not a constexpr binop opcode" op)])
+     a b))
+
+  (define (const-gep src-elem-ty ptr indices flags)
+    (base:call-with-pointer-array indices
+      (lambda (arr n)
+        (LLVMConstGEPWithNoWrapFlags src-elem-ty ptr arr n flags))))
 
   (define (const-named-struct ty constants)
     (base:call-with-pointer-array constants

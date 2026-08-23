@@ -150,8 +150,10 @@
     ;; named struct types
     StructCreateNamed StructSetBody
     ;; constant expressions
-    ConstGEP2 ConstInBoundsGEP2 ConstPtrToInt ConstIntToPtr
-    ConstBitCast ConstAddrSpaceCast
+    ConstGEP2 ConstInBoundsGEP2 ConstGEPWithNoWrapFlags
+    ConstPtrToInt ConstIntToPtr ConstBitCast ConstAddrSpaceCast
+    ConstTrunc ConstAdd ConstNSWAdd ConstNUWAdd ConstSub ConstNSWSub
+    ConstNUWSub ConstMul ConstNSWMul ConstNUWMul ConstXor
     IsAConstant IsExternallyInitialized HasPrefixData HasPrologueData
     SetGC
     GetTypeByName2 IsOpaqueStruct IsLiteralStruct ScalableVectorType
@@ -767,6 +769,20 @@
   (define-getter ConstIntToPtr "LLVMConstIntToPtr" (void* void*) void*)
   (define-getter ConstBitCast "LLVMConstBitCast" (void* void*) void*)
   (define-getter ConstAddrSpaceCast "LLVMConstAddrSpaceCast" (void* void*) void*)
+  (define-getter ConstGEPWithNoWrapFlags   ; flags: inbounds 1, nusw 2, nuw 4
+    "LLVMConstGEPWithNoWrapFlags" (void* void* void* unsigned-int unsigned-int)
+    void*)
+  (define-getter ConstTrunc "LLVMConstTrunc" (void* void*) void*)
+  (define-getter ConstAdd "LLVMConstAdd" (void* void*) void*)
+  (define-getter ConstNSWAdd "LLVMConstNSWAdd" (void* void*) void*)
+  (define-getter ConstNUWAdd "LLVMConstNUWAdd" (void* void*) void*)
+  (define-getter ConstSub "LLVMConstSub" (void* void*) void*)
+  (define-getter ConstNSWSub "LLVMConstNSWSub" (void* void*) void*)
+  (define-getter ConstNUWSub "LLVMConstNUWSub" (void* void*) void*)
+  (define-getter ConstMul "LLVMConstMul" (void* void*) void*)
+  (define-getter ConstNSWMul "LLVMConstNSWMul" (void* void*) void*)
+  (define-getter ConstNUWMul "LLVMConstNUWMul" (void* void*) void*)
+  (define-getter ConstXor "LLVMConstXor" (void* void*) void*)
 
   (define-getter IsAConstant "LLVMIsAConstant" (void*) void*)
   (define-getter IsExternallyInitialized

@@ -200,6 +200,36 @@
          [(blockaddress)
           (format "blockaddress(~a, ~a)"
                   (name->text (cadr v)) (name->text (caddr v)))]
+         [(trunc ptrtoint inttoptr bitcast addrspacecast)
+          ;; constexpr cast: op (src-ty VAL to dst-ty)
+          (format "~a (~a ~a to ~a)" (car v) (type->text (cadr v))
+                  (operand->text env (cadr v) (caddr v))
+                  (type->text (cadddr v)))]
+         [(add sub mul xor)
+          ;; constexpr binop: op flags (ty A, ty B)
+          (let loop ([rest (cdr v)] [flags '()])
+            (if (memq (car rest) '(nuw nsw))
+                (loop (cdr rest) (cons (car rest) flags))
+                (words (symbol->string (car v))
+                       (flags-text (reverse flags))
+                       (format "(~a ~a, ~a ~a)"
+                               (type->text (car rest))
+                               (operand->text env (car rest) (cadr rest))
+                               (type->text (car rest))
+                               (operand->text env (car rest)
+                                              (caddr rest))))))]
+         [(getelementptr)
+          ;; constexpr gep: getelementptr flags (src-ty, G, G...)
+          (let loop ([rest (cdr v)] [flags '()])
+            (if (memq (car rest) '(inbounds nusw nuw))
+                (loop (cdr rest) (cons (car rest) flags))
+                (words "getelementptr" (flags-text (reverse flags))
+                       (format "(~a)"
+                               (join ", "
+                                     (cons (type->text (car rest))
+                                           (map (lambda (g)
+                                                  (group->text env g))
+                                                (cdr rest))))))))]
          [else (aggregate->text env tyf v)])]
       [else (r-error "cannot render operand" v)]))
 

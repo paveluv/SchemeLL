@@ -190,11 +190,27 @@ Newest entries first. Format: date, Done / Decided / Next.
   New golden entry edge-shapes locks the round in (206 checks).
   Corpus: 28233 + 2263 renderer + 1 fixpoint = 30497 verified (83.6%).
 
+- Round 10 (2026-08-22): constant expressions MODELED -- LLVM 19's
+  surviving set (casts trunc/ptrtoint/inttoptr/bitcast/addrspacecast,
+  binops add/sub/mul/xor with single wrap flags, gep with nowrap flags
+  via LLVMConstGEPWithNoWrapFlags), spelled as the instruction forms
+  nested in operand position (self-typed, no new grammar shapes).
+  ConstantExpr::get folds symmetrically with the parser -- no fixpoint
+  tier needed. Detections for the remainder: extract/insert/shuffle
+  constexpr kinds (they fold away in practice), nuw+nsw binops (the C
+  constructors set one flag each), inrange(lo,hi) gep annotations
+  (NO C API accessor at all -- witnessed textually from the printed
+  constant; 12 files, was 9 MISMATCHes). New constexprs golden entry
+  pins all kinds through build/unbuild/render (209 checks). Corpus:
+  29014 + 2495 renderer + 2 fixpoint = 31511 verified (86.4%),
+  +1k files this round; constexpr bucket 1171 -> 239.
+
 ### Next (coverage burn-down, by corpus statistics)
-- Constant expressions (~1.2k files; ConstGEP2 etc. already bound in
-  raw.sls), metadata-typed operands (~1.7k), fn alignment (~334,
-  modelable), operand bundles (~322), global aliases (~262), unnamed
-  identified structs (~89), module asm (~71).
+- Metadata-typed operands (~1.7k, mostly intrinsic calls), fn
+  alignment (~337, modelable), operand bundles (~325), global aliases
+  (~262), residual constexpr kinds (~239), alloca addrspace (~196),
+  all-constant folding residue (~124), unnamed identified structs
+  (~104), module asm (~71).
 - Smaller leftovers: scalable vectors, raw value injection (the reserved
   (ptr N) shape), constant expressions on demand, address-spaced globals.
 

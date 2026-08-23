@@ -269,8 +269,55 @@
              (isa? (LLVMIsAConstantDataVector c)))
          (aggregate-form st c ty)]
         [(isa? (LLVMIsAConstantExpr c))
-         (not-modeled "constant expressions" (LLVMGetConstOpcode c))]
+         (constexpr-form st c)]
         [else (not-modeled "constant kind")])))
+
+  ;; the constexpr kinds LLVM 19 still has (zext/sext/icmp/select/and/
+  ;; shl are gone upstream); spelled exactly like the instruction forms
+  (define constexpr-casts '(trunc ptrtoint inttoptr bitcast addrspacecast))
+  (define constexpr-binops '(add sub mul xor))
+
+  (define (constexpr-form st c)
+    (let* ([opnum (LLVMGetConstOpcode c)]
+           [op (enum-name opcode-names opnum "constant expression opcode")]
+           [ty (LLVMTypeOf c)])
+      (define (opn i) (LLVMGetOperand c i))
+      (define (grp v)
+        (list (unbuild-type (LLVMTypeOf v)) (constant-form st v #t)))
+      (cond
+        [(memq op constexpr-casts)
+         `(,op ,(unbuild-type (LLVMTypeOf (opn 0)))
+               ,(constant-form st (opn 0) #t)
+               ,(unbuild-type ty))]
+        [(memq op constexpr-binops)
+         (let ([flags (if (eq? op 'xor)    ; xor carries no wrap flags
+                          '()
+                          (wrap-flags c))])
+           ;; the C API constructors set one flag each, never both
+           (when (equal? flags '(nuw nsw))
+             (not-modeled "constant expressions" 'nuw+nsw))
+           `(,op ,@flags ,(unbuild-type ty)
+                 ,(constant-form st (opn 0) #t)
+                 ,(constant-form st (opn 1) #t)))]
+        [(eq? op 'getelementptr)
+         ;; inrange(lo, hi) has no C API accessor at all; the printed
+         ;; form is the only witness
+         (let* ([txt (ir:value->string c)]
+                [n (string-length txt)])
+           (let loop ([i 0])
+             (cond
+               [(> (+ i 8) n) #f]
+               [(string=? (substring txt i (+ i 8)) "inrange(")
+                (not-modeled "inrange annotations on gep constant expressions (no C API)")]
+               [else (loop (+ i 1))])))
+         `(getelementptr ,@(gep-flag-syms c)
+                         ,(unbuild-type (LLVMGetGEPSourceElementType c))
+                         ,(grp (opn 0))
+                         ,@(let loop ([i 1])
+                             (if (fx= i (LLVMGetNumOperands c))
+                                 '()
+                                 (cons (grp (opn i)) (loop (fx+ i 1))))))]
+        [else (not-modeled "constant expressions" op)])))
 
   (define (aggregate-form st c ty)
     (let ([count (case (ir:type-kind ty)

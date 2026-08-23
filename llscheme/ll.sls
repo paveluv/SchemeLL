@@ -213,6 +213,12 @@
       [(and (pair? form) (memq (car form) '(c cz)))
        (unless ty (ll-error "string constant needs a type annotation" form))
        (resolve-constant (fstate-ctx st) (fstate-globals st) ty form)]
+      [(and (pair? form)
+            (memq (car form) '(trunc ptrtoint inttoptr bitcast addrspacecast
+                                add sub mul xor getelementptr)))
+       ;; a constant expression in operand position; self-typed
+       (resolve-constant (fstate-ctx st) (fstate-globals st) ty form
+                         (lambda (ety ef) (resolve-operand st ety ef)))]
       [(aggregate-literal? form)
        (unless ty (ll-error "aggregate constant needs a type annotation" form))
        (resolve-constant (fstate-ctx st) (fstate-globals st) ty form
@@ -938,6 +944,51 @@
        (unless (and (= (length form) 2) (string? (cadr form)))
          (ll-error "expected (c \"bytes\") or (cz \"bytes\")" form))
        (ir:const-string ctx (cadr form) (eq? (car form) 'cz))]
+      [(and (pair? form)
+            (memq (car form) '(trunc ptrtoint inttoptr bitcast
+                                addrspacecast)))
+       ;; constexpr cast: (op src-type value dst-type), like instructions
+       (unless (= (length form) 4)
+         (ll-error "expected (cast-op src-type constant dst-type)" form))
+       (ir:const-cast (car form)
+                      (elem-resolve (resolve-type ctx (cadr form))
+                                    (caddr form))
+                      (resolve-type ctx (cadddr form)))]
+      [(and (pair? form) (memq (car form) '(add sub mul xor)))
+       ;; constexpr binop: (op nuw? nsw? type a b)
+       (let loop ([rest (cdr form)] [nuw #f] [nsw #f])
+         (cond
+           [(and (pair? rest) (eq? (car rest) 'nuw)) (loop (cdr rest) #t nsw)]
+           [(and (pair? rest) (eq? (car rest) 'nsw)) (loop (cdr rest) nuw #t)]
+           [else
+            (unless (= (length rest) 3)
+              (ll-error "expected (binop nuw|nsw? type constant constant)"
+                        form))
+            (when (and (or nuw nsw) (eq? (car form) 'xor))
+              (ll-error "xor carries no wrap flags" form))
+            (when (and nuw nsw)
+              (ll-error "the C API cannot construct nuw+nsw constexprs" form))
+            (let ([ety (resolve-type ctx (car rest))])
+              (ir:const-binop (car form) nuw nsw
+                              (elem-resolve ety (cadr rest))
+                              (elem-resolve ety (caddr rest))))]))]
+      [(and (pair? form) (eq? (car form) 'getelementptr))
+       ;; constexpr gep: (getelementptr flags? src-type (ty ptr) (ty i)...)
+       (let loop ([rest (cdr form)] [flags 0])
+         (cond
+           [(and (pair? rest) (eq? (car rest) 'inbounds))
+            (loop (cdr rest) (bitwise-ior flags 3))]   ; inbounds implies nusw
+           [(and (pair? rest) (eq? (car rest) 'nusw))
+            (loop (cdr rest) (bitwise-ior flags 2))]
+           [(and (pair? rest) (eq? (car rest) 'nuw))
+            (loop (cdr rest) (bitwise-ior flags 4))]
+           [else
+            (unless (and (pair? rest) (pair? (cdr rest)))
+              (ll-error "expected (getelementptr flags? src-type groups...)"
+                        form))
+            (let ([groups (map constant-group (cdr rest))])
+              (ir:const-gep (resolve-type ctx (car rest))
+                            (car groups) (cdr groups) flags))]))]
       [(and (pair? form) (for-all pair? form))
        (let ([elts (map constant-group form)])
          (case (ir:type-kind ty)

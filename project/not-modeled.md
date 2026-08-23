@@ -88,7 +88,9 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 
 | Construct | Detection |
 |---|---|
-| constant expressions (`ptrtoint (ptr @g to i64)`, gep constexprs, ...) — opaque pointers made the common ones unnecessary; add on demand | detected (reports the constexpr opcode) |
+| constexpr kinds outside LLVM 19's core set: extractelement/insertelement/shufflevector constexprs (they almost always fold away at construction) | detected (reports the constexpr opcode) |
+| constexpr binops carrying BOTH nuw and nsw (the C API constructors set one flag each) | detected |
+| `inrange(lo, hi)` annotations on gep constexprs (vtable splitting; no C API accessor exists) | detected (textually, from the printed constant) |
 | fp constants not exactly representable as a double (fp128/x86_fp80 values; half/bfloat constants that fit a double ARE modeled) | detected |
 | blockaddress referencing another function | detected |
 | `; preds = ...` block comments reflect LLVM use-list order, which is not modeled | n/a (comments; stripped from the comparison) |

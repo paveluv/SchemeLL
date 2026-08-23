@@ -955,9 +955,55 @@ compute:
              (unbuild-of-ir "target triple = \"x86_64-pc-linux-gnu\"\n"))
 (t:check-exn "unbuild rejects calling conventions"
              (unbuild-of-ir "define fastcc void @f() {\nentry:\n  ret void\n}"))
-(t:check-exn "unbuild rejects constant expressions"
+(t:check-exn "unbuild rejects nuw+nsw constexpr binops (no C constructor)"
              (unbuild-of-ir
-               "@g = global i64 0\n@p = global i64 ptrtoint (ptr @g to i64)"))
+               "@g = global i64 0\n@p = global i64 add nuw nsw (i64 ptrtoint (ptr @g to i64), i64 1)"))
+
+(check-entry! "constexprs"
+  '((= @g (global i64 0))
+    (type %pair (struct i64 i32))
+    (= @arr (global (array 4 %pair) zeroinitializer))
+    (= @addr (global i64 (ptrtoint ptr @g i64)))
+    (= @back (global ptr (inttoptr i64 74565 ptr)))
+    (= @off (global i64 (add nuw i64 (ptrtoint ptr @g i64) 16)))
+    (= @dif (global i64 (sub i64 (ptrtoint ptr @g i64)
+                             (ptrtoint ptr @arr i64))))
+    (= @msk (global i64 (xor i64 (ptrtoint ptr @g i64) 1)))
+    ;; trunc-of-ptrtoint folds to a narrower ptrtoint on BOTH paths
+    ;; (ConstantExpr::get folding is symmetric with the parser)
+    (= @lo (global i32 (trunc i64 (ptrtoint ptr @g i64) i32)))
+    (= @sp (global (ptr (addrspace 1))
+                   (addrspacecast ptr @g (ptr (addrspace 1)))))
+    (= @fld (global ptr (getelementptr inbounds %pair (ptr @arr)
+                                       (i64 2) (i32 1))))
+    (= @raw (global ptr (getelementptr nuw i8 (ptr @g) (i64 8))))
+    (define i64 (@f)
+      (label %entry
+        (= %v (load i64 (ptr (getelementptr inbounds %pair (ptr @arr)
+                                            (i64 1) (i32 0)))))
+        (= %s (add i64 %v (ptrtoint ptr @g i64)))
+        (ret i64 %s))))
+  "%pair = type { i64, i32 }
+
+@g = global i64 0
+@arr = global [4 x %pair] zeroinitializer
+@addr = global i64 ptrtoint (ptr @g to i64)
+@back = global ptr inttoptr (i64 74565 to ptr)
+@off = global i64 add nuw (i64 ptrtoint (ptr @g to i64), i64 16)
+@dif = global i64 sub (i64 ptrtoint (ptr @g to i64), i64 ptrtoint (ptr @arr to i64))
+@msk = global i64 xor (i64 ptrtoint (ptr @g to i64), i64 1)
+@lo = global i32 ptrtoint (ptr @g to i32)
+@sp = global ptr addrspace(1) addrspacecast (ptr @g to ptr addrspace(1))
+@fld = global ptr getelementptr inbounds (%pair, ptr @arr, i64 2, i32 1)
+@raw = global ptr getelementptr nuw (i8, ptr @g, i64 8)
+
+define i64 @f() {
+entry:
+  %v = load i64, ptr getelementptr inbounds (%pair, ptr @arr, i64 1, i32 0), align 4
+  %s = add i64 %v, ptrtoint (ptr @g to i64)
+  ret i64 %s
+}
+")
 
 (check-entry! "edge-shapes"
   '((= @z (global (array 0 i64) zeroinitializer))

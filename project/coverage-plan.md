@@ -43,11 +43,14 @@ end of each run), and tests/bench-build.ss measures single modules.
 Aggregate over 28023 files: build 4.0s vs render 4.7s + parse 10.8s
 = 3.90x -- fine for testing, wrong default for production. One PASS
 file is render-unrepresentable (WebAssembly funcref: a call through
-ptr addrspace(20) needs the stripped datalayout to parse). Largest
-remaining buckets: metadata-typed operands (~1.7k), constant
-expressions (~1.2k), folding files with other unmodeled constructs
-(~350), fn alignment (~333), operand bundles (~321), aliases (~262),
-invalid-type build-fails (~151). "100% coverage" is meaningless without a
+ptr addrspace(20) needs the stripped datalayout to parse). Constant expressions were
+modeled in round 10 (grammar: instruction forms nested in operand
+position; +1k files). Rounds 9-10 emptied every BUG bucket and the
+MISMATCH bucket. As of round 10: 29014 strict + 2495 renderer + 2
+fixpoint = 31511 verified (86.4% of all, 88.3% of parseable). Largest
+remaining buckets: metadata-typed operands (~1.7k), fn alignment
+(~337), operand bundles (~325), aliases (~262), residual constexpr
+kinds (~239), alloca addrspace (~196). "100% coverage" is meaningless without a
 machine-checkable oracle and an explicit scope. This plan defines both, and
 three verification levels that turn coverage from a claim into a test that
 fails.

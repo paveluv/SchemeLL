@@ -42,10 +42,17 @@ global linkage); alloca element counts `(alloca i64 (i64 %n))`; and
 non-phi forward references — LLVM's own printer emits blocks in
 non-dominance order, so unresolved `%names` in typed positions become
 freeze-of-undef placeholders in a scratch block, patched via
-ReplaceAllUsesWith and erased at end of function. Not yet supported
-(rejected with clear errors): constant expressions (opaque pointers
-made the common ones unnecessary; add on demand) and raw value
-injection (the reserved `(ptr N)` operand shape).
+ReplaceAllUsesWith and erased at end of function (token-typed forward
+references -- EH pads -- use a parentless cleanuppad placeholder, since
+freeze cannot take a token). Constant expressions are modeled as the
+instruction forms nested in operand position, self-typed:
+`(ptrtoint ptr @g i64)`, `(add nuw i64 (ptrtoint ptr @g i64) 16)`,
+`(getelementptr inbounds %pair (ptr @arr) (i64 2) (i32 1))` -- exactly
+LLVM 19's surviving constexpr set (casts trunc/ptrtoint/inttoptr/
+bitcast/addrspacecast, binops add/sub/mul/xor, gep); construction goes
+through ConstantExpr::get, which folds symmetrically with the parser.
+Not yet supported (rejected with clear errors): raw value injection
+(the reserved `(ptr N)` operand shape).
 
 Corpus-driven additions (2026-08-22, step 6b): function linkage --
 `(define internal i64 (@f ...) ...)`, `(declare extern_weak ...)`, the
