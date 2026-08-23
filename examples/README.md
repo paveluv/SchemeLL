@@ -52,14 +52,18 @@ Scripts (`0*.ss`) build sll programs and emit `.o` / `.s` through the
 LLVM API. The `.sll` files are whole programs as pure data, compiled by
 the `sllc` tool:
 
-    scheme --libdirs . --script tools/sllc.ss            prog.sll  # -> .o
-    scheme --libdirs . --script tools/sllc.ss --asm      prog.sll  # -> .s
-    scheme --libdirs . --script tools/sllc.ss --run      prog.sll  # JIT @main
-    scheme --libdirs . --script tools/sllc.ss --exe      prog.sll  # executable
+    scheme --libdirs . --script tools/sllc.ss                    prog.sll  # -> .o
+    scheme --libdirs . --script tools/sllc.ss --asm               prog.sll  # -> .s
+    scheme --libdirs . --script tools/sllc.ss --run               prog.sll  # JIT @main
+    scheme --libdirs . --script tools/sllc.ss --exe               prog.sll  # executable
+    scheme --libdirs . --script tools/sllc.ss --render-llvm-ir    prog.sll  # sll->ll, pure Scheme
+    scheme --libdirs . --script tools/sllc.ss --print-canonical   prog.sll  # LLVM's canonical print
 
 `--exe` writes a static ELF executable itself -- no compiler,
-assembler, or linker involved anywhere. It handles self-contained
-programs (an `@_start`, no external symbols or data relocations); the
+assembler, or linker involved anywhere. It emits exactly one format
+(ELF64, little-endian, x86-64, Linux) and refuses both other hosts and
+cross-target objects. It handles self-contained programs (an
+`@_start`, no external symbols or data relocations); the
 flagship is `hello-linux-x86.sll`, a 186-byte binary that talks to the kernel
 directly:
 

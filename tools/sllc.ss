@@ -6,6 +6,9 @@
 ;;;   scheme --libdirs . --script tools/sllc.ss --render-llvm-ir prog.sll
 ;;;     (print the program as textual LLVM IR, via the pure-Scheme
 ;;;      renderer -- no LLVM machinery involved)
+;;;   scheme --libdirs . --script tools/sllc.ss --print-canonical prog.sll
+;;;     (print LLVM's own canonical form of the built module, with the
+;;;      host target lines and any --opt passes applied)
 ;;;   scheme --libdirs . --script tools/sllc.ss --opt O2 prog.sll  (optimize)
 ;;;   scheme --libdirs . --script tools/sllc.ss --run prog.sll     (JIT @main,
 ;;;                                              exit with its return value)
@@ -37,6 +40,8 @@
       [(string=? (car a) "--exe") (set! mode 'exe) (loop (cdr a))]
       [(string=? (car a) "--render-llvm-ir")
        (set! mode 'render) (loop (cdr a))]
+      [(string=? (car a) "--print-canonical")
+       (set! mode 'canonical) (loop (cdr a))]
       [(string=? (car a) "--opt")
        (set! opt-level (cadr a)) (loop (cddr a))]
       [(string=? (car a) "-o")
@@ -44,7 +49,7 @@
       [else (set! in-path (car a)) (loop (cdr a))])))
 
 (unless in-path
-  (printf "usage: sllc [--asm|--run|--exe|--render-llvm-ir] [--opt O2] [-o PATH] prog.sll~%")
+  (printf "usage: sllc [--asm|--run|--exe|--render-llvm-ir|--print-canonical] [--opt O2] [-o PATH] prog.sll~%")
   (exit 2))
 
 (define (default-out ext)
@@ -115,7 +120,29 @@
 (define (section-named secs name)
   (find (lambda (s) (string=? (car s) name)) secs))
 
+;; --exe writes exactly one binary format: ELF64, little-endian,
+;; x86-64, Linux process ABI. Refuse anything else -- both hosts that
+;; cannot run such a binary and objects that are not in that format.
+(define (check-exe-supported! obj)
+  (unless (memq (machine-type) '(a6le ta6le))
+    (error 'sllc
+      "--exe produces x86-64 Linux ELF executables; this host cannot run them -- use --run, or emit a .o for the system toolchain"
+      (machine-type)))
+  (unless (and (>= (bytevector-length obj) #x40)
+               (= (bytevector-u8-ref obj 0) #x7F)
+               (= (bytevector-u8-ref obj 1) (char->integer #\E))
+               (= (bytevector-u8-ref obj 2) (char->integer #\L))
+               (= (bytevector-u8-ref obj 3) (char->integer #\F))
+               (= (bytevector-u8-ref obj 4) 2)     ; ELFCLASS64
+               (= (bytevector-u8-ref obj 5) 1))    ; little-endian
+    (error 'sllc "--exe expects an ELF64 little-endian object; the module targets something else"))
+  (unless (= (bv-u16 obj #x12) 62)                 ; EM_X86_64
+    (error 'sllc
+      "--exe supports only x86-64 objects (e_machine 62); this object's e_machine differs"
+      (bv-u16 obj #x12))))
+
 (define (emit-executable obj path)
+  (check-exe-supported! obj)
   (let* ([secs (sections obj)]
          [text (or (section-named secs ".text")
                    (error 'sllc "no .text section in the object"))])
@@ -195,6 +222,8 @@
    ;; sll -> ll in pure Scheme; sll:build above has already validated
    ;; and verified the program
    (display (render:sll->ll prog))]
+  [(canonical)
+   (display (ir:module->string m))]
   [(object)
    (let ([path (default-out ".o")])
      (target:emit-object-file tm m path)
