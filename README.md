@@ -63,13 +63,21 @@ a Scheme function returning the platform-specific forms
 (`examples/aot/hello-portable.ss` cross-compiles one source into both
 x86-64 and AArch64 Linux objects this way).
 
-And it works in *files*, not just scripts: a `.sll` file is the
-**inverted format** — its top level is sll data, and Scheme is escaped
-*into* it. The whole file is one quasiquote body: `,expr` and `,@expr`
-evaluate at compile time, and top-level `(scheme ...)` forms hold the
-definitions and imports they use. This is `examples/aot/hello-metaprog.sll`,
-a self-contained file that picks the host's kernel ABI and builds its
-inline asm structurally, at compile time:
+## A 184-byte executable, no toolchain
+
+`tools/sllc.ss` compiles `.sll` files using the LLVM C API alone, and
+for self-contained programs it even writes the final static executable
+itself (a built-in minimal ELF64 emitter; no compiler, assembler, or
+linker anywhere).
+
+A `.sll` file is the **inverted format**: its top level is sll data,
+and Scheme is escaped *into* it. The whole file is one quasiquote
+body — `,expr` and `,@expr` evaluate at compile time, top-level
+`(scheme ...)` forms hold the definitions and imports they use, and
+plain data is the degenerate case. This is
+`examples/aot/hello-metaprog.sll`, a self-contained file that picks
+the host's kernel ABI and builds its inline asm structurally, at
+compile time:
 
 ```scheme
 (scheme
@@ -88,27 +96,15 @@ inline asm structurally, at compile time:
     (unreachable)))
 ```
 
-`sllc --exe` turns that file into a 184-byte executable whose
-constraint strings no human spelled.
-
-## A 186-byte executable, no toolchain
-
-`tools/sllc.ss` compiles `.sll` files — programs whose top level is
-sll data with Scheme escaped *into* it (the whole file is one
-quasiquote body: `,expr` evaluates at compile time, `(scheme ...)`
-holds definitions; plain data is the degenerate case) — using the
-LLVM C API alone. For self-contained programs it even writes
-the final static executable itself (a built-in minimal ELF64 emitter;
-no compiler, assembler, or linker anywhere):
-
 ```
-$ scheme --libdirs . --script tools/sllc.ss --opt O2 --exe examples/aot/hello-linux-x86.sll
-wrote executable examples/aot/hello-linux-x86 (186 bytes, entry #x400078)
-$ ./examples/aot/hello-linux-x86
+$ scheme --libdirs . --script tools/sllc.ss --opt O2 --exe examples/aot/hello-metaprog.sll
+wrote executable examples/aot/hello-metaprog (184 bytes, entry #x400078)
+$ ./examples/aot/hello-metaprog
 Hello, SchemeLL!
 ```
 
-**186 bytes**, talking to the kernel directly. `sllc` also emits
+**184 bytes**, talking to the kernel directly, from constraint strings
+no human spelled. `sllc` also emits
 relocatable objects and assembly (including cross-target: an x86 host
 emits genuine AArch64 objects), JIT-runs `@main` with `--run`, and
 prints your program as textual LLVM IR with `--render-llvm-ir` —
