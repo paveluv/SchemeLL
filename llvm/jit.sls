@@ -216,6 +216,9 @@
                     (lambda (out)
                       (LLVMOrcLLJITLookup (jit-live-ptr j) out name)))])
       (base:check-error-ref 'jit:lookup-address err)
+      ;; materialization just ran: inline-asm parse errors report
+      ;; success + an error-severity diagnostic
+      (base:check-diagnostics! 'jit:lookup-address)
       addr))
 
   ;; The payoff: a JIT'd function as a ready-to-call Scheme procedure, with

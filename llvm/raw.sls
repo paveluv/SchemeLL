@@ -137,6 +137,7 @@
     GetBlockAddressFunction GetBlockAddressBasicBlock
     HasPersonalityFn GetPersonalityFn
     GetInitializer GetGlobalParent GetTypeContext IsGlobalConstant
+    ContextSetDiagnosticHandler GetDiagInfoDescription GetDiagInfoSeverity
     HasMetadata GetFunctionCallConv GetAttributeCountAtIndex
     GetVisibility IsThreadLocal GetSection
     GetNumOperandBundles IsAtomicSingleThread IsPackedStruct
@@ -753,6 +754,13 @@
   (define-getter GetInitializer "LLVMGetInitializer" (void*) void*)
   (define-getter GetGlobalParent "LLVMGetGlobalParent" (void*) void*)
   (define-getter GetTypeContext "LLVMGetTypeContext" (void*) void*)
+  (define ContextSetDiagnosticHandler
+    (foreign-procedure "LLVMContextSetDiagnosticHandler"
+      (void* void* void*) void))
+  (define-getter GetDiagInfoDescription
+    "LLVMGetDiagInfoDescription" (void*) void*)
+  (define-getter GetDiagInfoSeverity
+    "LLVMGetDiagInfoSeverity" (void*) int)
   (define-getter IsGlobalConstant "LLVMIsGlobalConstant" (void*) int)
   (define-getter HasMetadata "LLVMHasMetadata" (void*) int)
   (define-getter GetFunctionCallConv "LLVMGetFunctionCallConv" (void*) unsigned-int)

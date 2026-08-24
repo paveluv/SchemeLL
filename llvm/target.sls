@@ -115,7 +115,10 @@
                       (LLVMTargetMachineEmitToFile
                         (machine-live-ptr tm) (ir:module-live-ptr m)
                         path file-type err-out)))])
-      (base:check-bool 'target:emit-to-file failed (base:cstring->string/dispose msg-ptr))))
+      (base:check-bool 'target:emit-to-file failed
+                       (base:cstring->string/dispose msg-ptr))
+      ;; inline-asm parse errors report success + an error diagnostic
+      (base:check-diagnostics! 'target:emit-to-file)))
 
   (define (emit-object-file tm m path) (emit-to-file tm m path 1))
   (define (emit-assembly-file tm m path) (emit-to-file tm m path 0))
@@ -134,6 +137,7 @@
           (foreign-free buf-out)
           (base:check-bool 'target:emit-object-bytevector failed
                            (base:cstring->string/dispose msg-ptr))
+          (base:check-diagnostics! 'target:emit-object-bytevector)
           (let* ([start (LLVMGetBufferStart buf)]
                  [size (LLVMGetBufferSize buf)]
                  [bv (make-bytevector size)])

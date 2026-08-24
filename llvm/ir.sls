@@ -14,7 +14,7 @@
     module? make-module module-dispose! module-live-ptr module-consume!
     module-context module->string verify-module
     set-module-target-triple! set-module-data-layout!
-    run-module-passes! parse-ir
+    run-module-passes! parse-ir take-diagnostics!
     ;; walking built IR (observation / disassembly)
     module-functions function-blocks block-instructions
     instruction-opcode icmp-predicate fcmp-predicate
@@ -93,11 +93,20 @@
     (fields ptr (mutable state))
     (nongenerative llvm-context-v0))
 
+  ;; LLVM diagnostics (inline-asm errors etc.) are captured per
+  ;; process in (llvm base); every context we create installs the
+  ;; recording handler, and base:error attaches drained diagnostics to
+  ;; whatever it raises. take-diagnostics! gives programmatic access.
+  (define take-diagnostics! base:take-diagnostics!)
+
   (define (make-context)
-    ($make-context (LLVMContextCreate) 'owned))
+    (let ([ptr (LLVMContextCreate)])
+      (base:install-diagnostic-handler! ptr)
+      ($make-context ptr 'owned)))
 
   ;; Wrap a context pointer someone else owns (e.g. an ORC ThreadSafeContext).
   (define (wrap-context ptr)
+    (base:install-diagnostic-handler! ptr)
     ($make-context ptr 'borrowed))
 
   (define (context-live-ptr ctx)

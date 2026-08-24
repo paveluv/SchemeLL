@@ -111,3 +111,18 @@
   (t:check-exn "jit refuses a foreign-triple module"
                (jit:add-module! j jc m))
   (jit:context-dispose! jc))
+
+(t:section "jit: diagnostics")
+
+;; inline-asm parse errors report SUCCESS plus an error-severity
+;; diagnostic; the capture + post-materialization check must turn that
+;; into a raised condition
+(let* ([jc (jit:make-context)]
+       [ctx (jit:context-ir jc)]
+       [m (ir:parse-ir ctx "badasm"
+            "define void @f() {\nentry:\n  call void asm sideeffect \"sycall\", \"\"()\n  ret void\n}")]
+       [j (jit:make)])
+  (jit:add-module! j jc m)
+  (jit:context-dispose! jc)
+  (t:check-exn "bad asm mnemonic raises at materialization"
+               (jit:function j "f")))
