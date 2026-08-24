@@ -63,14 +63,7 @@
 
 ;; ---- read and build ---------------------------------------------------------
 
-(define prog
-  (call-with-input-file in-path
-    (lambda (p)
-      (let loop ([items '()])
-        (let ([d (read p)])
-          (if (eof-object? d)
-              (reverse items)
-              (loop (cons d items))))))))
+(define prog (sll:load-program in-path))
 
 (define ctx (ir:make-context))
 (define m (sll:build ctx (path-last in-path) prog))

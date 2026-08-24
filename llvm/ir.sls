@@ -28,6 +28,7 @@
     vector-type scalable-vector-type
     named-type create-named-struct struct-set-body! value->string
     type-kind type-int-width type-return-type type-param-types type-vararg?
+    struct-field-count
     type->string
     ;; functions / values
     add-function named-function function-type-of
@@ -311,6 +312,8 @@
   (define (type-int-width t) (LLVMGetIntTypeWidth t))
   (define (type-return-type ft) (LLVMGetReturnType ft))
   (define (type-vararg? ft) (not (zero? (LLVMIsFunctionVarArg ft))))
+
+  (define (struct-field-count ty) (LLVMCountStructElementTypes ty))
 
   (define (type-param-types ft)
     (let* ([n (LLVMCountParamTypes ft)]

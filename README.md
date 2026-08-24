@@ -65,8 +65,11 @@ x86-64 and AArch64 Linux objects this way).
 
 ## A 186-byte executable, no toolchain
 
-`tools/sllc.ss` compiles `.sll` files — whole programs as pure data —
-using the LLVM C API alone. For self-contained programs it even writes
+`tools/sllc.ss` compiles `.sll` files — programs whose top level is
+sll data with Scheme escaped *into* it (the whole file is one
+quasiquote body: `,expr` evaluates at compile time, `(scheme ...)`
+holds definitions; plain data is the degenerate case) — using the
+LLVM C API alone. For self-contained programs it even writes
 the final static executable itself (a built-in minimal ELF64 emitter;
 no compiler, assembler, or linker anywhere):
 

@@ -461,3 +461,35 @@
                              (= %p (alloca i64))
                              (store 5 (ptr %p))
                              (ret i64 %x))))))
+
+(t:section "sll: load-program (the inverted format)")
+
+;; a .sll file is one quasiquote body: (scheme ...) defines, ,@ splices
+(let ([path "/tmp/sll-load-test.sll"])
+  (call-with-output-file path
+    (lambda (p)
+      (put-string p "(scheme (define (pair-of x) (list x x)))\n")
+      (put-string p "(define i64 (@f (i64 %x))\n")
+      (put-string p "  (label %e (= %r (add i64 %x ,(* 6 7))) (ret i64 %r)))\n")
+      (put-string p ",@(map (lambda (n)\n")
+      (put-string p "         `(= ,(string->symbol (format \"@g~a\" n))\n")
+      (put-string p "             (global i64 ,n)))\n")
+      (put-string p "       (pair-of 5))\n"))
+    'replace)
+  (let ([prog (sll:load-program path)])
+    (t:check "escapes evaluated inside items"
+             (equal? (car prog)
+                     '(define i64 (@f (i64 %x))
+                        (label %e (= %r (add i64 %x 42)) (ret i64 %r)))))
+    (t:check "top-level splices produce items"
+             (= 3 (length prog)))))
+
+(t:section "sll: asm arity guard")
+
+;; LLVM segfaults on constraint/type mismatches; sll must refuse first
+(t:check-exn "constraint operand count must match the call-site type"
+             (sll:build (ir:make-context) "x"
+               '((define void (@f)
+                   (label %e
+                     (call void ((asm "nop" "={rax},{rdi}" sideeffect)))
+                     (ret void))))))

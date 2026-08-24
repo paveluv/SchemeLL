@@ -19,8 +19,8 @@
 ;;; permitted forward reference to a *value*; everything else must be
 ;;; defined textually before use.
 (library (sll)
-  (export build jit dump unbuild procedure)
-  (import (except (chezscheme) error)
+  (export build jit dump unbuild procedure load-program)
+  (import (except (chezscheme) error load-program)
           (prefix (llvm base) base:)
           (prefix (llvm ir) ir:)
           (prefix (llvm jit) jit:)
@@ -422,6 +422,47 @@
   ;; callee of call/invoke/callbr: a function/pointer operand, or inline
   ;; asm: (asm "template" "constraints" flag ...), flags: sideeffect
   ;; alignstack. callbr requires an asm callee (LLVM restriction).
+  ;; count an asm constraint string's operands and compare with the
+  ;; call-site function type: LLVM SEGFAULTS on a mismatch instead of
+  ;; erroring, so this is a safety check, not pedantry. Constraints
+  ;; using + or * (tied-by-plus, indirect) have subtler counting and
+  ;; are skipped; ~clobbers and !label constraints (callbr) count as
+  ;; neither.
+  (define (check-asm-arity fnty form)
+    (let ([cs (caddr form)])
+      (unless (or (string=? cs "")
+                  (let loop ([i 0])   ; skip when + or * appear
+                    (and (< i (string-length cs))
+                         (or (memv (string-ref cs i) '(#\+ #\*))
+                             (loop (+ i 1))))))
+        (let loop ([i 0] [start 0] [outs 0] [ins 0])
+          (define (classify from to outs ins)
+            (cond
+              [(= from to) (values outs ins)]           ; empty item
+              [(char=? (string-ref cs from) #\~) (values outs ins)]
+              [(char=? (string-ref cs from) #\!) (values outs ins)]
+              [(char=? (string-ref cs from) #\=) (values (+ outs 1) ins)]
+              [else (values outs (+ ins 1))]))
+          (if (= i (string-length cs))
+              (let-values ([(outs ins) (classify start i outs ins)])
+                (let* ([retty (ir:type-return-type fnty)]
+                       [want-outs (case (ir:type-kind retty)
+                                    [(void) 0]
+                                    [(struct)
+                                     (ir:struct-field-count retty)]
+                                    [else 1])]
+                       [want-ins (length (ir:type-param-types fnty))])
+                  (unless (and (= outs want-outs) (= ins want-ins))
+                    (error "asm constraint operand counts do not match the call-site type (LLVM would crash on this)"
+                           `(constraints ,cs outputs ,outs inputs ,ins)
+                           `(type wants outputs ,want-outs inputs
+                                  ,want-ins)
+                           form))))
+              (if (char=? (string-ref cs i) #\,)
+                  (let-values ([(outs ins) (classify start i outs ins)])
+                    (loop (+ i 1) (+ i 1) outs ins))
+                  (loop (+ i 1) start outs ins)))))))
+
   (define resolve-callee
     (case-lambda
       [(st fnty form) (resolve-callee* st fnty form 0)]
@@ -436,6 +477,7 @@
                                              inteldialect unwind)))
                                 (cdddr form)))
             (error "expected (asm \"template\" \"constraints\" flag ...)" form))
+          (check-asm-arity fnty form)
           (ir:inline-asm fnty (cadr form) (caddr form)
                          (and (memq 'sideeffect (cdddr form)) #t)
                          (and (memq 'alignstack (cdddr form)) #t)
@@ -1529,6 +1571,32 @@
       (jit:add-module! j jc m)
       (jit:context-dispose! jc)
       j))
+
+  ;; Read a .sll file: sll module items with embedded Scheme. The file
+  ;; is the INVERSE of a Scheme source: its top level is data, and code
+  ;; is escaped INTO it --
+  ;;   ,expr and ,@expr   quasiquote escapes, anywhere in any item
+  ;;                      (including a whole item or item splice)
+  ;;   (scheme expr ...)  top-level: evaluated for effect (defines,
+  ;;                      imports) in the file's environment before the
+  ;;                      items are; contributes no items
+  ;; Everything else is literal sll. The whole file is evaluated as one
+  ;; quasiquoted list, so plain data files load unchanged and cost one
+  ;; eval. NOTE: like a Makefile, a .sll with escapes is a program --
+  ;; load only what you trust.
+  (define (load-program path)
+    (let ([env (copy-environment (environment '(chezscheme)) #t)])
+      (call-with-input-file path
+        (lambda (p)
+          (let loop ([items '()])
+            (let ([d (read p)])
+              (cond
+                [(eof-object? d)
+                 (eval (list 'quasiquote (reverse items)) env)]
+                [(and (pair? d) (eq? (car d) 'scheme))
+                 (for-each (lambda (e) (eval e env)) (cdr d))
+                 (loop items)]
+                [else (loop (cons d items))])))))))
 
   ;; The one-stop shop: compile a program in memory and hand back one of
   ;; its functions as an ordinary Scheme procedure. The procedure keeps
