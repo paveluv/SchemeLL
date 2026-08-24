@@ -3,6 +3,6 @@
 # Chez compiles imported libraries to .so object files on first use
 # (--compile-imported-libraries) and reuses them on every later run
 # when they are newer than their sources; `make clean` removes them.
-root="$(cd "$(dirname "$0")" && pwd)"
+root="$(cd "$(dirname "$0")/.." && pwd)"
 exec scheme --compile-imported-libraries --libdirs "$root" \
      --script "$root/tools/sllc.ss" "$@"
