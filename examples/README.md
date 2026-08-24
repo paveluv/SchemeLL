@@ -72,7 +72,7 @@ assembler, or linker involved anywhere. It emits exactly one format
 (ELF64, little-endian, x86-64, Linux) and refuses both other hosts and
 cross-target objects. It handles self-contained programs (an
 `@_start`, no external symbols or data relocations); the
-flagship is `hello-linux-x86.sll`, a 186-byte binary that talks to the kernel
+flagship is `hello-linux-x86.sll`, a 194-byte binary that talks to the kernel
 directly:
 
     $ scheme --libdirs . --script tools/sllc.ss --opt O2 --exe examples/aot/hello-linux-x86.sll

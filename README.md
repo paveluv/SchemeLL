@@ -63,7 +63,7 @@ a Scheme function returning the platform-specific forms
 (`examples/aot/hello-portable.ss` cross-compiles one source into both
 x86-64 and AArch64 Linux objects this way).
 
-## A 184-byte executable, no toolchain
+## A 194-byte executable, no toolchain
 
 `tools/sllc.ss` compiles `.sll` files using the LLVM C API alone, and
 for self-contained programs it even writes the final static executable
@@ -98,12 +98,12 @@ compile time:
 
 ```
 $ scheme --libdirs . --script tools/sllc.ss --opt O2 --exe examples/aot/hello-metaprog.sll
-wrote executable examples/aot/hello-metaprog (184 bytes, entry #x400078)
+wrote executable examples/aot/hello-metaprog (194 bytes, entry #x400080)
 $ ./examples/aot/hello-metaprog
 Hello, SchemeLL!
 ```
 
-**184 bytes**, talking to the kernel directly, from constraint strings
+**194 bytes**, talking to the kernel directly, from constraint strings
 no human spelled. `sllc` also emits
 relocatable objects and assembly (including cross-target: an x86 host
 emits genuine AArch64 objects), JIT-runs `@main` with `--run`, and
