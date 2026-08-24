@@ -358,7 +358,7 @@
 
   (define (prepare-blocks! ctx globals item)
     (when (eq? (item-kind item) 'define)
-      (let-values ([(retty-form fname params lk full-body)
+      (let-values ([(retty-form fname params lk ccv full-body)
                     (item-signature item)])
         (let* ([f (hashtable-ref globals fname #f)]
                [body (let skip ([b full-body])
@@ -732,9 +732,11 @@
                                          (fstate-phis st)))
                   ph)]
                [(call)
-                ;; (call (addrspace n)? type (callee args...) bundles...)
+                ;; (call cconv? (addrspace n)? type (callee args...) bundles...)
                 (arity>= 2 "(call type (callee (type arg) ...) bundles...)")
-                (let* ([callee-as (and (pair? (car args))
+                (let* ([ccv (cc-spec (car args) form)]
+                       [args (if ccv (cdr args) args)]
+                       [callee-as (and (pair? (car args))
                                        (eq? (caar args) 'addrspace)
                                        (cadr (car args)))]
                        [args (if callee-as (cdr args) args)]
@@ -748,21 +750,25 @@
                     (when (and (eq? (ir:type-kind retty) 'void)
                             (not (string=? name "")))
                       (error "cannot bind the result of a void call" form))
-                    (let ([callee (resolve-callee st fnty (car app)
-                                                  (or callee-as 0))])
-                      (if (null? (cddr args))
-                          (ir:build-call b fnty callee avals name)
-                          (let ([brefs (map (lambda (bf)
-                                              (resolve-bundle st bf))
-                                            (cddr args))])
-                            (let ([v (ir:build-call-bundles
-                                       b fnty callee avals brefs name)])
-                              (for-each ir:dispose-operand-bundle! brefs)
-                              v))))))]
+                    (let* ([callee (resolve-callee st fnty (car app)
+                                                   (or callee-as 0))]
+                           [v (if (null? (cddr args))
+                                  (ir:build-call b fnty callee avals name)
+                                  (let ([brefs (map (lambda (bf)
+                                                      (resolve-bundle st bf))
+                                                    (cddr args))])
+                                    (let ([v (ir:build-call-bundles
+                                               b fnty callee avals brefs name)])
+                                      (for-each ir:dispose-operand-bundle! brefs)
+                                      v)))])
+                      (when ccv (ir:set-instruction-call-conv! v ccv))
+                      v)))]
                [(invoke)
-                ;; (invoke type (callee args...) bundles... (label %ok) (label %pad))
+                ;; (invoke cconv? type (callee args...) bundles... (label %ok) (label %pad))
                 (arity>= 4 "(invoke type (callee args...) bundles... (label %ok) (label %pad))")
-                (let* ([app (cadr args)]
+                (let* ([ccv (cc-spec (car args) form)]
+                       [args (if ccv (cdr args) args)]
+                       [app (cadr args)]
                        [bundles (filter bundle-form? (cddr args))]
                        [labels (filter (lambda (x) (not (bundle-form? x)))
                                        (cddr args))])
@@ -777,28 +783,32 @@
                     (when (and (eq? (ir:type-kind retty) 'void)
                             (not (string=? name "")))
                       (error "cannot bind the result of a void invoke" form))
-                    (if (null? bundles)
-                        (ir:build-invoke b fnty
-                                         (resolve-callee st fnty (car app))
-                                         avals
-                                         (block-ref st (car labels))
-                                         (block-ref st (cadr labels))
-                                         name)
-                        (let ([brefs (map (lambda (bf) (resolve-bundle st bf))
-                                          bundles)])
-                          (let ([v (ir:build-invoke-bundles
-                                     b fnty (resolve-callee st fnty (car app))
-                                     avals
-                                     (block-ref st (car labels))
-                                     (block-ref st (cadr labels))
-                                     brefs name)])
-                            (for-each ir:dispose-operand-bundle! brefs)
-                            v)))))]
+                    (let ([v (if (null? bundles)
+                                 (ir:build-invoke b fnty
+                                                  (resolve-callee st fnty (car app))
+                                                  avals
+                                                  (block-ref st (car labels))
+                                                  (block-ref st (cadr labels))
+                                                  name)
+                                 (let ([brefs (map (lambda (bf) (resolve-bundle st bf))
+                                                   bundles)])
+                                   (let ([v (ir:build-invoke-bundles
+                                              b fnty (resolve-callee st fnty (car app))
+                                              avals
+                                              (block-ref st (car labels))
+                                              (block-ref st (cadr labels))
+                                              brefs name)])
+                                     (for-each ir:dispose-operand-bundle! brefs)
+                                     v)))])
+                      (when ccv (ir:set-instruction-call-conv! v ccv))
+                      v)))]
                [(callbr)
-                ;; (callbr type ((asm ...) args...) bundles...
+                ;; (callbr cconv? type ((asm ...) args...) bundles...
                 ;;         (label %fallthrough) ((label %indirect) ...))
                 (arity>= 4 "(callbr type ((asm ...) args...) bundles... (label %fall) ((label %i) ...))")
-                (let* ([bundles (filter bundle-form? (cddr args))]
+                (let* ([ccv (cc-spec (car args) form)]
+                       [args (if ccv (cdr args) args)]
+                       [bundles (filter bundle-form? (cddr args))]
                        [args (cons (car args)
                                    (cons (cadr args)
                                          (filter (lambda (x)
@@ -815,25 +825,27 @@
                   (let-values ([(fnty retty avals)
                                 (callsite-signature st ctx (car args)
                                                     (cdr app) form)])
-                    (if (null? bundles)
-                        (ir:build-callbr b fnty
-                                         (resolve-callee st fnty (car app))
-                                         (block-ref st (caddr args))
-                                         (map (lambda (d) (block-ref st d))
-                                              (cadddr args))
-                                         avals name)
-                        (let ([brefs (map (lambda (bf)
-                                            (resolve-bundle st bf))
-                                          bundles)])
-                          (let ([v (ir:build-callbr
-                                     b fnty
-                                     (resolve-callee st fnty (car app))
-                                     (block-ref st (caddr args))
-                                     (map (lambda (d) (block-ref st d))
-                                          (cadddr args))
-                                     avals brefs name)])
-                            (for-each ir:dispose-operand-bundle! brefs)
-                            v)))))]
+                    (let ([v (if (null? bundles)
+                                 (ir:build-callbr b fnty
+                                                  (resolve-callee st fnty (car app))
+                                                  (block-ref st (caddr args))
+                                                  (map (lambda (d) (block-ref st d))
+                                                       (cadddr args))
+                                                  avals name)
+                                 (let ([brefs (map (lambda (bf)
+                                                     (resolve-bundle st bf))
+                                                   bundles)])
+                                   (let ([v (ir:build-callbr
+                                              b fnty
+                                              (resolve-callee st fnty (car app))
+                                              (block-ref st (caddr args))
+                                              (map (lambda (d) (block-ref st d))
+                                                   (cadddr args))
+                                              avals brefs name)])
+                                     (for-each ir:dispose-operand-bundle! brefs)
+                                     v)))])
+                      (when ccv (ir:set-instruction-call-conv! v ccv))
+                      v)))]
                [(landingpad)
                 ;; (landingpad type clause ...) where clause is: cleanup |
                 ;; (catch type constant) | (filter type constant)
@@ -1114,6 +1126,55 @@
       (internal . 8) (private . 9)
       (extern_weak . 12) (common . 14)))
 
+  ;; llvm::CallingConv; keys are the IR keywords, i.e. exactly the
+  ;; names LLVM 19's printer uses (probed by setting every id 0..120
+  ;; and reading the print). Ids the printer has no name for spell as
+  ;; (cc N) -- and named ones MUST use the name, so sll data is
+  ;; canonical both directions (same shape as the anonymity rule).
+  ;; ccc (0) is the default and is never written.
+  (define call-convs
+    '((fastcc . 8) (coldcc . 9) (ghccc . 10) (anyregcc . 13)
+      (preserve_mostcc . 14) (preserve_allcc . 15) (swiftcc . 16)
+      (cxx_fast_tlscc . 17) (tailcc . 18) (cfguard_checkcc . 19)
+      (swifttailcc . 20) (preserve_nonecc . 21)
+      (x86_stdcallcc . 64) (x86_fastcallcc . 65)
+      (arm_apcscc . 66) (arm_aapcscc . 67) (arm_aapcs_vfpcc . 68)
+      (msp430_intrcc . 69) (x86_thiscallcc . 70)
+      (ptx_kernel . 71) (ptx_device . 72)
+      (spir_func . 75) (spir_kernel . 76) (intel_ocl_bicc . 77)
+      (x86_64_sysvcc . 78) (win64cc . 79) (x86_vectorcallcc . 80)
+      (hhvmcc . 81) (hhvm_ccc . 82) (x86_intrcc . 83)
+      (avr_intrcc . 84) (avr_signalcc . 85)
+      (amdgpu_vs . 87) (amdgpu_gs . 88) (amdgpu_ps . 89)
+      (amdgpu_cs . 90) (amdgpu_kernel . 91) (x86_regcallcc . 92)
+      (amdgpu_hs . 93) (amdgpu_ls . 95) (amdgpu_es . 96)
+      (aarch64_vector_pcs . 97) (aarch64_sve_vector_pcs . 98)
+      (amdgpu_gfx . 100)
+      (aarch64_sme_preservemost_from_x0 . 102)
+      (aarch64_sme_preservemost_from_x2 . 103)
+      (amdgpu_cs_chain . 104) (amdgpu_cs_chain_preserve . 105)
+      (m68k_rtdcc . 106) (graalcc . 107) (riscv_vector_cc . 110)
+      (aarch64_sme_preservemost_from_x1 . 111)))
+
+  ;; an optional calling-convention spec at the head of a form:
+  ;; a named symbol, or (cc N) for ids without a printer name.
+  ;; Returns the id or #f (not a cc spec); errors on a malformed one.
+  (define (cc-spec x form)
+    (cond
+      [(and (symbol? x) (assq x call-convs)) => cdr]
+      [(and (pair? x) (eq? (car x) 'cc))
+       (unless (and (pair? (cdr x)) (null? (cddr x))
+                    (fixnum? (cadr x)) (<= 1 (cadr x) 1023))
+         (error "expected (cc N) with N in 1..1023" x form))
+       (let ([n (cadr x)])
+         (cond
+           [(find (lambda (p) (= (cdr p) n)) call-convs) =>
+            (lambda (p)
+              (error "this calling convention has a name; use it"
+                     (car p) form))]
+           [else n]))]
+      [else #f]))
+
   ;; initializers: literals, undef/zeroinitializer/null, @globals,
   ;; (c "bytes") / (cz "bytes"), and per-element-typed aggregates
   ;; like ((i64 1) (i32 2)) -- exactly how IR spells them.
@@ -1312,19 +1373,22 @@
             (map (lambda (e) (resolve-type ctx e)) (cdr body))
             (eq? (car body) 'packed-struct))))))
 
-  ;; (define|declare linkage? ret-type (@name ...) body ...)
-  ;; -> (values ret-type-form name-sym rest linkage-int-or-#f body)
+  ;; (define|declare linkage? cconv? ret-type (@name ...) body ...)
+  ;; -> (values ret-type-form name-sym rest linkage-int-or-#f
+  ;;            cc-int-or-#f body)
   (define (item-signature item)
     (unless (>= (length item) 3)
       (error "malformed module item" item))
     (let* ([lk (and (symbol? (cadr item)) (assq (cadr item) linkages))]
-           [item (if lk (cdr item) item)])
+           [item (if lk (cdr item) item)]
+           [ccv (and (>= (length item) 3) (cc-spec (cadr item) item))]
+           [item (if ccv (cdr item) item)])
       (unless (>= (length item) 3)
         (error "malformed module item" item))
       (let ([sig (caddr item)])
         (unless (and (pair? sig) (global-name? (car sig)))
           (error "function signature must be (@name ...)" item))
-        (values (cadr item) (car sig) (cdr sig) (and lk (cdr lk))
+        (values (cadr item) (car sig) (cdr sig) (and lk (cdr lk)) ccv
                 (cdddr item)))))
 
   (define (check-param p item)
@@ -1360,7 +1424,7 @@
           (declare-function! ctx m globals item kind)))))
 
   (define (declare-function! ctx m globals item kind)
-    (let-values ([(retty-form fname rest0 lk body) (item-signature item)])
+    (let-values ([(retty-form fname rest0 lk ccv body) (item-signature item)])
       (let-values ([(rest variadic?) (split-variadic rest0)])
         (when (hashtable-ref globals fname #f)
           (error "duplicate global name" fname))
@@ -1375,6 +1439,7 @@
           (let ([f (ir:add-function m (llvm-name fname)
                                     (ir:function-type retty ptys variadic?))])
             (when lk (ir:set-linkage! f lk))
+            (when ccv (ir:set-function-call-conv! f ccv))
             ;; optional decorations after the signature, in print order:
             ;; (align N) then (gc "name")
             (let deco ([b body])
@@ -1415,7 +1480,8 @@
                        name)))
           (apply-attrs! g attrs item))))
     (when (eq? (item-kind item) 'define)
-      (let-values ([(retty-form fname params lk full-body0) (item-signature item)])
+      (let-values ([(retty-form fname params lk ccv full-body0)
+                    (item-signature item)])
         (let* ([f (hashtable-ref globals fname #f)]
                ;; (align N)/(gc "...") were applied in the declare pass
                [full-body (let skip ([b full-body0])

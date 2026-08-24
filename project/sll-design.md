@@ -54,6 +54,20 @@ through ConstantExpr::get, which folds symmetrically with the parser.
 Not yet supported (rejected with clear errors): raw value injection
 (the reserved `(ptr N)` operand shape).
 
+Calling conventions (2026-08-24, first Meik Scheme prerequisite):
+an optional slot after linkage in `define`/`declare` headers --
+`(define tailcc i64 (@f ...) ...)`, `(declare fastcc ...)` -- and after
+the flags of `call`/`invoke`/`callbr` sites, before the `(addrspace N)`
+marker: `(call musttail tailcc i64 (@f ...))`, `(invoke swiftcc ...)`.
+Named conventions use exactly LLVM 19's printer keywords (probed by
+setting ids 0..120 and reading the print; the table lives in
+`call-convs`/`call-conv-names`/`cc-words`); ids the printer has no
+name for spell `(cc N)` (printed `ccN`), and ids WITH a name must use
+the name -- canonical both directions, like the anonymity rule. `ccc`
+(0) is the unwritten default. Note a call site's cc is set
+independently of its callee's (matching them is the frontend's job;
+LLVM treats a mismatch as UB at runtime, not a verifier error).
+
 Corpus-driven additions (2026-08-22, step 6b): function linkage --
 `(define internal i64 (@f ...) ...)`, `(declare extern_weak ...)`, the
 same optional keyword-operand slot as globals; zero-incoming phis

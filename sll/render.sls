@@ -417,42 +417,51 @@
                                           (label-text (cadr inc))))
                                 (cdr args))))]
              [(call)
-              (words (cond [(memq 'tail flags) "tail"]
-                           [(memq 'musttail flags) "musttail"]
-                           [(memq 'notail flags) "notail"]
-                           [else ""])
-                     "call"
-                     (if (and (pair? (car args))
-                              (eq? (caar args) 'addrspace))
-                         (let ([as (cadr (car args))])
-                           (set! args (cdr args))
-                           (format "addrspace(~a)" as))
-                         "")
-                     (flags-text (filter (lambda (x)
-                                           (not (memq x '(tail musttail notail))))
-                                         flags))
-                     (string-append
-                       (app->text env (car args) (cadr args)
-                                  (and (memq 'musttail flags)
-                                       (caller-variadic?)
-                                       (pair? (car args))
-                                       (eq? (caar args) 'fn)
-                                       (memq 'variadic (car args))
-                                       #t))
-                       (bundles->text env (cddr args))))]
+              ;; parser order: [tail] call [fmf] [cconv] [addrspace] ty
+              (let* ([cc (cc-spec (car args))]
+                     [args (if cc (cdr args) args)]
+                     [as (and (pair? (car args))
+                              (eq? (caar args) 'addrspace)
+                              (cadr (car args)))]
+                     [args (if as (cdr args) args)])
+                (words (cond [(memq 'tail flags) "tail"]
+                             [(memq 'musttail flags) "musttail"]
+                             [(memq 'notail flags) "notail"]
+                             [else ""])
+                       "call"
+                       (flags-text (filter (lambda (x)
+                                             (not (memq x '(tail musttail notail))))
+                                           flags))
+                       (cc-text cc)
+                       (if as (format "addrspace(~a)" as) "")
+                       (string-append
+                         (app->text env (car args) (cadr args)
+                                    (and (memq 'musttail flags)
+                                         (caller-variadic?)
+                                         (pair? (car args))
+                                         (eq? (caar args) 'fn)
+                                         (memq 'variadic (car args))
+                                         #t))
+                         (bundles->text env (cddr args)))))]
              [(invoke)
-              (let ([bs (filter bundle-form? (cddr args))]
-                    [labels (filter (lambda (x) (not (bundle-form? x)))
-                                    (cddr args))])
-                (format "invoke ~a~a to ~a unwind ~a"
+              (let* ([cc (cc-spec (car args))]
+                     [args (if cc (cdr args) args)]
+                     [bs (filter bundle-form? (cddr args))]
+                     [labels (filter (lambda (x) (not (bundle-form? x)))
+                                     (cddr args))])
+                (format "invoke ~a~a~a to ~a unwind ~a"
+                        (if cc (string-append (cc-text cc) " ") "")
                         (app->text env (car args) (cadr args) #f)
                         (bundles->text env bs)
                         (label-ref (car labels)) (label-ref (cadr labels))))]
              [(callbr)
-              (let* ([bs (filter bundle-form? (cddr args))]
+              (let* ([cc (cc-spec (car args))]
+                     [args (if cc (cdr args) args)]
+                     [bs (filter bundle-form? (cddr args))]
                      [rest (filter (lambda (x) (not (bundle-form? x)))
                                    (cddr args))])
-                (format "callbr ~a~a to ~a [~a]"
+                (format "callbr ~a~a~a to ~a [~a]"
+                        (if cc (string-append (cc-text cc) " ") "")
                         (app->text env (car args) (cadr args) #f)
                         (bundles->text env bs)
                         (label-ref (car rest))
@@ -582,6 +591,33 @@
     '(external available_externally linkonce linkonce_odr weak weak_odr
        appending internal private extern_weak common))
 
+  (define cc-words   ; the named calling conventions, as LLVM prints them
+    '(fastcc coldcc ghccc anyregcc preserve_mostcc preserve_allcc
+       swiftcc cxx_fast_tlscc tailcc cfguard_checkcc swifttailcc
+       preserve_nonecc x86_stdcallcc x86_fastcallcc arm_apcscc
+       arm_aapcscc arm_aapcs_vfpcc msp430_intrcc x86_thiscallcc
+       ptx_kernel ptx_device spir_func spir_kernel intel_ocl_bicc
+       x86_64_sysvcc win64cc x86_vectorcallcc hhvmcc hhvm_ccc x86_intrcc
+       avr_intrcc avr_signalcc amdgpu_vs amdgpu_gs amdgpu_ps amdgpu_cs
+       amdgpu_kernel x86_regcallcc amdgpu_hs amdgpu_ls amdgpu_es
+       aarch64_vector_pcs aarch64_sve_vector_pcs amdgpu_gfx
+       aarch64_sme_preservemost_from_x0 aarch64_sme_preservemost_from_x2
+       amdgpu_cs_chain amdgpu_cs_chain_preserve m68k_rtdcc graalcc
+       riscv_vector_cc aarch64_sme_preservemost_from_x1))
+
+  ;; an optional leading cc spec: a named symbol or (cc N); returns it
+  ;; or #f. (cc N) prints as ccN, the numbered spelling LLVM uses.
+  (define (cc-spec x)
+    (and (or (and (symbol? x) (memq x cc-words))
+             (and (pair? x) (eq? (car x) 'cc)))
+         x))
+
+  (define (cc-text c)
+    (cond
+      [(not c) ""]
+      [(symbol? c) (symbol->string c)]
+      [else (format "cc~a" (cadr c))]))
+
   (define (ifunc->text env item)
     (let* ([rest (cdr (caddr item))]
            [lk (and (symbol? (car rest)) (memq (car rest) linkage-words)
@@ -650,9 +686,11 @@
            [lk (and (symbol? (car rest)) (memq (car rest) linkage-words)
                     (car rest))]
            [rest (if lk (cdr rest) rest)]
+           [cc (cc-spec (car rest))]
+           [rest (if cc (cdr rest) rest)]
            [ty (car rest)] [sig (cadr rest)] [body (cddr rest)])
       (if (eq? kind 'declare)
-          (words "declare" (if lk (symbol->string lk) "")
+          (words "declare" (if lk (symbol->string lk) "") (cc-text cc)
                  (type->text ty) (signature->text env sig #f)   ; bare types
                  (let deco ([b body] [acc '()])
                    (if (and (pair? b) (pair? (car b)))
@@ -682,7 +720,7 @@
                                                        (cdr sig))])
                               v?)])
             (string-append
-              (words "define" (if lk (symbol->string lk) "")
+              (words "define" (if lk (symbol->string lk) "") (cc-text cc)
                      (type->text ty) (signature->text env sig #t)
                      (if algn (format "align ~a" (cadr algn)) "")
                      (if gc (format "gc ~s" (cadr gc)) "")

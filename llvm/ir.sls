@@ -81,6 +81,8 @@
     build-call build-alloca build-array-alloca build-load build-store
     build-gep build-gep/flags
     set-tail-call-kind! tail-call-kind
+    set-function-call-conv! function-call-conv
+    set-instruction-call-conv! instruction-call-conv
     replace-all-uses! erase-instruction! delete-block!
     build-trunc build-zext build-sext
     build-si->fp build-ui->fp build-fp->si build-fp->ui
@@ -844,6 +846,12 @@
   ;; LLVMTailCallKind ints: 0 none, 1 tail, 2 musttail, 3 notail
   (define (set-tail-call-kind! call-inst kind) (LLVMSetTailCallKind call-inst kind))
   (define (tail-call-kind call-inst) (LLVMGetTailCallKind call-inst))
+  (define (set-function-call-conv! f cc) (LLVMSetFunctionCallConv f cc))
+  (define (function-call-conv f) (LLVMGetFunctionCallConv f))
+  (define (set-instruction-call-conv! call-inst cc)
+    (LLVMSetInstructionCallConv call-inst cc))
+  (define (instruction-call-conv call-inst)
+    (LLVMGetInstructionCallConv call-inst))
 
   ;; surgery used for forward-reference patching
   (define (replace-all-uses! old new) (LLVMReplaceAllUsesWith old new))

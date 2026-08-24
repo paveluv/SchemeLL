@@ -96,6 +96,38 @@
     '((1 . reassoc) (2 . nnan) (4 . ninf) (8 . nsz) (16 . arcp)
       (32 . contract) (64 . afn)))
 
+  (define call-conv-names   ; ccc (0) is the default and is omitted;
+    ;; ids the printer names get the name, the rest spell as (cc N)
+    '((8 . fastcc) (9 . coldcc) (10 . ghccc) (13 . anyregcc)
+      (14 . preserve_mostcc) (15 . preserve_allcc) (16 . swiftcc)
+      (17 . cxx_fast_tlscc) (18 . tailcc) (19 . cfguard_checkcc)
+      (20 . swifttailcc) (21 . preserve_nonecc)
+      (64 . x86_stdcallcc) (65 . x86_fastcallcc)
+      (66 . arm_apcscc) (67 . arm_aapcscc) (68 . arm_aapcs_vfpcc)
+      (69 . msp430_intrcc) (70 . x86_thiscallcc)
+      (71 . ptx_kernel) (72 . ptx_device)
+      (75 . spir_func) (76 . spir_kernel) (77 . intel_ocl_bicc)
+      (78 . x86_64_sysvcc) (79 . win64cc) (80 . x86_vectorcallcc)
+      (81 . hhvmcc) (82 . hhvm_ccc) (83 . x86_intrcc)
+      (84 . avr_intrcc) (85 . avr_signalcc)
+      (87 . amdgpu_vs) (88 . amdgpu_gs) (89 . amdgpu_ps)
+      (90 . amdgpu_cs) (91 . amdgpu_kernel) (92 . x86_regcallcc)
+      (93 . amdgpu_hs) (95 . amdgpu_ls) (96 . amdgpu_es)
+      (97 . aarch64_vector_pcs) (98 . aarch64_sve_vector_pcs)
+      (100 . amdgpu_gfx)
+      (102 . aarch64_sme_preservemost_from_x0)
+      (103 . aarch64_sme_preservemost_from_x2)
+      (104 . amdgpu_cs_chain) (105 . amdgpu_cs_chain_preserve)
+      (106 . m68k_rtdcc) (107 . graalcc) (110 . riscv_vector_cc)
+      (111 . aarch64_sme_preservemost_from_x1)))
+
+  ;; spliceable calling-convention part: () for ccc
+  (define (cc-part n)
+    (cond
+      [(zero? n) '()]
+      [(assv n call-conv-names) => (lambda (p) (list (cdr p)))]
+      [else `((cc ,n))]))
+
   (define (enum-name table n what)
     (cond
       [(assv n table) => cdr]
@@ -736,18 +768,21 @@
                        [(0) '()] [(1) '(tail)] [(2) '(musttail)]
                        [else '(notail)])
                    ,@(fmf-flags ins)
+                   ,@(cc-part (ir:instruction-call-conv ins))
                    ,@(callee-addrspace-marker st ins)
                    ,(call-type-slot (LLVMGetCalledFunctionType ins))
                    ,(application st ins)
                    ,@(bundle-forms st ins))]
            [(invoke)
-            `(invoke ,(call-type-slot (LLVMGetCalledFunctionType ins))
+            `(invoke ,@(cc-part (ir:instruction-call-conv ins))
+                     ,(call-type-slot (LLVMGetCalledFunctionType ins))
                      ,(application st ins)
                      ,@(bundle-forms st ins)
                      ,(block-label st (LLVMGetNormalDest ins))
                      ,(block-label st (LLVMGetUnwindDest ins)))]
            [(callbr)
-            `(callbr ,(call-type-slot (LLVMGetCalledFunctionType ins))
+            `(callbr ,@(cc-part (ir:instruction-call-conv ins))
+                     ,(call-type-slot (LLVMGetCalledFunctionType ins))
                      ,(application st ins)
                      ,@(bundle-forms st ins)
                      ,(successor st ins 0)
@@ -919,8 +954,6 @@
       (not-modeled "functions outside the datalayout's program address space"))
     (when (nz? (LLVMHasPrefixData f)) (not-modeled "function prefix data"))
     (when (nz? (LLVMHasPrologueData f)) (not-modeled "function prologue data"))
-    (unless (zero? (LLVMGetFunctionCallConv f))
-      (not-modeled "non-C calling conventions" (LLVMGetFunctionCallConv f)))
     (unless (zero? (LLVMGetVisibility f))
       (not-modeled "visibility (hidden/protected)"))
     (let ([s (base:cstring->string (LLVMGetSection f))])
@@ -944,16 +977,17 @@
       (check-function-decorations f (length params))
       (let ([lk-part (let ([lk (ir:linkage f)])
                        (if (zero? lk) '()
-                           (list (enum-name linkage-names lk "linkage"))))])
+                           (list (enum-name linkage-names lk "linkage"))))]
+            [cc (cc-part (ir:function-call-conv f))])
         (if (ir:declaration? f)
-          `(declare ,@lk-part
+          `(declare ,@lk-part ,@cc
                     ,(unbuild-type (ir:type-return-type fnty))
                     (,gname ,@(map unbuild-type (ir:type-param-types fnty))
                             ,@variadic)
                     ,@(align-attr f)
                     ,@(gc-attr f))
           (let ([st (make-ustate (function-names f) gnames f)])
-            `(define ,@lk-part
+            `(define ,@lk-part ,@cc
                ,(unbuild-type (ir:type-return-type fnty))
                (,gname
                  ,@(map (lambda (p)

@@ -20,10 +20,10 @@ collector**. Everything the GC needs from IR is already modeled
 (statepoints, tokens, "gc-live"/"deopt" bundles, gc attribute,
 datalayout `ni:1`, addrspace(1) pointers). Remaining GC prerequisites
 live OUTSIDE sll: stack-map (`.llvm_stackmaps`) section access from
-the ORC JIT (an object-linking-layer hook), safepoint polls, and — for
-guaranteed proper tail calls — **calling conventions, which sll does
-NOT model yet** (tailcc/fastcc; a known gap, flagged for when compiler
-work starts). Statepoint flow knowledge: you do NOT hand-write
+the ORC JIT (an object-linking-layer hook) and safepoint polls.
+(Calling conventions — tailcc/fastcc/ghccc/`(cc N)` — WERE the third
+gap; modeled 2026-08-24 as the first Meik Scheme prerequisite, see
+sll-design.md.) Statepoint flow knowledge: you do NOT hand-write
 relocation chains — the frontend emits clean addrspace(1) IR with `gc`
 attributes, `RewriteStatepointsForGC` runs LATE and inserts
 statepoints/relocates mechanically, codegen emits the stack maps.
@@ -41,7 +41,7 @@ the normalized-entry kind).
   potential*. Ledger invariant: implemented ∪ documented = LLVM IR;
   modeling something later = delete its ledger row + its normalizer
   strip, and the corpus starts testing it.
-- **249 checks** (`make test`), **37 examples** (`make examples`),
+- **252 checks** (`make test`), **37 examples** (`make examples`),
   all green. A large bug hunt (two review agents + adversarial probes)
   just fixed 15 reproduced defects; regressions exist for each.
 - **Tested platforms**: x86-64 Linux and x86-64 FreeBSD (user-verified,
@@ -252,7 +252,7 @@ the normalized-entry kind).
 
 Chez 10 (`scheme` or `chez-scheme`, auto-detected) + LLVM 19 with
 headers. Then: `make build` (compile libs, ~6x faster startups),
-`make test` (249), `make examples` (37), `make reference` (sparse
+`make test` (252), `make examples` (37), `make reference` (sparse
 llvm-project clone for `make corpus`; `git sparse-checkout add
 llvm/docs` inside it for LangRef). `tools/sllc` is self-compiling.
 Platform facts: FreeBSD's image activator REJECTS unbranded SYSV
@@ -276,8 +276,8 @@ non-alloc and `.eh_frame`/X86_64_UNWIND drop silently.
 1. GC runtime groundwork: `.llvm_stackmaps` access from ORC (object
    linking layer hook), safepoint polls, then the allocator/barriers —
    in the future GC repo, driven from here.
-2. Calling conventions in sll (needed for guaranteed tail calls:
-   `musttail` is modeled, `tailcc`/`fastcc` are not).
+2. ~~Calling conventions in sll~~ DONE 2026-08-24 (define/declare
+   headers, call/invoke/callbr sites, named + `(cc N)`).
 3. LLVM 20 support: re-run the oracle + corpus against a new pin;
    constexpr kinds shrink again upstream.
 4. medl design (separate repo): nanopass over sll; sll grammar was

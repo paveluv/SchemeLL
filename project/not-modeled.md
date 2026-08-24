@@ -29,7 +29,6 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 | Construct | Detection |
 |---|---|
 | function / return / parameter attributes (`nounwind`, `noundef`, `sret(T)`, `#0` groups, ...) | detected |
-| non-C calling conventions (`fastcc`, `tailcc`, `coldcc`, ...) | detected |
 | sections (`section "..."`) | detected |
 | visibility (`hidden` / `protected`) | detected |
 | `dso_local` | undetected; the corpus harness normalizes it textually (no C API accessor in LLVM 19) |
@@ -56,7 +55,7 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 | Construct | Detection |
 |---|---|
 | attached metadata (`!dbg`, `!tbaa`, `!prof`, `!range`, ...) | detected |
-| call-site attributes and call-site calling conventions | undetected |
+| call-site attributes | undetected |
 | operand bundles on callbr | detected (call and invoke bundles are modeled) |
 | calls through null/undef pointer constants in non-zero address spaces (the untyped callee slot cannot carry the addrspace) | detected |
 | named syncscopes (`syncscope("agent")`, ...) | undetected (no C API in LLVM 19); the harness normalizes them textually |

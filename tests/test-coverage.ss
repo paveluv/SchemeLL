@@ -890,6 +890,74 @@ entry:
 }
 ")
 
+;; calling conventions: named ones spell as LLVM's printer keywords, the
+;; nameless ids as (cc N); ccc is the unwritten default. Covers headers
+;; (define + declare), call sites (with tail markers and independently of
+;; the callee's cc), and invoke.
+(check-entry! "calling-conventions"
+  '((declare fastcc i64 (@fext i64))
+    (declare i32 (@pers))
+    (define tailcc i64 (@self (i64 %n))
+      (label %entry
+        (= %n1 (sub i64 %n 1))
+        (= %r (call musttail tailcc i64 (@self (i64 %n1))))
+        (ret i64 %r)))
+    (define ghccc void (@stg (i64 %sp))
+      (label %entry
+        (= %r (call fastcc i64 (@fext (i64 %sp))))
+        (call coldcc i64 (@fext (i64 %r)))
+        (ret void)))
+    (define (cc 11) void (@numbered)
+      (label %entry
+        (call (cc 42) void (@numbered))
+        (ret void)))
+    (define internal preserve_mostcc void (@linked)
+      (personality ptr @pers)
+      (label %entry
+        (invoke swiftcc void (@linked) (label %ok) (label %pad)))
+      (label %ok (ret void))
+      (label %pad
+        (= %lp (landingpad (struct ptr i32) cleanup))
+        (ret void))))
+  "declare fastcc i64 @fext(i64)
+
+declare i32 @pers()
+
+define tailcc i64 @self(i64 %n) {
+entry:
+  %n1 = sub i64 %n, 1
+  %r = musttail call tailcc i64 @self(i64 %n1)
+  ret i64 %r
+}
+
+define ghccc void @stg(i64 %sp) {
+entry:
+  %r = call fastcc i64 @fext(i64 %sp)
+  %0 = call coldcc i64 @fext(i64 %r)
+  ret void
+}
+
+define cc11 void @numbered() {
+entry:
+  call cc42 void @numbered()
+  ret void
+}
+
+define internal preserve_mostcc void @linked() personality ptr @pers {
+entry:
+  invoke swiftcc void @linked()
+          to label %ok unwind label %pad
+
+ok:
+  ret void
+
+pad:
+  %lp = landingpad { ptr, i32 }
+          cleanup
+  ret void
+}
+")
+
 (check-entry! "varargs"
   '((declare i32 (@printf ptr variadic))
     (define i64 (@sum2 (i64 %n) variadic)
