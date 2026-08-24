@@ -14,9 +14,9 @@
 ;;;       (in   a (tied sum))       ; "0"       -> tied to sum's location
 ;;;       (in   b r)                ; "r"
 ;;;       (clobber cc))             ; "~{cc}"
-;;;     '("add " b ", " sum)        ; template: "add $2, $0"
+;;;     '("add " b ", " sum)        ; template: "add ${2}, ${0}"
 ;;;     'sideeffect)
-;;;   => (asm "add $2, $0" "=r,0,r,~{cc}" sideeffect)
+;;;   => (asm "add ${2}, ${0}" "=r,0,r,~{cc}" sideeffect)
 ;;;
 ;;; Operands are referenced BY NAME in the template and in (tied ...);
 ;;; the library computes the $N numbering (outputs first, then inputs,
@@ -83,7 +83,14 @@
                                             (and (eq? (car item) 'inout)
                                                  (gensym))
                                             (cadr item)))]
-                           [(3) (list item)]
+                           [(3)
+                            ;; an explicit #f name on inout still needs
+                            ;; the internal name its hidden tied input
+                            ;; references
+                            (list (if (and (eq? (car item) 'inout)
+                                           (not (cadr item)))
+                                      (list 'inout (gensym) (caddr item))
+                                      item))]
                            [else (error "expected (out|out!|inout|in NAME? SPEC)"
                                         item)]))]
                     [(list? item) (normalize-items item)]   ; splice
@@ -115,11 +122,17 @@
        (format "{~a}" (cadr spec))]
       [(and (pair? spec) (eq? (car spec) 'tied) (= (length spec) 2))
        (let ([name (cadr spec)])
-         (unless (exists (lambda (o) (eq? (cadr o) name)) outs)
-           (error "(tied NAME) must reference an out/out!/inout operand"
+         (unless (and name (symbol? name)
+                      (exists (lambda (o) (eq? (cadr o) name)) outs)
+                      (assq name indices))
+           (error "(tied NAME) must reference a NAMED out/out!/inout operand"
                   spec))
          (number->string (cdr (assq name indices))))]
       [(and (list? spec) (pair? spec))
+       ;; alternatives -- but a malformed (reg ...) or (tied ...) that
+       ;; failed its shape check above must not silently concatenate
+       (when (memq (car spec) '(reg tied))
+         (error "malformed constraint spec" spec))
        (apply string-append
               (map (lambda (s) (spec->string s indices outs)) spec))]
       [else (error "invalid constraint spec" spec)]))
@@ -143,7 +156,9 @@
                        [(symbol? f)
                         (let ([e (assq f indices)])
                           (unless e (error "unknown operand in template" f))
-                          (string-append "$" (number->string (cdr e))))]
+                          ;; braced: a following digit-initial fragment
+                          ;; must not merge into the operand number
+                          (format "${~a}" (cdr e)))]
                        [(and (pair? f) (eq? (car f) 'mod) (= (length f) 3)
                              (symbol? (cadr f)) (symbol? (caddr f)))
                         (let ([e (assq (cadr f) indices)])

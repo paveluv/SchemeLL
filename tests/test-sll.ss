@@ -462,7 +462,7 @@
                              (store 5 (ptr %p))
                              (ret i64 %x))))))
 
-(t:section "sll: load-program (the inverted format)")
+(t:section "sll: load-sll (the inverted format)")
 
 ;; a .sll file is one quasiquote body: (scheme ...) defines, ,@ splices
 (let ([path "/tmp/sll-load-test.sll"])
@@ -476,7 +476,7 @@
       (put-string p "             (global i64 ,n)))\n")
       (put-string p "       (pair-of 5))\n"))
     'replace)
-  (let ([prog (sll:load-program path)])
+  (let ([prog (sll:load-sll path)])
     (t:check "escapes evaluated inside items"
              (equal? (car prog)
                      '(define i64 (@f (i64 %x))
@@ -493,3 +493,30 @@
                    (label %e
                      (call void ((asm "nop" "={rax},{rdi}" sideeffect)))
                      (ret void))))))
+
+(t:section "sll: bug-hunt regressions")
+
+;; empty constraint strings and empty items are arity-checked too
+(t:check-exn "empty constraint string vs non-void call"
+             (sll:build (ir:make-context) "x"
+               '((define i64 (@f (i64 %a))
+                   (label %e
+                     (= %r (call i64 ((asm "mov $1, $0" "") (i64 %a))))
+                     (ret i64 %r))))))
+(t:check-exn "trailing comma in constraints"
+             (sll:build (ir:make-context) "x"
+               '((define i64 (@f (i64 %a))
+                   (label %e
+                     (= %r (call i64 ((asm "mov $1, $0" "=r,r,")
+                                      (i64 %a))))
+                     (ret i64 %r))))))
+
+;; load-sll: escape side effects observe strict file order
+(let ([path "/tmp/sll-order-test.sll"])
+  (call-with-output-file path
+    (lambda (p)
+      (put-string p "(scheme (define n 0) (define (next!) (set! n (+ n 1)) n))\n")
+      (put-string p "(a ,(next!)) (b ,(next!)) (c ,(next!))\n"))
+    'replace)
+  (t:check "escapes evaluate top to bottom"
+           (equal? (sll:load-sll path) '((a 1) (b 2) (c 3)))))

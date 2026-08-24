@@ -19,8 +19,8 @@
 ;;; permitted forward reference to a *value*; everything else must be
 ;;; defined textually before use.
 (library (sll)
-  (export build jit dump unbuild procedure load-program)
-  (import (except (chezscheme) error load-program)
+  (export build jit dump unbuild procedure load-sll)
+  (import (except (chezscheme) error)
           (prefix (llvm base) base:)
           (prefix (llvm ir) ir:)
           (prefix (llvm jit) jit:)
@@ -430,15 +430,21 @@
   ;; neither.
   (define (check-asm-arity fnty form)
     (let ([cs (caddr form)])
-      (unless (or (string=? cs "")
-                  (let loop ([i 0])   ; skip when + or * appear
-                    (and (< i (string-length cs))
-                         (or (memv (string-ref cs i) '(#\+ #\*))
-                             (loop (+ i 1))))))
+      ;; + (read-write) and * (indirect) make counting subtler; skip
+      (unless (let loop ([i 0])
+                (and (< i (string-length cs))
+                     (or (memv (string-ref cs i) '(#\+ #\*))
+                         (loop (+ i 1)))))
         (let loop ([i 0] [start 0] [outs 0] [ins 0])
           (define (classify from to outs ins)
             (cond
-              [(= from to) (values outs ins)]           ; empty item
+              [(= from to)
+               ;; an empty ITEM (doubled or trailing comma) is fatal to
+               ;; LLVM; an empty STRING is simply zero items
+               (if (zero? (string-length cs))
+                   (values outs ins)
+                   (error "empty constraint item (doubled or trailing comma?)"
+                          cs form))]
               [(char=? (string-ref cs from) #\~) (values outs ins)]
               [(char=? (string-ref cs from) #\!) (values outs ins)]
               [(char=? (string-ref cs from) #\=) (values (+ outs 1) ins)]
@@ -1580,23 +1586,33 @@
   ;;   (scheme expr ...)  top-level: evaluated for effect (defines,
   ;;                      imports) in the file's environment before the
   ;;                      items are; contributes no items
-  ;; Everything else is literal sll. The whole file is evaluated as one
-  ;; quasiquoted list, so plain data files load unchanged and cost one
-  ;; eval. NOTE: like a Makefile, a .sll with escapes is a program --
-  ;; load only what you trust.
-  (define (load-program path)
+  ;; Everything else is literal sll; escapes evaluate in strict
+  ;; top-to-bottom file order. Plain data files load unchanged.
+  ;; NOTE: like a Makefile, a .sll with escapes is a program -- load
+  ;; only what you trust. (Named load-sll: Chez has an unrelated
+  ;; built-in load-program that an unprefixed double import would
+  ;; silently shadow this with.)
+  (define (load-sll path)
     (let ([env (copy-environment (environment '(chezscheme)) #t)])
       (call-with-input-file path
         (lambda (p)
-          (let loop ([items '()])
+          (let loop ([acc '()])
             (let ([d (read p)])
               (cond
-                [(eof-object? d)
-                 (eval (list 'quasiquote (reverse items)) env)]
+                [(eof-object? d) (reverse acc)]
                 [(and (pair? d) (eq? (car d) 'scheme))
                  (for-each (lambda (e) (eval e env)) (cdr d))
-                 (loop items)]
-                [else (loop (cons d items))])))))))
+                 (loop acc)]
+                ;; each item evaluates AS IT IS READ, so stateful
+                ;; escapes observe strict top-to-bottom file order
+                ;; (one quasiquote over the whole file would leave
+                ;; the order of ,expr side effects unspecified)
+                [(and (pair? d) (eq? (car d) 'unquote))
+                 (loop (cons (eval (cadr d) env) acc))]
+                [(and (pair? d) (eq? (car d) 'unquote-splicing))
+                 (loop (append (reverse (eval (cadr d) env)) acc))]
+                [else
+                 (loop (cons (eval (list 'quasiquote d) env) acc))])))))))
 
   ;; The one-stop shop: compile a program in memory and hand back one of
   ;; its functions as an ordinary Scheme procedure. The procedure keeps

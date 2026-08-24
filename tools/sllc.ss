@@ -90,7 +90,7 @@
 
 ;; ---- read and build ---------------------------------------------------------
 
-(define prog (sll:load-program in-path))
+(define prog (sll:load-sll in-path))
 
 (define ctx (ir:make-context))
 (define m (sll:build ctx (path-last in-path) prog))
