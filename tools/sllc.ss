@@ -286,31 +286,31 @@
      (target:emit-assembly-file tm m path)
      (printf "wrote ~a~%" path))]
   [(run)
-   ;; --run executes @main, like a hosted program. Freestanding
-   ;; programs (@_start, raw syscalls) are --exe material: their exit
-   ;; path would terminate the host process behind the JIT's back.
+   ;; --run executes @main (hosted semantics: exit with its return
+   ;; value) or, when there is none, @_start (freestanding semantics:
+   ;; the program exits ITSELF, usually via a raw exit syscall that
+   ;; ends this process on the spot -- so flush first).
    (let ([defines-fn?
            (lambda (name)
              (exists (lambda (item)
                        (and (pair? item) (eq? (car item) 'define)
-                            (let ([sig (exists (lambda (x)
-                                                 (and (pair? x)
-                                                      (eq? (car x) name)
-                                                      x))
-                                               item)])
-                              sig)))
+                            (exists (lambda (x)
+                                      (and (pair? x) (eq? (car x) name)))
+                                    item)))
                      prog))])
-     (unless (defines-fn? '@main)
-       (if (defines-fn? '@_start)
-           (die "--run executes @main, but this program is freestanding (@_start): use --exe, or add a @main")
-           (die "--run executes @main, and this program does not define one"))))
-   (let* ([jc (jit:make-context)]
-          [m2 (sll:build (jit:context-ir jc) "main" prog)]
-          [j (jit:make)])
-     (jit:add-module! j jc m2)
-     (jit:context-dispose! jc)
-     (let ([main (jit:function j "main")])
-       (exit (main))))]
+     (unless (or (defines-fn? '@main) (defines-fn? '@_start))
+       (die "--run executes @main (or @_start), and this program defines neither"))
+     (let* ([jc (jit:make-context)]
+            [m2 (sll:build (jit:context-ir jc) "main" prog)]
+            [j (jit:make)])
+       (jit:add-module! j jc m2)
+       (jit:context-dispose! jc)
+       (if (defines-fn? '@main)
+           (exit ((jit:function j "main")))
+           (let ([start (jit:function j "_start")])
+             (flush-output-port (current-output-port))
+             (start)                 ; normally never returns
+             (exit 0)))))]
   [(exe)
    (emit-executable (target:emit-object-bytevector tm m)
                     (default-out ""))])

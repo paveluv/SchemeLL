@@ -53,5 +53,5 @@
     (= %p16 (getelementptr i8 (ptr %buf) (i64 16)))
     (store (i8 10) (ptr %p16))
     ,@(syscall sys-write '(i64 1) '(ptr %buf) '(i64 17))
-    ,@(syscall sys-exit)
+    ,@(syscall sys-exit '(i64 0))
     (unreachable)))
