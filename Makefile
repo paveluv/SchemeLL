@@ -1,6 +1,8 @@
 # Chez's binary is `scheme` on most systems, `chez-scheme` on FreeBSD
-# (and some Linux distros); override with `make CHEZ=...`.
-CHEZ ?= $(shell command -v scheme >/dev/null 2>&1 && echo scheme || echo chez-scheme)
+# (and some Linux distros); override with `make CHEZ=...`. The !=
+# shell-assignment works in both BSD make and GNU make (>= 4.0).
+CHEZ_DETECTED != command -v scheme >/dev/null 2>&1 && echo scheme || echo chez-scheme
+CHEZ ?= $(CHEZ_DETECTED)
 LIBDIRS = .
 
 .PHONY: test repl build corpus format clean examples reference
@@ -38,8 +40,8 @@ examples:
 	done
 	@$(CHEZ) --libdirs $(LIBDIRS) --script tools/sllc.ss --run examples/aot/fact.sll; \
 	  test $$? -eq 120 || exit 1
-	@$(CHEZ) --libdirs $(LIBDIRS) --script tools/sllc.ss --opt O2 --exe examples/aot/hello-linux-x86.sll && \
-	  ./examples/aot/hello-linux-x86 && rm -f examples/aot/hello-linux-x86
+	@$(CHEZ) --libdirs $(LIBDIRS) --script tools/sllc.ss --opt O2 --exe examples/aot/hello-metaprog.sll && \
+	  ./examples/aot/hello-metaprog && rm -f examples/aot/hello-metaprog
 	@echo "examples ok"
 
 format:
