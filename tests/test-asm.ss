@@ -33,7 +33,7 @@
 (t:check "early clobber, alternatives, modifiers, $ escaping"
          (equal? (asm:expr '((out! d (r m))
                              (in s r))
-                           '("mov " (: s w) ", " d "  # costs $$5"))
+                           '("mov " (mod s w) ", " d "  # costs $$5"))
                  '(asm "mov ${1:w}, $0  # costs $$$$5" "=&rm,r")))
 
 (t:check "item order does not matter (numbering is canonical)"

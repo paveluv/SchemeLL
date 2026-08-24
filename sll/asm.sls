@@ -43,7 +43,9 @@
 ;;;   string              verbatim escape hatch
 ;;;
 ;;; Template: a list of fragments -- strings (verbatim, $ escaped),
-;;; operand names (-> $N), or (: NAME MODIFIER) (-> ${N:MODIFIER});
+;;; operand names (-> $N), or (mod NAME M) (-> ${N:M}, LangRef's "asm
+;;; template argument modifiers": register re-spelling, register-pair
+;;; halves, immediate formatting, and more -- passed through);
 ;;; or a single plain string used verbatim (expert mode: you number
 ;;; operands yourself, nothing is escaped).
 (library (sll asm)
@@ -113,7 +115,7 @@
                         (let ([e (assq f indices)])
                           (unless e (error "unknown operand in template" f))
                           (string-append "$" (number->string (cdr e))))]
-                       [(and (pair? f) (eq? (car f) ':) (= (length f) 3)
+                       [(and (pair? f) (eq? (car f) 'mod) (= (length f) 3)
                              (symbol? (cadr f)) (symbol? (caddr f)))
                         (let ([e (assq (cadr f) indices)])
                           (unless e (error "unknown operand in template" f))
