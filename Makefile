@@ -34,7 +34,10 @@ reference:
 	@echo "reference ready: $$(find reference/llvm-project/llvm/test \
 	  -name '*.ll' | wc -l) .ll files"
 
-examples:
+# depends on build: each example is its own Chez process, and without
+# compiled library objects every one of the 37 re-compiles the whole
+# stack in memory (~35s total); with them the run takes ~5s.
+examples: build
 	@for f in examples/sll/*.ss examples/llvm/*.ss examples/aot/*.ss; do \
 	  echo "== $$f"; $(CHEZ) --libdirs $(LIBDIRS) --script $$f >/dev/null || exit 1; \
 	done
