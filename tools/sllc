@@ -4,5 +4,11 @@
 # (--compile-imported-libraries) and reuses them on every later run
 # when they are newer than their sources; `make clean` removes them.
 root="$(cd "$(dirname "$0")/.." && pwd)"
-exec scheme --compile-imported-libraries --libdirs "$root" \
+# `scheme` on most systems, `chez-scheme` on FreeBSD; $CHEZ overrides.
+if [ -z "$CHEZ" ]; then
+  if command -v scheme >/dev/null 2>&1; then CHEZ=scheme
+  else CHEZ=chez-scheme
+  fi
+fi
+exec "$CHEZ" --compile-imported-libraries --libdirs "$root" \
      --script "$root/tools/sllc.ss" "$@"

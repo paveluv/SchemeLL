@@ -1,4 +1,6 @@
-CHEZ ?= scheme
+# Chez's binary is `scheme` on most systems, `chez-scheme` on FreeBSD
+# (and some Linux distros); override with `make CHEZ=...`.
+CHEZ ?= $(shell command -v scheme >/dev/null 2>&1 && echo scheme || echo chez-scheme)
 LIBDIRS = .
 
 .PHONY: test repl build corpus format clean examples reference
