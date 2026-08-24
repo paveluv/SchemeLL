@@ -11,3 +11,5 @@ tests/tmp/
 examples/aot/*.o
 examples/aot/*.s
 examples/aot/hello-linux-x86
+*.swp
+.*.swp

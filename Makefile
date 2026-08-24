@@ -43,9 +43,11 @@ examples:
 format:
 	~/.e/tools/scheme-format -i $$(git ls-files '*.sls' '*.ss')
 
-# Compile libraries to Chez object files (llvm/*.so -- not ELF, gitignored)
+# Compile every library to Chez object files (*.so -- Chez objects,
+# not ELF; gitignored). Any later run with --libdirs reuses them; the
+# ./sllc wrapper also compiles on demand.
 build:
-	echo '(compile-imported-libraries #t)(import (prefix (sll) sll:) (prefix (llvm target) target:))' | $(CHEZ) -q --libdirs $(LIBDIRS)
+	echo '(compile-imported-libraries #t)(import (prefix (sll) sll:) (prefix (sll render) render:) (prefix (sll asm) asm:) (prefix (llvm target) target:) (prefix (tests normalize) n:))' | $(CHEZ) -q --libdirs $(LIBDIRS)
 
 clean:
 	find llvm sll tests -name '*.so' -delete 2>/dev/null; \
