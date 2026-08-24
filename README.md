@@ -120,6 +120,7 @@ datalayout/triple, and more.
 | `(llvm target)` | objects and assembly, to disk or bytevector; any backend in your libLLVM (X86, AArch64, ARM, RISCV, WebAssembly on stock Debian) |
 | `(sll)` | the s-expression dialect: `build`, `jit`, `procedure`, `dump`, and `unbuild` (modules **back** into sll data) |
 | `(sll render)` | `sll->ll`: textual LLVM IR from sll data in pure Scheme |
+| `(sll asm)` | structured inline asm: named operands, computed `$N` numbering, assembled constraint strings |
 | `tools/sllc.ss` | the `.sll` compiler: `.o` / `.s` / `--run` / `--exe` / IR printing |
 
 The whole stack is about **5,800 lines of Scheme**. There is no C to
@@ -132,14 +133,14 @@ Requirements: Chez Scheme 10, LLVM 19 (`libLLVM-19.so`; the Debian
 moment; newer versions are planned.
 
 ```
-$ make test        # 224 checks
-$ make examples    # smoke-runs all 35 examples end to end
+$ make test        # 235 checks
+$ make examples    # smoke-runs all 36 examples end to end
 $ scheme --libdirs . --script examples/sll/01-add.ss
 2 + 40 = 42
 ```
 
-Then read **`examples/README.md`** — 35 examples in three buckets:
-sll scripting (20), the binding layers (10), and AOT objects &
+Then read **`examples/README.md`** — 36 examples in three buckets:
+sll scripting (21), the binding layers (10), and AOT objects &
 executables (10, including the `.sll` files).
 
 Design documents live in `project/`: the sll grammar and its

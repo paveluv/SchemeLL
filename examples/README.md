@@ -30,6 +30,7 @@ hands back a Scheme procedure. One import, no ceremony.
 | 18-atomics | `atomicrmw`, `cmpxchg`, `fence`, orderings |
 | 19-aggregates | arrays of structs as constant data |
 | 20-unbuild | module -> sll data -> textual IR (pure Scheme) |
+| 21-asm-dsl | (sll asm): named-operand inline asm, computed numbering |
 
 ## examples/llvm -- the binding layers
 

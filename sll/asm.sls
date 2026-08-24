@@ -1,4 +1,4 @@
-;;; (sll asm) -- EXPERIMENTAL: structured inline-asm expressions.
+;;; (sll asm) -- structured inline-asm expressions.
 ;;;
 ;;; A one-directional generator: s-expressions in, an ordinary sll
 ;;; (asm "template" "constraints" flags...) callee form out. The core
