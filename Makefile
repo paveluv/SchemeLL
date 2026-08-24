@@ -1,7 +1,7 @@
 CHEZ ?= scheme
 LIBDIRS = .
 
-.PHONY: test repl build corpus format clean examples
+.PHONY: test repl build corpus format clean examples reference
 
 test:
 	$(CHEZ) --libdirs $(LIBDIRS) --script tests/run.ss
@@ -16,6 +16,20 @@ corpus:
 	$(CHEZ) --libdirs $(LIBDIRS) --script tests/corpus.ss $(CORPUS_DIR)
 
 # Format all tracked Scheme sources in place (prints the files it changed)
+# Populate reference/ with what the tests need: LLVM's regression
+# corpus (for `make corpus`), pinned to the LLVM version the bindings
+# target. Idempotent. See project/RULES.md ("The reference/ directory")
+# for the full catalogue, including optional extras like llvm/docs.
+LLVM_TAG = llvmorg-19.1.7
+reference:
+	@test -d reference/llvm-project || \
+	  git clone --depth 1 --branch $(LLVM_TAG) --filter=blob:none \
+	    --sparse https://github.com/llvm/llvm-project.git \
+	    reference/llvm-project
+	@cd reference/llvm-project && git sparse-checkout add llvm/test
+	@echo "reference ready: $$(find reference/llvm-project/llvm/test \
+	  -name '*.ll' | wc -l) .ll files"
+
 examples:
 	@for f in examples/sll/*.ss examples/llvm/*.ss examples/aot/*.ss; do \
 	  echo "== $$f"; $(CHEZ) --libdirs $(LIBDIRS) --script $$f >/dev/null || exit 1; \

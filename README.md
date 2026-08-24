@@ -160,8 +160,9 @@ Requirements: Chez Scheme 10, LLVM 19 (`libLLVM-19.so`; the Debian
 moment; newer versions are planned.
 
 ```
-$ make test        # 235 checks
+$ make test        # 241 checks
 $ make examples    # smoke-runs all 37 examples end to end
+$ make reference   # (optional) fetch LLVM's test corpus for `make corpus`
 $ scheme --libdirs . --script examples/sll/01-add.ss
 2 + 40 = 42
 ```
