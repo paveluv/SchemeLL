@@ -65,3 +65,23 @@
                         (ret i64 %r))))
                   "f")
                 40 2)))
+
+(t:section "asm: generator ergonomics")
+
+(t:check "anonymous operands and spliced sublists"
+         (equal? (asm:expr
+                   (list '(out (reg rax))
+                         '(in (reg rax))
+                         (map (lambda (r) `(in (reg ,r))) '(rdi rsi))
+                         '(clobber memory))
+                   "syscall"
+                   '(sideeffect))
+                 '(asm "syscall" "={rax},{rax},{rdi},{rsi},~{memory}"
+                       sideeffect)))
+
+(t:check "anonymous inout still ties correctly"
+         (equal? (asm:expr '((inout r)) "incq $0")
+                 '(asm "incq $0" "=r,0")))
+
+(t:check-exn "anonymous operands cannot be referenced in templates"
+             (asm:expr '((out (reg rax))) '("mov " ret)))

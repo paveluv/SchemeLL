@@ -30,20 +30,15 @@
   (define sys-exit (list-ref spec 6))
 
   (define (syscall nr . args)   ; -> instruction forms for one syscall
-    (let ([callee (apply asm:expr
-                         `((out ret (reg ,(list-ref spec 2)))
-                           (in nr (reg ,(list-ref spec 1)))
-                           ,@(map (lambda (r i)
-                                    `(in ,(string->symbol
-                                            (string-append
-                                              "a" (number->string i)))
-                                         (reg ,r)))
-                                  (list-head (list-ref spec 3)
-                                             (length args))
-                                  (iota (length args)))
-                           (clobber ,@(list-ref spec 4) memory))
-                         (list-ref spec 0)
-                         '(sideeffect))])
+    (let ([callee (asm:expr
+                    (list `(out (reg ,(list-ref spec 2)))
+                          `(in (reg ,(list-ref spec 1)))
+                          (map (lambda (r) `(in (reg ,r)))
+                               (list-head (list-ref spec 3)
+                                          (length args)))
+                          `(clobber ,@(list-ref spec 4) memory))
+                    (list-ref spec 0)
+                    'sideeffect)])
       `((call i64 (,callee (i64 ,nr) ,@args))))))
 
 (define void (@_start)

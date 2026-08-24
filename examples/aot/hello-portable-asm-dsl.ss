@@ -37,19 +37,14 @@
 ;; one generator covers every ABI: a syscall asm callee taking the
 ;; number plus NARGS arguments
 (define (syscall-asm abi nargs)
-  (apply asm:expr
-         `((out ret (reg ,(car (abi-ref abi 'ret-reg))))
-           (in nr (reg ,(car (abi-ref abi 'nr-reg))))
-           ,@(let loop ([regs (abi-ref abi 'arg-regs)] [i 0])
-               (if (or (null? regs) (= i nargs))
-                   '()
-                   (cons `(in ,(string->symbol
-                                 (string-append "arg" (number->string i)))
-                              (reg ,(car regs)))
-                         (loop (cdr regs) (+ i 1)))))
-           (clobber ,@(abi-ref abi 'clobbers) memory))
-         (car (abi-ref abi 'instruction))
-         '(sideeffect)))
+  (asm:expr
+    (list `(out (reg ,(car (abi-ref abi 'ret-reg))))
+          `(in (reg ,(car (abi-ref abi 'nr-reg))))
+          (map (lambda (r) `(in (reg ,r)))
+               (list-head (abi-ref abi 'arg-regs) nargs))
+          `(clobber ,@(abi-ref abi 'clobbers) memory))
+    (car (abi-ref abi 'instruction))
+    'sideeffect))
 
 ;; the portable 99%, identical for every target
 (define (hello-prog abi)

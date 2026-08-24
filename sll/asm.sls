@@ -25,12 +25,17 @@
 ;;; strings. Literal $ in template strings is escaped automatically.
 ;;;
 ;;; Items:
-;;;   (out NAME SPEC)     an output              =SPEC
-;;;   (out! NAME SPEC)    early-clobber output   =&SPEC
-;;;   (inout NAME SPEC)   read-write             =SPEC plus a hidden
+;;;   (out NAME? SPEC)    an output              =SPEC
+;;;   (out! NAME? SPEC)   early-clobber output   =&SPEC
+;;;   (inout NAME? SPEC)  read-write             =SPEC plus a hidden
 ;;;                                              tied input
-;;;   (in NAME SPEC)      an input               SPEC
+;;;   (in NAME? SPEC)     an input               SPEC
 ;;;   (clobber X ...)     clobbers               ~{X},...
+;;; NAME is optional: anonymous operands cannot be referenced by
+;;; (tied ...) or the template, which plain-string templates never do
+;;; anyway. A LIST of items may appear where an item is expected and
+;;; is spliced -- generators can return item lists without the caller
+;;; resorting to unquote-splicing.
 ;;;
 ;;; SPEC:
 ;;;   symbol              a constraint code, passed through: r, m, i,
@@ -62,9 +67,32 @@
     (and (pair? item) (memq (car item) '(out out! inout in clobber))
          (car item)))
 
+  ;; normalize (KIND SPEC) -> (KIND #f SPEC); flatten spliced sublists
+  (define (normalize-items items)
+    (apply append
+           (map (lambda (item)
+                  (cond
+                    [(item-kind item)
+                     (if (eq? (car item) 'clobber)
+                         (list item)
+                         (case (length item)
+                           [(2) (list (list (car item)
+                                            ;; inout's hidden tied input
+                                            ;; references its output by
+                                            ;; name, so it gets one
+                                            (and (eq? (car item) 'inout)
+                                                 (gensym))
+                                            (cadr item)))]
+                           [(3) (list item)]
+                           [else (error "expected (out|out!|inout|in NAME? SPEC)"
+                                        item)]))]
+                    [(list? item) (normalize-items item)]   ; splice
+                    [else (error "unknown operand item" item)]))
+                items)))
+
   (define (check-operand-item item)
-    (unless (and (= (length item) 3) (symbol? (cadr item)))
-      (error "expected (out|out!|inout|in NAME SPEC)" item)))
+    (unless (or (not (cadr item)) (symbol? (cadr item)))
+      (error "operand name must be a symbol" item)))
 
   ;; NAME -> index alist for every non-clobber item, outputs first --
   ;; the $N numbering LangRef specifies
@@ -73,9 +101,10 @@
       (if (null? items)
           (reverse acc)
           (let ([name (cadr (car items))])
-            (when (assq name acc)
+            (when (and name (assq name acc))
               (error "duplicate operand name" name))
-            (loop (cdr items) (+ i 1) (cons (cons name i) acc))))))
+            (loop (cdr items) (+ i 1)
+                  (if name (cons (cons name i) acc) acc))))))
 
   (define (spec->string spec indices outs)
     (cond
@@ -126,20 +155,23 @@
                    template)]))
 
   ;; items + template + flags -> (asm "template" "constraints" flags...)
-  (define (expr items template . flags)
+  (define (expr items template . flags0)
     (unless (list? items) (error "expected a list of operand items" items))
-    (for-each (lambda (f)
-                (unless (memq f flag-set)
-                  (error "unknown asm flag" f flag-set)))
-              flags)
+    (let ([flags (apply append
+                        (map (lambda (f) (if (list? f) f (list f)))
+                             flags0))])
+      (for-each (lambda (f)
+                  (unless (memq f flag-set)
+                    (error "unknown asm flag" f flag-set)))
+                flags)
+      (expr* (normalize-items items) template flags)))
+
+  (define (expr* items template flags)
     (let* ([outs (filter (lambda (i) (memq (item-kind i) '(out out! inout)))
                          items)]
            [ins (filter (lambda (i) (eq? (item-kind i) 'in)) items)]
            [clobbers (filter (lambda (i) (eq? (item-kind i) 'clobber))
-                             items)]
-           [other (filter (lambda (i) (not (item-kind i))) items)])
-      (unless (null? other)
-        (error "unknown operand item" (car other)))
+                             items)])
       (for-each check-operand-item (append outs ins))
       ;; (inout X S) = output "=S" plus a hidden input tied to X,
       ;; appended after the explicit inputs
