@@ -156,8 +156,13 @@ compile: everything talks to stock `libLLVM` through Chez's FFI.
 ## Getting started
 
 Requirements: Chez Scheme 10, LLVM 19 (`libLLVM-19.so`; the Debian
-`llvm-19` packages work as-is). Only LLVM 19 is supported at the
-moment; newer versions are planned.
+`llvm-19` packages work as-is).
+
+**Status: work in progress.** SchemeLL has so far been tested only on
+x86-64 Linux and x86-64 FreeBSD (including the freestanding `--exe`
+executables on both), always with LLVM 19 — the only supported LLVM
+version at the moment. Newer LLVM versions and more platforms are
+planned.
 
 ```
 $ make build       # compile the libraries to .so (later runs start ~5x faster)
