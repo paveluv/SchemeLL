@@ -27,30 +27,57 @@
 ;; ---- arguments -------------------------------------------------------------
 
 (define args (cdr (command-line)))
-(define mode 'object)
+(define mode #f)          ; #f = the default, object emission
 (define opt-level #f)
 (define out-path #f)
 (define in-path #f)
 
+(define (usage!)
+  (printf "usage: sllc [--asm|--run|--exe|--render-llvm-ir|--print-canonical] [--opt LEVEL] [-o PATH] prog.sll~%")
+  (exit 2))
+
+(define (die msg . irritants)
+  (printf "sllc: ~a~{ ~a~}~%" msg irritants)
+  (usage!))
+
+(define (set-mode! m flag)
+  (when (and mode (not (eq? mode m)))
+    (die "conflicting modes" flag))
+  (set! mode m))
+
+(define (option-value a flag)
+  (when (null? (cdr a))
+    (die "missing value for" flag))
+  (cadr a))
+
 (let loop ([a args])
   (unless (null? a)
-    (cond
-      [(string=? (car a) "--asm") (set! mode 'asm) (loop (cdr a))]
-      [(string=? (car a) "--run") (set! mode 'run) (loop (cdr a))]
-      [(string=? (car a) "--exe") (set! mode 'exe) (loop (cdr a))]
-      [(string=? (car a) "--render-llvm-ir")
-       (set! mode 'render) (loop (cdr a))]
-      [(string=? (car a) "--print-canonical")
-       (set! mode 'canonical) (loop (cdr a))]
-      [(string=? (car a) "--opt")
-       (set! opt-level (cadr a)) (loop (cddr a))]
-      [(string=? (car a) "-o")
-       (set! out-path (cadr a)) (loop (cddr a))]
-      [else (set! in-path (car a)) (loop (cdr a))])))
+    (let ([arg (car a)])
+      (cond
+        [(string=? arg "--asm") (set-mode! 'asm arg) (loop (cdr a))]
+        [(string=? arg "--run") (set-mode! 'run arg) (loop (cdr a))]
+        [(string=? arg "--exe") (set-mode! 'exe arg) (loop (cdr a))]
+        [(string=? arg "--render-llvm-ir")
+         (set-mode! 'render arg) (loop (cdr a))]
+        [(string=? arg "--print-canonical")
+         (set-mode! 'canonical arg) (loop (cdr a))]
+        [(string=? arg "--opt")
+         (when opt-level (die "duplicate option" arg))
+         (set! opt-level (option-value a arg))
+         (loop (cddr a))]
+        [(string=? arg "-o")
+         (when out-path (die "duplicate option" arg))
+         (set! out-path (option-value a arg))
+         (loop (cddr a))]
+        [(and (> (string-length arg) 0) (char=? (string-ref arg 0) #\-))
+         (die "unknown option" arg)]
+        [else
+         (when in-path (die "more than one input file" in-path arg))
+         (set! in-path arg)
+         (loop (cdr a))]))))
 
-(unless in-path
-  (printf "usage: sllc [--asm|--run|--exe|--render-llvm-ir|--print-canonical] [--opt O2] [-o PATH] prog.sll~%")
-  (exit 2))
+(unless in-path (usage!))
+(unless mode (set! mode 'object))
 
 (define (default-out ext)
   (or out-path
