@@ -134,12 +134,12 @@ moment; newer versions are planned.
 
 ```
 $ make test        # 235 checks
-$ make examples    # smoke-runs all 36 examples end to end
+$ make examples    # smoke-runs all 37 examples end to end
 $ scheme --libdirs . --script examples/sll/01-add.ss
 2 + 40 = 42
 ```
 
-Then read **`examples/README.md`** — 36 examples in three buckets:
+Then read **`examples/README.md`** — 37 examples in three buckets:
 sll scripting (21), the binding layers (10), and AOT objects &
 executables (10, including the `.sll` files).
 
