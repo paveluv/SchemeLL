@@ -169,10 +169,16 @@
 ;; --exe writes exactly one binary format: ELF64, little-endian,
 ;; x86-64, Linux process ABI. Refuse anything else -- both hosts that
 ;; cannot run such a binary and objects that are not in that format.
+(define exe-osabi   ; e_ident[EI_OSABI] for the host, #f = unsupported
+  (case (machine-type)
+    [(a6le ta6le) 0]      ; Linux accepts SYSV branding
+    [(a6fb ta6fb) 9]      ; FreeBSD requires ELFOSABI_FREEBSD
+    [else #f]))
+
 (define (check-exe-supported! obj)
-  (unless (memq (machine-type) '(a6le ta6le))
+  (unless exe-osabi
     (error 'sllc
-      "--exe produces x86-64 Linux ELF executables; this host cannot run them -- use --run, or emit a .o for the system toolchain"
+      "--exe produces x86-64 ELF executables (Linux or FreeBSD); this host cannot run them -- use --run, or emit a .o for the system toolchain"
       (machine-type)))
   (unless (and (>= (bytevector-length obj) #x40)
                (= (bytevector-u8-ref obj 0) #x7F)
@@ -235,6 +241,7 @@
       (bytevector-u8-set! exe 4 2)   ; 64-bit
       (bytevector-u8-set! exe 5 1)   ; little-endian
       (bytevector-u8-set! exe 6 1)   ; version
+      (bytevector-u8-set! exe 7 exe-osabi)   ; OS branding
       (bytevector-u16-set! exe #x10 2 (endianness little))       ; ET_EXEC
       (bytevector-u16-set! exe #x12 62 (endianness little))      ; EM_X86_64
       (bytevector-u32-set! exe #x14 1 (endianness little))

@@ -14,7 +14,7 @@
   ;; do. Map Chez's machine type to LLVM's target name.
   (define (native-target-name)
     (case (machine-type)
-      [(a6le ta6le a6nt ta6nt a6osx ta6osx i3le ti3le) "X86"]
+      [(a6le ta6le a6nt ta6nt a6osx ta6osx i3le ti3le a6fb ta6fb) "X86"]
       [(arm64le tarm64le arm64osx tarm64osx) "AArch64"]
       [else (base:error 'target:initialize-native!
                         "unsupported machine type" (machine-type))]))

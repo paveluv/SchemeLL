@@ -28,6 +28,8 @@
        (values "syscall" 'rax 'rax '(rdi rsi rdx) '(rcx r11) 1 231)]
       [(arm64le tarm64le)                              ; ARM64 Linux
        (values "svc #0" 'x8 'x0 '(x0 x1 x2) '() 64 94)]
+      [(a6fb ta6fb)                                    ; FreeBSD amd64
+       (values "syscall" 'rax 'rax '(rdi rsi rdx) '(rcx r11) 4 1)]
       [else (error 'hello-metaprog "no syscall table for this host"
                    (machine-type))]))
 
