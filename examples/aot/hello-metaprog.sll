@@ -1,3 +1,10 @@
+;;                The machine of a dream
+;;                Such a clean machine
+;;                With the pistons a pumpin'
+;;                And the hubcaps all gleam
+;;
+;;                    -- Queen, "I'm in Love with My Car"
+;;
 ;; hello-metaprog.sll -- the inverted format: the file IS sll data, and
 ;; Scheme is escaped INTO it. A .sll file is one big quasiquote body:
 ;; ,expr and ,@expr evaluate at compile time, and top-level

@@ -63,6 +63,34 @@ a Scheme function returning the platform-specific forms
 (`examples/aot/hello-portable.ss` cross-compiles one source into both
 x86-64 and AArch64 Linux objects this way).
 
+And it works in *files*, not just scripts: a `.sll` file is the
+**inverted format** — its top level is sll data, and Scheme is escaped
+*into* it. The whole file is one quasiquote body: `,expr` and `,@expr`
+evaluate at compile time, and top-level `(scheme ...)` forms hold the
+definitions and imports they use. This is `examples/aot/hello-metaprog.sll`,
+a self-contained file that picks the host's kernel ABI and builds its
+inline asm structurally, at compile time:
+
+```scheme
+(scheme
+  (import (prefix (sll asm) asm:))
+  (define-values (instr nr-reg ret-reg arg-regs clobbers sys-write sys-exit)
+    (case (machine-type)
+      [(a6le ta6le)       (values "syscall" 'rax 'rax '(rdi rsi rdx) '(rcx r11) 1 231)]
+      [(arm64le tarm64le) (values "svc #0"  'x8  'x0  '(x0 x1 x2)   '()        64 94)]))
+  (define (syscall nr . args) ...))          ; a few lines of generator
+
+(define void (@_start)
+  (label %entry
+    ...                                      ; plain sll, verbatim
+    ,@(syscall sys-write '(i64 1) '(ptr %buf) '(i64 17))
+    ,@(syscall sys-exit)
+    (unreachable)))
+```
+
+`sllc --exe` turns that file into a 184-byte executable whose
+constraint strings no human spelled.
+
 ## A 186-byte executable, no toolchain
 
 `tools/sllc.ss` compiles `.sll` files — programs whose top level is
