@@ -286,6 +286,24 @@
      (target:emit-assembly-file tm m path)
      (printf "wrote ~a~%" path))]
   [(run)
+   ;; --run executes @main, like a hosted program. Freestanding
+   ;; programs (@_start, raw syscalls) are --exe material: their exit
+   ;; path would terminate the host process behind the JIT's back.
+   (let ([defines-fn?
+           (lambda (name)
+             (exists (lambda (item)
+                       (and (pair? item) (eq? (car item) 'define)
+                            (let ([sig (exists (lambda (x)
+                                                 (and (pair? x)
+                                                      (eq? (car x) name)
+                                                      x))
+                                               item)])
+                              sig)))
+                     prog))])
+     (unless (defines-fn? '@main)
+       (if (defines-fn? '@_start)
+           (die "--run executes @main, but this program is freestanding (@_start): use --exe, or add a @main")
+           (die "--run executes @main, and this program does not define one"))))
    (let* ([jc (jit:make-context)]
           [m2 (sll:build (jit:context-ir jc) "main" prog)]
           [j (jit:make)])
