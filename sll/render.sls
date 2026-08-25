@@ -681,6 +681,15 @@
                            parts)
                       (if variadic? '("...") '()))))))
 
+  ;; one (attributes ...) element -> its textual spelling
+  (define (attr-text spec)
+    (cond
+      [(symbol? spec) (symbol->string spec)]
+      [(null? (cdr spec)) (format "~s" (car spec))]
+      [else (format "~s=~s" (car spec) (cadr spec))]))
+
+  (define (attrs-words specs) (join " " (map attr-text specs)))
+
   (define (function->text env item)
     (let* ([kind (car item)] [rest (cdr item)]
            [lk (and (symbol? (car rest)) (memq (car rest) linkage-words)
@@ -695,6 +704,9 @@
                  (let deco ([b body] [acc '()])
                    (if (and (pair? b) (pair? (car b)))
                        (case (caar b)
+                         [(attributes)
+                          (deco (cdr b)
+                                (cons (attrs-words (cdr (car b))) acc))]
                          [(align) (deco (cdr b)
                                         (cons (format "align ~a"
                                                       (cadr (car b)))
@@ -704,7 +716,11 @@
                                            acc))]
                          [else (join " " (reverse acc))])
                        (join " " (reverse acc)))))
-          (let* ([algn (and (pair? body) (pair? (car body))
+          (let* ([attrs (and (pair? body) (pair? (car body))
+                             (eq? (caar body) 'attributes)
+                             (car body))]
+                 [body (if attrs (cdr body) body)]
+                 [algn (and (pair? body) (pair? (car body))
                             (eq? (caar body) 'align)
                             (car body))]
                  [body (if algn (cdr body) body)]
@@ -722,6 +738,7 @@
             (string-append
               (words "define" (if lk (symbol->string lk) "") (cc-text cc)
                      (type->text ty) (signature->text env sig #t)
+                     (if attrs (attrs-words (cdr attrs)) "")
                      (if algn (format "align ~a" (cadr algn)) "")
                      (if gc (format "gc ~s" (cadr gc)) "")
                      (if pers

@@ -6,7 +6,8 @@
           machine? make-machine machine-dispose!
           machine-live-ptr machine-triple
           configure-module!
-          emit-object-file emit-assembly-file emit-object-bytevector)
+          emit-object-file emit-assembly-file
+          emit-object-bytevector emit-assembly-string)
   (import (chezscheme) (prefix (llvm raw) LLVM) (prefix (llvm base) base:) (prefix (llvm ir) ir:))
 
   ;; The generic LLVMInitializeNativeTarget is a static inline in Target.h,
@@ -97,13 +98,35 @@
       (machine-state-set! tm 'disposed)))
 
   ;; Stamp the module with the machine's triple and data layout, as codegen
-  ;; expects for correct optimization/lowering.
-  (define (configure-module! m tm)
-    (ir:set-module-target-triple! m (machine-triple tm))
-    (let* ([td (LLVMCreateTargetDataLayout (machine-live-ptr tm))]
-           [layout (base:cstring->string/dispose (LLVMCopyStringRepOfTargetData td))])
-      (LLVMDisposeTargetData td)
-      (ir:set-module-data-layout! m layout)))
+  ;; expects for correct optimization/lowering. The optional third argument
+  ;; is a list of NON-INTEGRAL address spaces appended as an ni: component
+  ;; (e.g. '(1) for a moving-GC pointer space): without it, optimization
+  ;; passes may fold addrspace(1) pointers through ptrtoint even though a
+  ;; relocating collector can change their bits at any safepoint. The
+  ;; machine's stock layout never carries ni, so it must be added HERE,
+  ;; before any passes run. Address space 0 cannot be non-integral (LLVM
+  ;; rejects ni:0).
+  (define configure-module!
+    (case-lambda
+      [(m tm) (configure-module! m tm '())]
+      [(m tm non-integral)
+       (unless (and (list? non-integral)
+                    (for-all (lambda (n) (and (fixnum? n) (positive? n)))
+                             non-integral))
+         (base:error 'target:configure-module!
+                     "non-integral address spaces must be positive fixnums"
+                     non-integral))
+       (ir:set-module-target-triple! m (machine-triple tm))
+       (let* ([td (LLVMCreateTargetDataLayout (machine-live-ptr tm))]
+              [layout (base:cstring->string/dispose
+                        (LLVMCopyStringRepOfTargetData td))])
+         (LLVMDisposeTargetData td)
+         (ir:set-module-data-layout!
+           m
+           (if (null? non-integral)
+               layout
+               (apply string-append layout "-ni"
+                      (map (lambda (n) (format ":~a" n)) non-integral)))))]))
 
   ;; ---- emission ---------------------------------------------------------------
 
@@ -123,8 +146,8 @@
   (define (emit-object-file tm m path) (emit-to-file tm m path 1))
   (define (emit-assembly-file tm m path) (emit-to-file tm m path 0))
 
-  ;; Fully in-memory: returns the object code as a bytevector.
-  (define (emit-object-bytevector tm m)
+  ;; Fully in-memory emission (file-type as in emit-to-file).
+  (define (emit-to-bytevector who tm m file-type)
     (let ([buf-out (foreign-alloc 8)])
       (foreign-set! 'unsigned-64 buf-out 0 0)
       (let-values ([(failed msg-ptr)
@@ -132,12 +155,12 @@
                       (lambda (err-out)
                         (LLVMTargetMachineEmitToMemoryBuffer
                           (machine-live-ptr tm) (ir:module-live-ptr m)
-                          1 err-out buf-out)))])
+                          file-type err-out buf-out)))])
         (let ([buf (foreign-ref 'unsigned-64 buf-out 0)])
           (foreign-free buf-out)
-          (base:check-bool 'target:emit-object-bytevector failed
+          (base:check-bool who failed
                            (base:cstring->string/dispose msg-ptr))
-          (base:check-diagnostics! 'target:emit-object-bytevector)
+          (base:check-diagnostics! who)
           (let* ([start (LLVMGetBufferStart buf)]
                  [size (LLVMGetBufferSize buf)]
                  [bv (make-bytevector size)])
@@ -145,4 +168,11 @@
                 ((fx= i size))
               (bytevector-u8-set! bv i (foreign-ref 'unsigned-8 start i)))
             (LLVMDisposeMemoryBuffer buf)
-            bv))))))
+            bv)))))
+
+  (define (emit-object-bytevector tm m)
+    (emit-to-bytevector 'target:emit-object-bytevector tm m 1))
+
+  (define (emit-assembly-string tm m)
+    (utf8->string
+      (emit-to-bytevector 'target:emit-assembly-string tm m 0))))

@@ -20,7 +20,8 @@
   (import (except (chezscheme) error)
           (prefix (llvm base) base:)
           (prefix (llvm raw) LLVM)
-          (prefix (llvm ir) ir:))
+          (prefix (llvm ir) ir:)
+          (prefix (sll attributes) attrs:))
 
   (define (error msg . irritants)
     (apply base:error 'sll:unbuild msg irritants))
@@ -958,12 +959,42 @@
       (not-modeled "visibility (hidden/protected)"))
     (let ([s (base:cstring->string (LLVMGetSection f))])
       (when (and s (not (string=? s ""))) (not-modeled "sections")))
-    ;; attribute indices: function (~0), return (0), params (1..n)
-    (do ([i -1 (+ i 1)])
+    ;; attribute indices: return (0), params (1..n); the function
+    ;; position (~0) is handled by fn-attr-part
+    (do ([i 0 (+ i 1)])
         ((> i nparams))
-      (unless (zero? (LLVMGetAttributeCountAtIndex
-                       f (if (= i -1) 4294967295 i)))
-        (not-modeled "function/return/parameter attributes"))))
+      (unless (zero? (LLVMGetAttributeCountAtIndex f i))
+        (not-modeled "return / parameter attributes"))))
+
+  ;; the function-position attributes sll models: valueless enums with
+  ;; a known name, and string attributes. Everything else is strictly
+  ;; refused: valued enums (memory(...), uwtable(sync), alignstack(N))
+  ;; and type attributes. Probed: value 0 does NOT imply valueless
+  ;; (memory(none) has value 0) -- the known-name table is the judge.
+  (define (fn-attr-part f)
+    (let ([as (ir:function-attributes f)])
+      (if (null? as)
+          '()
+          `((attributes
+              ,@(map
+                  (lambda (a)
+                    (cond
+                      [(ir:attribute-type? a)
+                       (not-modeled "type attributes at function position")]
+                      [(ir:attribute-string? a)
+                       (let ([k (ir:attribute-string-kind a)]
+                             [v (ir:attribute-string-value a)])
+                         (if (string=? v "") (list k) (list k v)))]
+                      [(ir:attribute-enum? a)
+                       (let ([name (attrs:enum-kind->name
+                                     (ir:attribute-enum-kind a))])
+                         (unless (and name
+                                      (zero? (ir:attribute-enum-value a)))
+                           (not-modeled "valued or unnamed function attributes"
+                                        (ir:attribute-enum-kind a)))
+                         name)]
+                      [else (not-modeled "function attribute kind")]))
+                  as))))))
 
   (define (gc-attr f)
     (let ([s (ir:gc-name f)])
@@ -984,6 +1015,7 @@
                     ,(unbuild-type (ir:type-return-type fnty))
                     (,gname ,@(map unbuild-type (ir:type-param-types fnty))
                             ,@variadic)
+                    ,@(fn-attr-part f)
                     ,@(align-attr f)
                     ,@(gc-attr f))
           (let ([st (make-ustate (function-names f) gnames f)])
@@ -995,6 +1027,7 @@
                                 (local-name st p)))
                         params)
                  ,@variadic)
+               ,@(fn-attr-part f)
                ,@(align-attr f)
                ,@(gc-attr f)
                ;; the personality is any ptr constant: @fn, null, undef

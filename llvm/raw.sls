@@ -155,6 +155,9 @@
     SetMetadata GlobalClearMetadata
     GetAttributesAtIndex IsEnumAttribute IsStringAttribute
     GetEnumAttributeKind GetStringAttributeKind
+    GetEnumAttributeKindForName CreateEnumAttribute CreateStringAttribute
+    AddAttributeAtIndex AddCallSiteAttribute
+    GetEnumAttributeValue GetStringAttributeValue IsTypeAttribute
     RemoveEnumAttributeAtIndex RemoveStringAttributeAtIndex
     GetCallSiteAttributeCount GetCallSiteAttributes
     RemoveCallSiteEnumAttribute RemoveCallSiteStringAttribute
@@ -824,6 +827,26 @@
     "LLVMRemoveCallSiteEnumAttribute" (void* unsigned-int unsigned-int) void)
   (define-getter RemoveCallSiteStringAttribute
     "LLVMRemoveCallSiteStringAttribute" (void* unsigned-int string unsigned-int) void)
+  (define GetEnumAttributeKindForName   ; 0 = no such attribute
+    (foreign-procedure "LLVMGetEnumAttributeKindForName"
+                       (string size_t) unsigned-int))
+  (define CreateEnumAttribute
+    (foreign-procedure "LLVMCreateEnumAttribute"
+                       (void* unsigned-int unsigned-64) void*))
+  (define CreateStringAttribute
+    (foreign-procedure "LLVMCreateStringAttribute"
+                       (void* string unsigned-int string unsigned-int) void*))
+  (define AddAttributeAtIndex
+    (foreign-procedure "LLVMAddAttributeAtIndex"
+                       (void* unsigned-int void*) void))
+  (define AddCallSiteAttribute
+    (foreign-procedure "LLVMAddCallSiteAttribute"
+                       (void* unsigned-int void*) void))
+  (define-getter GetEnumAttributeValue
+    "LLVMGetEnumAttributeValue" (void*) unsigned-64)
+  (define-getter GetStringAttributeValue ; (attr, unsigned* len out)
+    "LLVMGetStringAttributeValue" (void* void*) void*)
+  (define-getter IsTypeAttribute "LLVMIsTypeAttribute" (void*) int)
   (define-getter SetInstructionCallConv
     "LLVMSetInstructionCallConv" (void* unsigned-int) void)
   (define-getter GetInstructionCallConv

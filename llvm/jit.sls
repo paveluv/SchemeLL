@@ -26,7 +26,7 @@
 (library (llvm jit)
   (export jit? make dispose!
           context? make-context context-ir context-dispose!
-          add-module! lookup-address function)
+          add-module! lookup-address function stackmap-address)
   (import (chezscheme) (prefix (llvm raw) LLVM) (prefix (llvm base) base:)
           (prefix (llvm ir) ir:)
           (prefix (llvm target) target:))
@@ -237,4 +237,22 @@
            (lambda args
              ;; liveness check; also keeps j reachable from this closure
              (jit-live-ptr j)
-             (apply fp args)))]))))
+             (apply fp args)))])))
+
+  ;; Run-time address of the JIT'd module's .llvm_stackmaps section
+  ;; (GC statepoint stack maps). Codegen's section symbol
+  ;; (__LLVM_StackMaps) is LOCAL, so ORC lookup cannot see it (probed);
+  ;; a program that needs its map at run time splices sll's
+  ;; stackmap-keeper items, which export a pointer to the section under
+  ;; a name this looks up. The direct name is still tried first in case
+  ;; a linking-layer configuration ever exports it.
+  (define (stackmap-address j)
+    (define (try name)
+      (guard (e [#t #f]) (lookup-address j name)))
+    (cond
+      [(try "__LLVM_StackMaps")]
+      [(try "sll_stackmaps_keeper") =>
+       (lambda (keeper) (foreign-ref 'void* keeper 0))]
+      [else
+       (base:error 'jit:stackmap-address
+         "stack maps are not reachable: splice sll:stackmap-keeper into the program (it exports a pointer to __LLVM_StackMaps)")])))

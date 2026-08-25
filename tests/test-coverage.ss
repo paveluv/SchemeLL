@@ -958,6 +958,40 @@ pad:
 }
 ")
 
+;; function-position attributes: valueless enums by name, string
+;; attributes with and without values, on both defines and declares;
+;; the printer canonicalizes to #N groups, which both sides of every
+;; comparison go through
+(check-entry! "function-attributes"
+  '((declare void (@leaf) (attributes ("gc-leaf-function")))
+    (declare i32 (@cold_path i32) (attributes cold noreturn nounwind))
+    (define void (@hot (i64 %n))
+      (attributes alwaysinline nounwind ("frame-pointer" "all")
+                  ("target-cpu" "x86-64"))
+      (label %entry
+        (call void (@leaf))
+        (ret void)))
+    (define void (@decorated)
+      (attributes noinline optnone)
+      (align 16)
+      (gc "statepoint-example")
+      (label %entry (ret void))))
+  "declare void @leaf() \"gc-leaf-function\"
+
+declare i32 @cold_path(i32) cold noreturn nounwind
+
+define void @hot(i64 %n) alwaysinline nounwind \"frame-pointer\"=\"all\" \"target-cpu\"=\"x86-64\" {
+entry:
+  call void @leaf()
+  ret void
+}
+
+define void @decorated() noinline optnone align 16 gc \"statepoint-example\" {
+entry:
+  ret void
+}
+")
+
 (check-entry! "varargs"
   '((declare i32 (@printf ptr variadic))
     (define i64 (@sum2 (i64 %n) variadic)
@@ -1012,8 +1046,18 @@ compute:
 (define (unbuild-of-ir text)
   (sll:unbuild (ir:parse-ir ctx "strict" text)))
 
-(t:check-exn "unbuild rejects function attributes"
-             (unbuild-of-ir "define void @f() nounwind {\nentry:\n  ret void\n}"))
+;; valueless enum + string function attributes are modeled now; the
+;; strict boundary moved to valued enums and non-function positions
+(t:check "unbuild accepts modeled function attributes"
+         (equal? (car (unbuild-of-ir
+                        "define void @f() nounwind \"gc-leaf-function\" {\nentry:\n  ret void\n}"))
+                 '(define void (@f)
+                    (attributes nounwind ("gc-leaf-function"))
+                    (label %entry (ret void)))))
+(t:check-exn "unbuild rejects valued function attributes"
+             (unbuild-of-ir "define void @f() alignstack(8) {\nentry:\n  ret void\n}"))
+(t:check-exn "unbuild rejects parameter attributes"
+             (unbuild-of-ir "define void @f(i64 noundef %x) {\nentry:\n  ret void\n}"))
 (t:check-exn "unbuild rejects instruction metadata"
              (unbuild-of-ir
                "define void @f() {\nentry:\n  ret void, !x !0\n}\n!0 = !{}"))
@@ -1030,8 +1074,10 @@ compute:
 (t:check-exn "unbuild rejects function prefix data"
              (unbuild-of-ir
                "define void @f() prefix i32 7 {\nentry:\n  ret void\n}"))
-(t:check-exn "unbuild rejects calling conventions"
-             (unbuild-of-ir "define fastcc void @f() {\nentry:\n  ret void\n}"))
+;; calling conventions are modeled now; pin the round-trip shape here
+(t:check "unbuild spells calling conventions"
+         (equal? (car (unbuild-of-ir "define fastcc void @f() {\nentry:\n  ret void\n}"))
+                 '(define fastcc void (@f) (label %entry (ret void)))))
 (t:check-exn "unbuild rejects nuw+nsw constexpr binops (no C constructor)"
              (unbuild-of-ir
                "@g = global i64 0\n@p = global i64 add nuw nsw (i64 ptrtoint (ptr @g to i64), i64 1)"))

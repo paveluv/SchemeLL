@@ -28,14 +28,24 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 
 | Construct | Detection |
 |---|---|
-| function / return / parameter attributes (`nounwind`, `noundef`, `sret(T)`, `#0` groups, ...) | detected |
+| return / parameter attributes (`noundef`, `sret(T)`, ...) | detected |
+| valued enum function attributes (`memory(...)`, `uwtable(sync)`, `alignstack(N)`, `allocsize(N)`, ...) and type attributes at function position | detected |
 | sections (`section "..."`) | detected |
+
+Function-position VALUELESS enum attributes (`nounwind`, `noinline`,
+...; the table in `sll/attributes.sls`) and string attributes
+(`"gc-leaf-function"`, `"frame-pointer"="all"`) ARE modeled
+(2026-08-24). Deviation from the usual ledger rule: the corpus
+normalizer still strips ALL attributes, so the corpus does not yet
+test the modeled subset -- attribute fidelity across all positions
+and kinds is a future corpus campaign; until it runs, the golden
+entry `function-attributes` is the pin.
 | visibility (`hidden` / `protected`) | detected |
 | `dso_local` | undetected; the corpus harness normalizes it textually (no C API accessor in LLVM 19) |
 | `unnamed_addr` / `local_unnamed_addr` | undetected |
 | DLL storage class (`dllimport`/`dllexport`) | undetected; the corpus normalizer strips it |
 | prefix / prologue data | detected |
-| intrinsic declarations acquiring auto-upgraded attributes | detected (via the attribute check) |
+| intrinsic declarations acquiring auto-upgraded attributes | detected (their groups carry `memory(...)`, a valued attribute) |
 
 ## Global variables
 

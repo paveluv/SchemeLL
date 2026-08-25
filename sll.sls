@@ -19,11 +19,14 @@
 ;;; permitted forward reference to a *value*; everything else must be
 ;;; defined textually before use.
 (library (sll)
-  (export build jit dump unbuild procedure load-sll)
+  (export build jit dump unbuild procedure load-sll stackmap-keeper
+          object assembly)
   (import (except (chezscheme) error)
           (prefix (llvm base) base:)
           (prefix (llvm ir) ir:)
           (prefix (llvm jit) jit:)
+          (prefix (llvm target) target:)
+          (prefix (sll attributes) attrs:)
           (sll unbuild))
 
   (define (error msg . irritants)
@@ -364,7 +367,7 @@
                [body (let skip ([b full-body])
                        (if (and (pair? b) (pair? (car b))
                                 (memq (caar b)
-                                      '(align gc personality)))
+                                      '(attributes align gc personality)))
                            (skip (cdr b))
                            b))]
                [tbl (make-eq-hashtable)])
@@ -1423,6 +1426,27 @@
                                            (llvm-name name) (or as 0))))
           (declare-function! ctx m globals item kind)))))
 
+  ;; an (attributes ...) element: a bare symbol is a valueless enum
+  ;; attribute (the names LLVM's own kind lookup accepts, via
+  ;; (sll attributes)); ("key") and ("key" "value") are string
+  ;; attributes. Valued enums and type attributes are not modeled.
+  (define (resolve-attribute ctx spec form fname)
+    (cond
+      [(symbol? spec)
+       (let ([kind (attrs:enum-name->kind spec)])
+         (unless kind
+           (error "unknown enum attribute (valued and type attributes are not modeled)"
+                  spec form fname))
+         (ir:create-enum-attribute ctx kind 0))]
+      [(and (pair? spec) (string? (car spec)) (null? (cdr spec)))
+       (ir:create-string-attribute ctx (car spec) "")]
+      [(and (pair? spec) (string? (car spec)) (pair? (cdr spec))
+            (string? (cadr spec)) (null? (cddr spec)))
+       (ir:create-string-attribute ctx (car spec) (cadr spec))]
+      [else
+       (error "attribute must be a symbol, (\"key\") or (\"key\" \"value\")"
+              spec form fname)]))
+
   (define (declare-function! ctx m globals item kind)
     (let-values ([(retty-form fname rest0 lk ccv body) (item-signature item)])
       (let-values ([(rest variadic?) (split-variadic rest0)])
@@ -1441,10 +1465,17 @@
             (when lk (ir:set-linkage! f lk))
             (when ccv (ir:set-function-call-conv! f ccv))
             ;; optional decorations after the signature, in print order:
-            ;; (align N) then (gc "name")
+            ;; (attributes ...) then (align N) then (gc "name")
             (let deco ([b body])
               (when (and (pair? b) (pair? (car b)))
                 (case (car (car b))
+                  [(attributes)
+                   (for-each
+                     (lambda (spec)
+                       (ir:add-function-attribute!
+                         f (resolve-attribute ctx spec (car b) fname)))
+                     (cdr (car b)))
+                   (deco (cdr b))]
                   [(align)
                    (let ([a (car b)])
                      (unless (and (= (length a) 2) (fixnum? (cadr a))
@@ -1483,10 +1514,11 @@
       (let-values ([(retty-form fname params lk ccv full-body0)
                     (item-signature item)])
         (let* ([f (hashtable-ref globals fname #f)]
-               ;; (align N)/(gc "...") were applied in the declare pass
+               ;; (attributes ...)/(align N)/(gc "...") were applied in
+               ;; the declare pass
                [full-body (let skip ([b full-body0])
                             (if (and (pair? b) (pair? (car b))
-                                     (memq (caar b) '(align gc)))
+                                     (memq (caar b) '(attributes align gc)))
                                 (skip (cdr b))
                                 b))]
                ;; optional (personality type @fn) before the first block,
@@ -1685,6 +1717,53 @@
   ;; the underlying JIT alive.
   (define (procedure prog name)
     (jit:function (jit prog) name))
+
+  ;; Module items that expose the module's .llvm_stackmaps section to
+  ;; run-time lookup: codegen's own section symbol is local (invisible
+  ;; to ORC and to normal linking), so an exported keeper pointer is
+  ;; the portable handle. Splice into any program whose GC stack maps
+  ;; must be readable at run time; consume via jit:stackmap-address
+  ;; (JIT) or the sll_stackmaps_keeper symbol (AOT).
+  ;; (@-symbols are spelled via string->symbol: the R6RS reader used
+  ;; for this library rejects a leading @, unlike the .sll/user side)
+  (define stackmap-keeper
+    (let ([sm (string->symbol "@__LLVM_StackMaps")]
+          [keeper (string->symbol "@sll_stackmaps_keeper")])
+      `((= ,sm (global external i8))
+        (= ,keeper (constant ptr ,sm)))))
+
+  ;; The one-call AOT pipeline: build, stamp the module with a target
+  ;; machine's triple and layout, optionally run passes, verify, emit.
+  ;; opts is a property list:
+  ;;   'machine       target machine to use (default: the host; a
+  ;;                  machine created here is disposed here)
+  ;;   'passes        new-pass-manager pipeline string, e.g.
+  ;;                  "default<O2>" or "rewrite-statepoints-for-gc"
+  ;;   'non-integral  address spaces for the layout's ni: component
+  ;;                  (a moving-GC pointer space needs this BEFORE any
+  ;;                  passes run -- see target:configure-module!)
+  ;; (object prog opts ...)   -> relocatable object code, a bytevector
+  ;; (assembly prog opts ...) -> assembly text, a string
+  (define (compile-through prog opts emit)
+    (define (opt key) (cond [(memq key opts) => cadr] [else #f]))
+    (let* ([own-machine? (not (opt 'machine))]
+           [tm (or (opt 'machine) (target:make-machine))]
+           [ctx (ir:make-context)]
+           [m (build ctx "sll" prog)])
+      (target:configure-module! m tm (or (opt 'non-integral) '()))
+      (cond [(opt 'passes) => (lambda (p) (ir:run-module-passes! m p))])
+      (ir:verify-module m)
+      (let ([result (emit tm m)])
+        (ir:module-dispose! m)
+        (ir:context-dispose! ctx)
+        (when own-machine? (target:machine-dispose! tm))
+        result)))
+
+  (define (object prog . opts)
+    (compile-through prog opts target:emit-object-bytevector))
+
+  (define (assembly prog . opts)
+    (compile-through prog opts target:emit-assembly-string))
 
   ;; Build a program and return its textual LLVM IR (for humans).
   (define (dump prog)

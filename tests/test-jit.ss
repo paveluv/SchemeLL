@@ -126,3 +126,41 @@
   (jit:context-dispose! jc)
   (t:check-exn "bad asm mnemonic raises at materialization"
                (jit:function j "f")))
+
+(t:section "jit: stack-map access (GC statepoints)")
+
+;; the section symbol is local, so access goes through sll's keeper
+;; items; version byte 3 proves the pointer lands on the map
+(let* ([jc (jit:make-context)]
+       [ctx (jit:context-ir jc)]
+       [m (ir:parse-ir ctx "sm"
+            "declare i32 @getpid()
+define ptr addrspace(1) @keep(ptr addrspace(1) %a) gc \"statepoint-example\" {
+entry:
+  %p = call i32 @getpid()
+  ret ptr addrspace(1) %a
+}
+@__LLVM_StackMaps = external global i8
+@sll_stackmaps_keeper = constant ptr @__LLVM_StackMaps")]
+       [j (jit:make)])
+  (ir:run-module-passes! m "rewrite-statepoints-for-gc")
+  (jit:add-module! j jc m)
+  (jit:context-dispose! jc)
+  (jit:lookup-address j "keep")   ; materialize
+  (let ([sm (jit:stackmap-address j)])
+    (t:check "stackmap-address finds the section via the keeper"
+             (positive? sm))
+    (t:check "stackmap version byte is 3"
+             (= 3 (foreign-ref 'unsigned-8 sm 0)))))
+
+;; without the keeper the failure must be a clear raised error
+(let* ([jc (jit:make-context)]
+       [ctx (jit:context-ir jc)]
+       [m (ir:parse-ir ctx "nosm"
+            "define void @g() {\nentry:\n  ret void\n}")]
+       [j (jit:make)])
+  (jit:add-module! j jc m)
+  (jit:context-dispose! jc)
+  (jit:lookup-address j "g")
+  (t:check-exn "stackmap-address without the keeper raises"
+               (jit:stackmap-address j)))

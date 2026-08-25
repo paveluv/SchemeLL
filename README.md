@@ -166,7 +166,7 @@ planned.
 
 ```
 $ make build       # compile the libraries to .so (later runs start ~5x faster)
-$ make test        # 252 checks
+$ make test        # 265 checks
 $ make examples    # smoke-runs all 37 examples end to end
 $ make reference   # (optional) fetch LLVM's test corpus for `make corpus`
 $ scheme --libdirs . --script examples/sll/01-add.ss

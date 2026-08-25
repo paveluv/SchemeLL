@@ -83,6 +83,11 @@
     set-tail-call-kind! tail-call-kind
     set-function-call-conv! function-call-conv
     set-instruction-call-conv! instruction-call-conv
+    enum-attribute-kind-named create-enum-attribute create-string-attribute
+    add-function-attribute! add-callsite-attribute! function-attributes
+    attribute-enum? attribute-string? attribute-type?
+    attribute-enum-kind attribute-enum-value
+    attribute-string-kind attribute-string-value
     replace-all-uses! erase-instruction! delete-block!
     build-trunc build-zext build-sext
     build-si->fp build-ui->fp build-fp->si build-fp->ui
@@ -852,6 +857,65 @@
     (LLVMSetInstructionCallConv call-inst cc))
   (define (instruction-call-conv call-inst)
     (LLVMGetInstructionCallConv call-inst))
+
+  ;; ---- attributes -------------------------------------------------------
+
+  (define attr-function-index 4294967295)   ; LLVMAttributeIndex ~0U
+
+  ;; 0 = LLVM has no enum attribute of this name
+  (define (enum-attribute-kind-named name)
+    (LLVMGetEnumAttributeKindForName name (string-length name)))
+
+  (define (create-enum-attribute ctx kind value)
+    (LLVMCreateEnumAttribute (context-live-ptr ctx) kind value))
+
+  (define (create-string-attribute ctx k v)
+    (let ([kb (string->utf8 k)] [vb (string->utf8 v)])
+      (LLVMCreateStringAttribute (context-live-ptr ctx)
+                                 k (bytevector-length kb)
+                                 v (bytevector-length vb))))
+
+  (define (add-function-attribute! f attr)
+    (LLVMAddAttributeAtIndex f attr-function-index attr))
+
+  (define (add-callsite-attribute! call-inst attr)
+    (LLVMAddCallSiteAttribute call-inst attr-function-index attr))
+
+  ;; the function-position attributes as a list of AttributeRefs
+  (define (function-attributes f)
+    (let ([n (LLVMGetAttributeCountAtIndex f attr-function-index)])
+      (if (zero? n)
+          '()
+          (let ([buf (foreign-alloc (* 8 n))])
+            (LLVMGetAttributesAtIndex f attr-function-index buf)
+            (let loop ([i (- n 1)] [acc '()])
+              (if (< i 0)
+                  (begin (foreign-free buf) acc)
+                  (loop (- i 1)
+                        (cons (foreign-ref 'void* buf (* 8 i)) acc))))))))
+
+  ;; probed: LLVMIsEnumAttribute is TRUE for int-VALUED attributes too
+  ;; (alignstack(8), uwtable(2), ...), and value 0 does not mean
+  ;; valueless (memory(none) has value 0) -- classify by a table of
+  ;; known-valueless kinds, never by value alone. Type attributes also
+  ;; carry an enum kind -- test attribute-type? first.
+  (define (attribute-enum? a) (not (zero? (LLVMIsEnumAttribute a))))
+  (define (attribute-string? a) (not (zero? (LLVMIsStringAttribute a))))
+  (define (attribute-type? a) (not (zero? (LLVMIsTypeAttribute a))))
+  (define (attribute-enum-kind a) (LLVMGetEnumAttributeKind a))
+  (define (attribute-enum-value a) (LLVMGetEnumAttributeValue a))
+
+  (define (string-with-len-out getter a)
+    (let ([out (foreign-alloc 4)])
+      (let ([p (getter a out)])
+        (let ([s (base:cstring->string/len p (foreign-ref 'unsigned-32 out 0))])
+          (foreign-free out)
+          s))))
+
+  (define (attribute-string-kind a)
+    (string-with-len-out LLVMGetStringAttributeKind a))
+  (define (attribute-string-value a)
+    (string-with-len-out LLVMGetStringAttributeValue a))
 
   ;; surgery used for forward-reference patching
   (define (replace-all-uses! old new) (LLVMReplaceAllUsesWith old new))

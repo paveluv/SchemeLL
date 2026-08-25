@@ -75,3 +75,65 @@
 (ir:builder-dispose! b)
 (ir:module-dispose! mod)
 (ir:context-dispose! ctx)
+
+(t:section "target: non-integral datalayout + one-call pipelines")
+
+(import (prefix (sll) sll:))
+
+;; ni: appended by configure-module!; the parser accepts the layout
+;; (verify-module passes) and the stamp is visible in the print
+(let* ([xctx (ir:make-context)]
+       [m (sll:build xctx "ni" '((define void (@f) (label %e (ret void)))))]
+       [tm (target:make-machine)])
+  (target:configure-module! m tm '(1))
+  (ir:verify-module m)
+  (let ([txt (ir:module->string m)])
+    (t:check "configure-module! appends ni:1"
+             (let loop ([i 0])
+               (and (<= (+ i 5) (string-length txt))
+                    (or (string=? (substring txt i (+ i 5)) "-ni:1")
+                        (loop (+ i 1)))))))
+  (t:check-exn "ni rejects address space 0"
+               (target:configure-module! m tm '(0)))
+  (target:machine-dispose! tm)
+  (ir:module-dispose! m)
+  (ir:context-dispose! xctx))
+
+;; sll:object / sll:assembly: build+configure+passes+verify+emit in one
+(define pipeline-prog
+  '((declare i32 (@getpid))
+    (define (ptr (addrspace 1)) (@keep ((ptr (addrspace 1)) %a))
+      (gc "statepoint-example")
+      (label %entry
+        (= %p (call i32 (@getpid)))
+        (ret (ptr (addrspace 1)) %a)))))
+
+(let ([obj (sll:object pipeline-prog
+                       'passes "rewrite-statepoints-for-gc"
+                       'non-integral '(1))])
+  (t:check "sll:object emits ELF"
+           (and (> (bytevector-length obj) 4)
+                (= (bytevector-u32-ref obj 0 (endianness little))
+                   #x464c457f)))
+  ;; the statepoint pass ran: the object carries a stackmap section
+  (t:check "sll:object with statepoint passes carries .llvm_stackmaps"
+           (let* ([want (string->utf8 ".llvm_stackmaps")]
+                  [wn (bytevector-length want)]
+                  [n (bytevector-length obj)])
+             (let loop ([i 0])
+               (and (<= (+ i wn) n)
+                    (or (let sub ([k 0])
+                          (or (= k wn)
+                              (and (= (bytevector-u8-ref obj (+ i k))
+                                      (bytevector-u8-ref want k))
+                                   (sub (+ k 1)))))
+                        (loop (+ i 1))))))))
+
+(t:check "sll:assembly emits text containing the function"
+         (let ([s (sll:assembly '((define i64 (@answer)
+                                    (label %e (ret i64 42)))))])
+           (and (string? s)
+                (let loop ([i 0])
+                  (and (<= (+ i 6) (string-length s))
+                       (or (string=? (substring s i (+ i 6)) "answer")
+                           (loop (+ i 1))))))))

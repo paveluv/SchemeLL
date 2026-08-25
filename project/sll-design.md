@@ -68,6 +68,23 @@ the name -- canonical both directions, like the anonymity rule. `ccc`
 independently of its callee's (matching them is the frontend's job;
 LLVM treats a mismatch as UB at runtime, not a verifier error).
 
+Function attributes (2026-08-24, second Meik Scheme prerequisite):
+an optional `(attributes ...)` decoration after the signature, before
+`(align)`/`(gc)`/`(personality)` -- print order -- on both defines
+and declares. Elements: a bare symbol is a valueless enum attribute
+(`nounwind`, `noinline`, ...; the name table lives in
+`sll/attributes.sls` and resolves kinds against the loaded LLVM
+lazily, so names a given LLVM lacks drop out); `("key")` and
+`("key" "value")` are string attributes (`("gc-leaf-function")`,
+`("frame-pointer" "all")`). Scope is deliberate: valued enums
+(`memory(...)`, `uwtable(sync)`, `alignstack(N)`) and type attributes
+(`sret(T)`) are NOT modeled and unbuild refuses them strictly;
+return/parameter positions likewise. Position validity of a name is
+LLVM's business (the verifier judges, sll spells). Probed facts:
+LLVMIsEnumAttribute is true for valued attributes too, and value 0
+does not imply valueless (`memory(none)` is value 0) -- the known-name
+table is the classifier, never the value.
+
 Corpus-driven additions (2026-08-22, step 6b): function linkage --
 `(define internal i64 (@f ...) ...)`, `(declare extern_weak ...)`, the
 same optional keyword-operand slot as globals; zero-incoming phis

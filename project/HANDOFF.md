@@ -18,11 +18,15 @@ mention in README): **medl**, a Scheme-like typed language lowering to
 sll; and the first target application, a **highly efficient garbage
 collector**. Everything the GC needs from IR is already modeled
 (statepoints, tokens, "gc-live"/"deopt" bundles, gc attribute,
-datalayout `ni:1`, addrspace(1) pointers). Remaining GC prerequisites
-live OUTSIDE sll: stack-map (`.llvm_stackmaps`) section access from
-the ORC JIT (an object-linking-layer hook) and safepoint polls.
-(Calling conventions — tailcc/fastcc/ghccc/`(cc N)` — WERE the third
-gap; modeled 2026-08-24 as the first Meik Scheme prerequisite, see
+datalayout `ni:1`, addrspace(1) pointers). The GC prerequisites that
+lived OUTSIDE sll are now closed too: stack-map access at JIT time is
+`jit:stackmap-address` + the spliceable `sll:stackmap-keeper` items
+(the section symbol is LOCAL — probed — so an exported keeper pointer
+is the portable handle), and `target:configure-module!` takes the
+non-integral spaces for `ni:`. Remaining: safepoint polls. (Calling
+conventions — tailcc/fastcc/ghccc/`(cc N)` — and function-position
+attributes — `(attributes nounwind ("gc-leaf-function"))` — were the
+other gaps; both modeled 2026-08-24 as Meik Scheme prerequisites, see
 sll-design.md.) Statepoint flow knowledge: you do NOT hand-write
 relocation chains — the frontend emits clean addrspace(1) IR with `gc`
 attributes, `RewriteStatepointsForGC` runs LATE and inserts
@@ -41,7 +45,7 @@ the normalized-entry kind).
   potential*. Ledger invariant: implemented ∪ documented = LLVM IR;
   modeling something later = delete its ledger row + its normalizer
   strip, and the corpus starts testing it.
-- **252 checks** (`make test`), **37 examples** (`make examples`),
+- **265 checks** (`make test`), **37 examples** (`make examples`),
   all green. A large bug hunt (two review agents + adversarial probes)
   just fixed 15 reproduced defects; regressions exist for each.
 - **Tested platforms**: x86-64 Linux and x86-64 FreeBSD (user-verified,
@@ -252,7 +256,7 @@ the normalized-entry kind).
 
 Chez 10 (`scheme` or `chez-scheme`, auto-detected) + LLVM 19 with
 headers. Then: `make build` (compile libs, ~6x faster startups),
-`make test` (252), `make examples` (37), `make reference` (sparse
+`make test` (265), `make examples` (37), `make reference` (sparse
 llvm-project clone for `make corpus`; `git sparse-checkout add
 llvm/docs` inside it for LangRef). `tools/sllc` is self-compiling.
 Platform facts: FreeBSD's image activator REJECTS unbranded SYSV
@@ -273,11 +277,17 @@ non-alloc and `.eh_frame`/X86_64_UNWIND drop silently.
 
 ## Open threads / natural next steps
 
-1. GC runtime groundwork: `.llvm_stackmaps` access from ORC (object
-   linking layer hook), safepoint polls, then the allocator/barriers —
-   in the future GC repo, driven from here.
+1. GC runtime groundwork: safepoint polls (probe `place-safepoints`
+   through `ir:run-module-passes!` before relying on it), then the
+   allocator/barriers — in MeikScheme, driven from here. Stack-map
+   access is DONE (jit:stackmap-address / sll:stackmap-keeper).
 2. ~~Calling conventions in sll~~ DONE 2026-08-24 (define/declare
-   headers, call/invoke/callbr sites, named + `(cc N)`).
+   headers, call/invoke/callbr sites, named + `(cc N)`). Function
+   attributes DONE the same day (valueless enums + strings, function
+   position; valued/param attrs still not modeled — the corpus
+   normalizer still strips ALL attributes, a future fidelity
+   campaign). One-call AOT pipeline: `sll:object` / `sll:assembly`
+   ('machine / 'passes / 'non-integral options).
 3. LLVM 20 support: re-run the oracle + corpus against a new pin;
    constexpr kinds shrink again upstream.
 4. medl design (separate repo): nanopass over sll; sll grammar was
