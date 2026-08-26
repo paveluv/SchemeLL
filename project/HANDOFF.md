@@ -45,7 +45,7 @@ the normalized-entry kind).
   potential*. Ledger invariant: implemented ∪ documented = LLVM IR;
   modeling something later = delete its ledger row + its normalizer
   strip, and the corpus starts testing it.
-- **307 checks** (`make test`), **37 examples** (`make examples`),
+- **313 checks** (`make test`), **37 examples** (`make examples`),
   all green. A large bug hunt (two review agents + adversarial probes)
   just fixed 15 reproduced defects; regressions exist for each.
 - **Tested platforms**: x86-64 Linux and x86-64 FreeBSD (user-verified,
@@ -106,6 +106,13 @@ the normalized-entry kind).
   it forces every call site into multi-block callbr shape to save
   single-digit instructions next to a 100ns syscall. Known floor,
   wrong trade.
+- `llvm/gccheck.sls` — the bit-leak checker: addrspace-parameterized
+  gate that GC-space `ptrtoint`s feed only tag-masks (the probed
+  GVN/relocation contract edge, mechanically enforced). Runs on
+  FRONTEND IR, BEFORE optimization — instcombine rewrites conforming
+  mask algebra (tag+tag → shl) beyond syntactic recognition, and
+  pre-O2 is sound because semantic preservation carries conformance
+  through transforms. Violations raise with the printed instructions.
 - `sll.sls` — build/jit/procedure/dump/unbuild/load-sll. Two build
   passes per program + per-function block pre-pass (cross-function
   blockaddress); alias/ifunc two-phase creation (print order =
@@ -320,7 +327,7 @@ the normalized-entry kind).
 
 Chez 10 (`scheme` or `chez-scheme`, auto-detected) + LLVM 19 with
 headers. Then: `make build` (compile libs, ~6x faster startups),
-`make test` (307), `make examples` (37), `make reference` (sparse
+`make test` (313), `make examples` (37), `make reference` (sparse
 llvm-project clone for `make corpus`; `git sparse-checkout add
 llvm/docs` inside it for LangRef). `tools/sllc` is self-compiling.
 Platform facts: FreeBSD's image activator REJECTS unbranded SYSV

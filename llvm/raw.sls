@@ -103,7 +103,7 @@
     ;; generic value/type inspection (read-only; used by sll:unbuild)
     GetOperand GetNumOperands GetNumArgOperands
     IsAInstruction IsAArgument IsAFunction IsAGlobalVariable IsAGlobalAlias
-    DeleteFunction GetFirstUse
+    DeleteFunction GetFirstUse GetNextUse GetUser
     IsAMDNode IsAMDString IsAValueAsMetadata
     MDStringInContext2 MDNodeInContext2 MetadataAsValue2 GetMDString
     GetMDNodeNumOperands GetMDNodeOperands MetadataTypeInContext
@@ -655,6 +655,8 @@
   (define-getter IsAGlobalAlias "LLVMIsAGlobalAlias" (void*) void*)
   (define-getter DeleteFunction "LLVMDeleteFunction" (void*) void)
   (define-getter GetFirstUse "LLVMGetFirstUse" (void*) void*)
+  (define-getter GetNextUse "LLVMGetNextUse" (void*) void*)
+  (define-getter GetUser "LLVMGetUser" (void*) void*)
   (define-getter IsAMDNode "LLVMIsAMDNode" (void*) void*)
   (define-getter IsAMDString "LLVMIsAMDString" (void*) void*)
   (define-getter IsAValueAsMetadata "LLVMIsAValueAsMetadata" (void*) void*)
