@@ -8,7 +8,8 @@
           configure-module!
           emit-object-file emit-assembly-file
           emit-object-bytevector emit-assembly-string)
-  (import (chezscheme) (prefix (llvm raw) LLVM) (prefix (llvm base) base:) (prefix (llvm ir) ir:))
+  (import (chezscheme) (prefix (llvm raw) LLVM) (prefix (llvm base) base:)
+          (prefix (llvm ir) ir:) (prefix (llvm datalayout) dl:))
 
   ;; The generic LLVMInitializeNativeTarget is a static inline in Target.h,
   ;; so it does not exist as a symbol; we call the per-target functions that
@@ -125,8 +126,13 @@
            m
            (if (null? non-integral)
                layout
-               (apply string-append layout "-ni"
-                      (map (lambda (n) (format ":~a" n)) non-integral)))))]))
+               ;; structured merge (llvm datalayout): drop any ni the
+               ;; layout already carries, append ours -- no duplicates
+               (dl:unparse
+                 (append
+                   (filter (lambda (f) (not (eq? (car f) 'non-integral)))
+                           (dl:parse layout))
+                   (list (cons 'non-integral non-integral)))))))]))
 
   ;; ---- emission ---------------------------------------------------------------
 

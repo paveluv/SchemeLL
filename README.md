@@ -148,6 +148,7 @@ datalayout/triple, and more.
 | `(llvm ir)` | safe construction: contexts/modules/builders as records with **ownership tracking** — use-after-free raises a Scheme condition instead of segfaulting |
 | `(llvm jit)` | ORC LLJIT: foreign signatures derived from LLVM types automatically; JIT'd code resolves process symbols (call `@cos` or `@puts` by declaring them); refuses modules targeting a foreign platform |
 | `(llvm target)` | objects and assembly, to disk or bytevector; any backend in your libLLVM (X86, AArch64, ARM, RISCV, WebAssembly on stock Debian) |
+| `(llvm datalayout)` | the datalayout string as structured data: `parse`/`unparse`, byte-identical round-trips (validated against every layout in LLVM's test corpus), unknown components pass through verbatim |
 | `(sll)` | the s-expression dialect: `build`, `jit`, `procedure`, `dump`, and `unbuild` (modules **back** into sll data) |
 | `(sll render)` | `sll->ll`: textual LLVM IR from sll data in pure Scheme |
 | `(sll asm)` | structured inline asm: named operands, computed `$N` numbering, assembled constraint strings |
@@ -169,7 +170,7 @@ planned.
 
 ```
 $ make build       # compile the libraries to .so (later runs start ~5x faster)
-$ make test        # 273 checks
+$ make test        # 296 checks
 $ make examples    # smoke-runs all 37 examples end to end
 $ make reference   # (optional) fetch LLVM's test corpus for `make corpus`
 $ scheme --libdirs . --script examples/sll/01-add.ss
