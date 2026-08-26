@@ -6,7 +6,8 @@
 ;;; return address and rflags), result in rax. Errors return -errno
 ;;; in rax: error iff (unsigned)ret > -4096.
 (library (abi a6le)
-  (export arch os error-convention sys sysno const trap-insns)
+  (export arch os error-convention sys sysno const trap-insns
+          sys-fn-items errcheck)
   (import (chezscheme) (prefix (abi common) common:))
 
   (define arch 'x86-64)
@@ -31,4 +32,12 @@
 
   (define (const name) (common:lookup 'const constants name))
 
-  (define trap-insns (common:make-trap "ud2")))
+  (define trap-insns (common:make-trap "ud2"))
+
+  ;; the @sys_* function layer, normalized to -errno (see common)
+  (define sys-fn-items
+    (common:make-sys-fns "syscall" 'rax 'rax
+                         '(rdi rsi rdx r10 r8 r9) '(rcx r11)
+                         'neg-errno sysno common:default-syscall-fns))
+
+  (define errcheck common:errcheck))

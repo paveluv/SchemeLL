@@ -3,5 +3,6 @@
 ;;; identical (threading is a Chez runtime property, not a machine
 ;;; one), so this is a re-export.
 (library (abi tarm64le)
-  (export arch os error-convention sys sysno const trap-insns)
+  (export arch os error-convention sys sysno const trap-insns
+          sys-fn-items errcheck)
   (import (abi arm64le)))

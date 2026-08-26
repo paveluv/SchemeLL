@@ -2,7 +2,8 @@
 ;;; (abi arm64le) -- ARM64 Linux kernel ABI, raw. `svc #0`, number in
 ;;; x8, args in x0-x5, result in x0; -errno errors like all Linux.
 (library (abi arm64le)
-  (export arch os error-convention sys sysno const trap-insns)
+  (export arch os error-convention sys sysno const trap-insns
+          sys-fn-items errcheck)
   (import (chezscheme) (prefix (abi common) common:))
 
   (define arch 'arm64)
@@ -25,4 +26,11 @@
 
   (define (const name) (common:lookup 'const constants name))
 
-  (define trap-insns (common:make-trap "brk #0")))
+  (define trap-insns (common:make-trap "brk #0"))
+
+  ;; the @sys_* function layer, normalized to -errno (see common)
+  (define sys-fn-items
+    (common:make-sys-fns "svc #0" 'x8 'x0 '(x0 x1 x2 x3 x4 x5) '()
+                         'neg-errno sysno common:default-syscall-fns))
+
+  (define errcheck common:errcheck))

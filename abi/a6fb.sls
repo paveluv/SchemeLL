@@ -3,13 +3,15 @@
 ;;; convention as Linux x86-64 (syscall; rax; rdi rsi rdx r10 r8 r9;
 ;;; rcx/r11 clobbered) but DIFFERENT numbers and a DIFFERENT error
 ;;; convention: errors set the CARRY FLAG with a positive errno in
-;;; rax. The raw splice does not capture the flag yet (TODO: an
-;;; ={@ccc} flag-output operand); until then callers use the
-;;; documented heuristic -- for address-returning calls like mmap, a
-;;; result < 4096 is an error (page zero is never mapped and errno
-;;; values are small). User-verified on FreeBSD, as usual.
+;;; rax. The raw `sys` splice returns rax alone (lossy for
+;;; small-integer successes); the @sys_* function layer captures CF
+;;; via ={@ccc} and normalizes to -errno, so portable callers use
+;;; THAT. CF semantics after a real syscall are user-verified on
+;;; FreeBSD (the ={@ccc} plumbing itself is pinned kernel-free by
+;;; the stc/clc tests).
 (library (abi a6fb)
-  (export arch os error-convention sys sysno const trap-insns)
+  (export arch os error-convention sys sysno const trap-insns
+          sys-fn-items errcheck)
   (import (chezscheme) (prefix (abi common) common:))
 
   (define arch 'x86-64)
@@ -34,4 +36,13 @@
 
   (define (const name) (common:lookup 'const constants name))
 
-  (define trap-insns (common:make-trap "ud2")))
+  (define trap-insns (common:make-trap "ud2"))
+
+  ;; the @sys_* function layer: carry-flag capture (={@ccc}) +
+  ;; branchless select, normalized to -errno like every OS
+  (define sys-fn-items
+    (common:make-sys-fns "syscall" 'rax 'rax
+                         '(rdi rsi rdx r10 r8 r9) '(rcx r11)
+                         'carry-flag sysno common:default-syscall-fns))
+
+  (define errcheck common:errcheck))
