@@ -45,7 +45,7 @@ the normalized-entry kind).
   potential*. Ledger invariant: implemented ∪ documented = LLVM IR;
   modeling something later = delete its ledger row + its normalizer
   strip, and the corpus starts testing it.
-- **297 checks** (`make test`), **37 examples** (`make examples`),
+- **301 checks** (`make test`), **37 examples** (`make examples`),
   all green. A large bug hunt (two review agents + adversarial probes)
   just fixed 15 reproduced defects; regressions exist for each.
 - **Tested platforms**: x86-64 Linux and x86-64 FreeBSD (user-verified,
@@ -75,6 +75,18 @@ the normalized-entry kind).
   against all 421 distinct corpus layouts, byte-identical; the `n`
   component's first width rides ON the letter — a parser trap).
   configure-module!'s ni merge goes through it (dedupes).
+- `abi/` — the freestanding kernel ABI, raw (no libc; standing goal:
+  Meik/Woof/SchemeLL on a bare kernel). `(abi common)` = splice
+  generators over (sll asm); per-machine-type modules mirror Chez's
+  symbols (`a6le`, `ta6le`→re-export, `a6fb`, `arm64le`, ...);
+  `(abi machine)` selects the host. Exports: `sys` (raw syscall
+  splice), `sysno`, `const`, `trap-insns` (ud2/brk), `arch`/`os`/
+  `error-convention`. Linux errors are -errno in the return;
+  FreeBSD sets CARRY + positive errno (not captured yet — TODO
+  ={@ccc} flag output; callers use the <4096 heuristic for
+  address-returning calls). Hand-written tables for now; generation
+  from kernel headers is the plan. x86-64 syscall args are rdi rsi
+  rdx R10 r8 r9 — NOT rcx (the insn clobbers rcx/r11).
 - `sll.sls` — build/jit/procedure/dump/unbuild/load-sll. Two build
   passes per program + per-function block pre-pass (cross-function
   blockaddress); alias/ifunc two-phase creation (print order =
@@ -283,7 +295,7 @@ the normalized-entry kind).
 
 Chez 10 (`scheme` or `chez-scheme`, auto-detected) + LLVM 19 with
 headers. Then: `make build` (compile libs, ~6x faster startups),
-`make test` (297), `make examples` (37), `make reference` (sparse
+`make test` (301), `make examples` (37), `make reference` (sparse
 llvm-project clone for `make corpus`; `git sparse-checkout add
 llvm/docs` inside it for LangRef). `tools/sllc` is self-compiling.
 Platform facts: FreeBSD's image activator REJECTS unbranded SYSV

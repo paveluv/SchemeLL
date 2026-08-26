@@ -152,6 +152,7 @@ datalayout/triple, and more.
 | `(sll)` | the s-expression dialect: `build`, `jit`, `procedure`, `dump`, and `unbuild` (modules **back** into sll data) |
 | `(sll render)` | `sll->ll`: textual LLVM IR from sll data in pure Scheme |
 | `(sll asm)` | structured inline asm: named operands, computed `$N` numbering, assembled constraint strings |
+| `(abi ...)` | the freestanding kernel ABI: raw syscall and trap splices per machine type (`(abi a6le)`, `(abi a6fb)`, ... — `(abi machine)` picks the host), no libc anywhere |
 | `tools/sllc.ss` | the `.sll` compiler: `.o` / `.s` / `--run` / `--exe` / IR printing |
 
 The whole stack is about **5,800 lines of Scheme**. There is no C to
@@ -170,7 +171,7 @@ planned.
 
 ```
 $ make build       # compile the libraries to .so (later runs start ~5x faster)
-$ make test        # 297 checks
+$ make test        # 301 checks
 $ make examples    # smoke-runs all 37 examples end to end
 $ make reference   # (optional) fetch LLVM's test corpus for `make corpus`
 $ scheme --libdirs . --script examples/sll/01-add.ss
