@@ -1,3 +1,4 @@
+#!chezscheme
 ;;; (sll) -- LLVM IR as s-expressions: the first SchemeLL layer.
 ;;; Grammar and rationale: project/sll-design.md. Import as:
 ;;;   (prefix (sll) sll:)
@@ -1755,20 +1756,19 @@
   ;; the portable handle. Splice into any program whose GC stack maps
   ;; must be readable at run time; consume via jit:stackmap-address
   ;; (JIT) or the sll_stackmaps_keeper symbol (AOT).
-  ;; (@-symbols are spelled via string->symbol: the R6RS reader used
-  ;; for this library rejects a leading @, unlike the .sll/user side)
   ;; A JIT dylib holds ONE definition per symbol name (probed: a
   ;; second module with the same keeper is a duplicate-definition
   ;; error), so multi-module programs give each module its own
   ;; keeper name and pass it to jit:stackmap-address.
+  ;; (@-literals here are what the file's #!chezscheme directive is
+  ;; for: library sources lex in r6rs mode by default, which rejects
+  ;; a leading @ -- see the HANDOFF Chez quirks catalog.)
   (define (stackmap-keeper-named keeper-sym)
     (unless (symbol? keeper-sym)
       (error "keeper name must be a symbol (no sigil)" keeper-sym))
-    (let ([sm (string->symbol "@__LLVM_StackMaps")]
-          [keeper (string->symbol
-                    (string-append "@" (symbol->string keeper-sym)))])
-      `((= ,sm (global external i8))
-        (= ,keeper (constant ptr ,sm)))))
+    (let ([keeper (name '@ keeper-sym)])
+      `((= @__LLVM_StackMaps (global external i8))
+        (= ,keeper (constant ptr @__LLVM_StackMaps)))))
 
   (define stackmap-keeper (stackmap-keeper-named 'sll_stackmaps_keeper))
 

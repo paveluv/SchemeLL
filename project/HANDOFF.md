@@ -241,12 +241,13 @@ the normalized-entry kind).
 ## Chez quirks catalog
 
 - LIBRARY sources are lexed in #!r6rs mode regardless of file
-  extension (.sls or .ss), where `@name` symbols are illegal —
-  which is why sll.sls spells its @-globals via string->symbol,
-  and why hand-written sll data in a LIBRARY (e.g. Meik runtime
-  modules) needs a `#!chezscheme` first line to switch the reader.
-  Scripts (--script) use the Chez reader — the reason probes and
-  tests never hit this.
+  extension (.sls or .ss), where `@name` symbols are illegal (an
+  R6RS identifier cannot start with @). Any library embedding sll
+  data literally needs a `#!chezscheme` first line to switch the
+  reader — sll.sls itself carries one now (SchemeLL is Chez-only;
+  r6rs lexing bought nothing), as do Meik's runtime modules.
+  Scripts (--script) and plain `read` default to Chez mode — the
+  reason probes, tests, and the .sll file format never hit this.
 - `foreign-callable` code objects must be `lock-object`'d before
   taking their entry point (the diagnostic callback). NEVER raise
   inside a C→Scheme callback — it unwinds through LLVM's C++ frames;
