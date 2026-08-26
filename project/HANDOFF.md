@@ -222,6 +222,19 @@ the normalized-entry kind).
   unreferenced type-def lines to a fixpoint. `; preds =` comments
   reflect use-list order, which RAUW fixups legitimately permute —
   stripped from comparisons.
+- Stack-map delivery quirks (probed 2026-08-25): `__LLVM_StackMaps`
+  is a LOCAL symbol (ORC lookup cannot see it — hence the keeper
+  globals); a JIT dylib's namespace is flat (same-name keepers in
+  two modules = duplicate-definition error — hence
+  `stackmap-keeper-named`); system linkers CONCATENATE one complete
+  blob per object under the one section name (consumers must
+  iterate blobs); no `__start_`/`__stop_` symbols are synthesized
+  (`.llvm_stackmaps` is not a C identifier — dots); in a `.o` the
+  function-address quads are unapplied relocations (read as zero)
+  while return-address offsets are assembly-time label arithmetic
+  (already final) — the JIT's in-memory blob is the fully resolved
+  artifact. `--exe` still refuses SHF_ALLOC data sections, so
+  freestanding statepointed executables await that open thread.
 - `i1` maps to Chez `boolean` at the FFI: Scheme `0` is TRUTHY —
   pass `#f`.
 
