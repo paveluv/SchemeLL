@@ -201,6 +201,12 @@ the normalized-entry kind).
   too — test `LLVMIsAValueAsMetadata` first. `LLVMStripModuleDebugInfo`
   segfaults on malformed debug info — guarded in the normalizer, which
   also deletes the dead `llvm.dbg.*` declarations it leaves behind.
+- **Passes SEGFAULT on invalid IR instead of diagnosing**: feeding
+  RewriteStatepointsForGC a function with wrong phi predecessors
+  crashed the process (invalid memory reference), looking exactly
+  like a runtime GC bug and costing a bisect cycle. ALWAYS
+  `ir:verify-module` BEFORE `run-module-passes!` — the verifier
+  raises with the precise phi and blocks; the pass just dies.
 - **Mismatched inline-asm constraint counts SEGFAULT LLVM** (no
   verifier check) — `check-asm-arity` in sll.sls guards; `$N` operand
   errors in templates go through `report_fatal_error` = process abort,
