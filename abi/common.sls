@@ -93,6 +93,11 @@
                  [groups (map (lambda (p) `(i64 ,p)) params)]
                  [fname (sll:name '@sys_ nm)])
             `(define i64 (,fname ,@groups)
+               ;; asm inside + never reaches a GC: must not inline
+               ;; into gc-attributed callers (statepointing a raw
+               ;; asm callee is invalid IR), and call sites in gc
+               ;; code need no statepoint
+               (attributes noinline ("gc-leaf-function"))
                (label %entry
                  ,@(case norm
                      [(neg-errno)
