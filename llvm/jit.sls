@@ -246,13 +246,23 @@
   ;; stackmap-keeper items, which export a pointer to the section under
   ;; a name this looks up. The direct name is still tried first in case
   ;; a linking-layer configuration ever exports it.
-  (define (stackmap-address j)
-    (define (try name)
-      (guard (e [#t #f]) (lookup-address j name)))
-    (cond
-      [(try "__LLVM_StackMaps")]
-      [(try "sll_stackmaps_keeper") =>
-       (lambda (keeper) (foreign-ref 'void* keeper 0))]
-      [else
-       (base:error 'jit:stackmap-address
-         "stack maps are not reachable: splice sll:stackmap-keeper into the program (it exports a pointer to __LLVM_StackMaps)")])))
+  ;; Multi-module programs: one keeper NAME per module (the dylib
+  ;; holds one definition per symbol), created with
+  ;; sll:stackmap-keeper-named and read back here by that name.
+  (define stackmap-address
+    (case-lambda
+      [(j) (stackmap-address j "sll_stackmaps_keeper")]
+      [(j keeper-name)
+       (define (try name)
+         (guard (e [#t #f]) (lookup-address j name)))
+       (let ([keeper-name (if (symbol? keeper-name)
+                              (symbol->string keeper-name)
+                              keeper-name)])
+         (cond
+           [(try "__LLVM_StackMaps")]
+           [(try keeper-name) =>
+            (lambda (keeper) (foreign-ref 'void* keeper 0))]
+           [else
+            (base:error 'jit:stackmap-address
+              "stack maps are not reachable: splice sll:stackmap-keeper (or stackmap-keeper-named, multi-module) into the program"
+              keeper-name)]))])))

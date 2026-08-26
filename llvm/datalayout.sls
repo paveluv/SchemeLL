@@ -148,7 +148,7 @@
                     [(num selfnum c) =>
                      (lambda (sz)
                        `(,(case letter [(#\i) 'int] [(#\v) 'vector]
-                                       [(#\f) 'float])
+                            [(#\f) 'float])
                          ,sz ,@ns))]
                     [else (raw)])]
                  [else (raw)]))]
@@ -197,14 +197,14 @@
            (begin (check-nums f (cdr f))
                   (join-nums "p" (cdr f))))]
       [(int) (check-nums f (cdr f))
-             (join-nums (format "i~a" (cadr f)) (cddr f))]
+       (join-nums (format "i~a" (cadr f)) (cddr f))]
       [(vector) (check-nums f (cdr f))
-                (join-nums (format "v~a" (cadr f)) (cddr f))]
+       (join-nums (format "v~a" (cadr f)) (cddr f))]
       [(float) (check-nums f (cdr f))
-               (join-nums (format "f~a" (cadr f)) (cddr f))]
+       (join-nums (format "f~a" (cadr f)) (cddr f))]
       [(aggregate) (check-nums f (cdr f)) (join-nums "a" (cdr f))]
       [(native) (check-nums f (cdr f))
-                (join-nums (format "n~a" (cadr f)) (cddr f))]
+       (join-nums (format "n~a" (cadr f)) (cddr f))]
       [(non-integral)
        (check-nums f (cdr f))
        (when (memv 0 (cdr f))
@@ -213,7 +213,7 @@
        (join-nums "ni" (cdr f))]
       [(raw) (unless (and (string? (cadr f)) (null? (cddr f)))
                (base:error 'dl:unparse "raw takes one string" f))
-             (cadr f)]
+       (cadr f)]
       [else (base:error 'dl:unparse "unknown component form" f)]))
 
   ;; ---- entry points ------------------------------------------------

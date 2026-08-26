@@ -48,7 +48,7 @@
          (equal? (map car (list (car (dl:parse "p0:32:32"))
                                 (car (dl:parse "p:32:32"))))
                  '(ptr ptr))
-         )
+)
 (t:check "explicit p0 keeps its addrspace marker"
          (equal? (dl:parse "p0:32:32") '((ptr (addrspace 0) 32 32))))
 (t:check "bare p has none"

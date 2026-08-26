@@ -19,7 +19,8 @@
 ;;; permitted forward reference to a *value*; everything else must be
 ;;; defined textually before use.
 (library (sll)
-  (export build jit dump unbuild procedure load-sll stackmap-keeper
+  (export build jit dump unbuild procedure load-sll
+          stackmap-keeper stackmap-keeper-named
           object assembly name)
   (import (except (chezscheme) error)
           (prefix (llvm base) base:)
@@ -1756,11 +1757,20 @@
   ;; (JIT) or the sll_stackmaps_keeper symbol (AOT).
   ;; (@-symbols are spelled via string->symbol: the R6RS reader used
   ;; for this library rejects a leading @, unlike the .sll/user side)
-  (define stackmap-keeper
+  ;; A JIT dylib holds ONE definition per symbol name (probed: a
+  ;; second module with the same keeper is a duplicate-definition
+  ;; error), so multi-module programs give each module its own
+  ;; keeper name and pass it to jit:stackmap-address.
+  (define (stackmap-keeper-named keeper-sym)
+    (unless (symbol? keeper-sym)
+      (error "keeper name must be a symbol (no sigil)" keeper-sym))
     (let ([sm (string->symbol "@__LLVM_StackMaps")]
-          [keeper (string->symbol "@sll_stackmaps_keeper")])
+          [keeper (string->symbol
+                    (string-append "@" (symbol->string keeper-sym)))])
       `((= ,sm (global external i8))
         (= ,keeper (constant ptr ,sm)))))
+
+  (define stackmap-keeper (stackmap-keeper-named 'sll_stackmaps_keeper))
 
   ;; The one-call AOT pipeline: build, stamp the module with a target
   ;; machine's triple and layout, optionally run passes, verify, emit.

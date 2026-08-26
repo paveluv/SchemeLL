@@ -164,3 +164,32 @@ entry:
   (jit:lookup-address j "g")
   (t:check-exn "stackmap-address without the keeper raises"
                (jit:stackmap-address j)))
+
+;; multi-module: one keeper NAME per module (a dylib holds one
+;; definition per symbol -- probed: same-name keepers collide); each
+;; module's map is read back by its keeper's name
+(let* ([jc (jit:make-context)]
+       [mk (lambda (name fname keeper)
+             (let ([m (ir:parse-ir (jit:context-ir jc) name
+                        (format "declare i32 @getpid()
+define ptr addrspace(1) @~a(ptr addrspace(1) %a) gc \"statepoint-example\" {
+entry:
+  %p = call i32 @getpid()
+  ret ptr addrspace(1) %a
+}
+@__LLVM_StackMaps = external global i8
+@~a = constant ptr @__LLVM_StackMaps" fname keeper))])
+               (ir:run-module-passes! m "rewrite-statepoints-for-gc")
+               m))]
+       [j (jit:make)])
+  (jit:add-module! j jc (mk "mm1" "mf1" "keeper_one"))
+  (jit:add-module! j jc (mk "mm2" "mf2" "keeper_two"))
+  (jit:context-dispose! jc)
+  (jit:lookup-address j "mf1")
+  (jit:lookup-address j "mf2")
+  (let ([sm1 (jit:stackmap-address j "keeper_one")]
+        [sm2 (jit:stackmap-address j "keeper_two")])
+    (t:check "two modules, two named keepers, two maps"
+             (and (not (= sm1 sm2))
+                  (= 3 (foreign-ref 'unsigned-8 sm1 0))
+                  (= 3 (foreign-ref 'unsigned-8 sm2 0))))))

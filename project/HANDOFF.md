@@ -20,7 +20,7 @@ collector**. Everything the GC needs from IR is already modeled
 (statepoints, tokens, "gc-live"/"deopt" bundles, gc attribute,
 datalayout `ni:1`, addrspace(1) pointers). The GC prerequisites that
 lived OUTSIDE sll are now closed too: stack-map access at JIT time is
-`jit:stackmap-address` + the spliceable `sll:stackmap-keeper` items
+`jit:stackmap-address` + the spliceable `sll:stackmap-keeper` items (multi-module: `stackmap-keeper-named`, one keeper name per module — same-name keepers collide in a dylib)
 (the section symbol is LOCAL — probed — so an exported keeper pointer
 is the portable handle), and `target:configure-module!` takes the
 non-integral spaces for `ni:`. Remaining: safepoint polls. (Calling
@@ -45,7 +45,7 @@ the normalized-entry kind).
   potential*. Ledger invariant: implemented ∪ documented = LLVM IR;
   modeling something later = delete its ledger row + its normalizer
   strip, and the corpus starts testing it.
-- **296 checks** (`make test`), **37 examples** (`make examples`),
+- **297 checks** (`make test`), **37 examples** (`make examples`),
   all green. A large bug hunt (two review agents + adversarial probes)
   just fixed 15 reproduced defects; regressions exist for each.
 - **Tested platforms**: x86-64 Linux and x86-64 FreeBSD (user-verified,
@@ -262,7 +262,7 @@ the normalized-entry kind).
 
 Chez 10 (`scheme` or `chez-scheme`, auto-detected) + LLVM 19 with
 headers. Then: `make build` (compile libs, ~6x faster startups),
-`make test` (296), `make examples` (37), `make reference` (sparse
+`make test` (297), `make examples` (37), `make reference` (sparse
 llvm-project clone for `make corpus`; `git sparse-checkout add
 llvm/docs` inside it for LangRef). `tools/sllc` is self-compiling.
 Platform facts: FreeBSD's image activator REJECTS unbranded SYSV
