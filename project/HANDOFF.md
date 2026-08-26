@@ -93,7 +93,19 @@ the normalized-entry kind).
   real syscalls is user-verified on FreeBSD. Hand-written tables
   for now; generation from kernel headers is the plan. x86-64
   syscall args are rdi rsi rdx R10 r8 r9 — NOT rcx (the insn
-  clobbers rcx/r11).
+  clobbers rcx/r11). Design analysis on record: CF is NOT checkable
+  after the call — flags are not SSA values, nearly every
+  instruction rewrites them, and ={@ccc} exists precisely because
+  the asm boundary is the only capture point; a deferred
+  "errcheck reads CF" cannot exist. Exposing the captured flag
+  instead of normalizing was weighed and rejected (~1ns saved for a
+  per-OS-forked API and the lossy-pair bug reborn at a higher
+  level). The true zero-cost ceiling is asm-goto fusion — callbr
+  with "syscall; jc ${errlabel}" branches on the kernel's CF inside
+  the asm, no capture, no check insn; sll models callbr+asm — but
+  it forces every call site into multi-block callbr shape to save
+  single-digit instructions next to a 100ns syscall. Known floor,
+  wrong trade.
 - `sll.sls` — build/jit/procedure/dump/unbuild/load-sll. Two build
   passes per program + per-function block pre-pass (cross-function
   blockaddress); alias/ifunc two-phase creation (print order =
