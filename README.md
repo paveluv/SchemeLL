@@ -51,12 +51,15 @@ lists. Here is a fully unrolled `x^n`, specialized at run time:
         ,@(let loop ([i 1] [prev '%x] [acc '()])
             (if (>= i n)
                 (reverse (cons `(ret i64 ,prev) acc))
-                (let ([next (string->symbol (format "%p~a" i))])
+                (let ([next (sll:name '%p i)])
                   (loop (+ i 1) next
                         (cons `(= ,next (mul i64 ,prev %x)) acc)))))))))
 
 ((sll:procedure (power-prog 11) "pow") 2)   ; => 2048
 ```
+
+(`sll:name` assembles `%`/`@` names from symbol, string, and integer
+pieces — the generator's replacement for `string->symbol`+`format`.)
 
 The same trick scales to real problems: platform-specific code becomes
 a Scheme function returning the platform-specific forms
@@ -166,7 +169,7 @@ planned.
 
 ```
 $ make build       # compile the libraries to .so (later runs start ~5x faster)
-$ make test        # 265 checks
+$ make test        # 273 checks
 $ make examples    # smoke-runs all 37 examples end to end
 $ make reference   # (optional) fetch LLVM's test corpus for `make corpus`
 $ scheme --libdirs . --script examples/sll/01-add.ss

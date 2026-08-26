@@ -8,7 +8,7 @@
         ,@(let loop ([i 1] [prev '%x] [acc '()])
             (if (>= i n)
                 (reverse (cons `(ret i64 ,prev) acc))
-                (let ([next (string->symbol (format "%p~a" i))])
+                (let ([next (sll:name '%p i)])
                   (loop (+ i 1) next
                         (cons `(= ,next (mul i64 ,prev %x)) acc)))))))))
 

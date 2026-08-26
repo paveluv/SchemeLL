@@ -520,3 +520,33 @@
     'replace)
   (t:check "escapes evaluate top to bottom"
            (equal? (sll:load-sll path) '((a 1) (b 2) (c 3)))))
+
+(t:section "sll: name construction")
+
+(t:check "name concatenates symbol pieces" (eq? (sll:name '%p 1) '%p1))
+(t:check "name takes strings and integers"
+         (eq? (sll:name '@h "x" 2 '_tail) '@hx2_tail))
+(t:check "name keeps the sigil only from the head"
+         (eq? (sll:name '% 'acc2_ 3) '%acc2_3))
+(t:check-exn "name requires a sigil on the first piece"
+             (sll:name 'p 1))
+(t:check-exn "name rejects an empty result" (sll:name '%))
+(t:check-exn "name rejects inexact and other piece types"
+             (sll:name '%x 1.5))
+(t:check-exn "constructed all-digit names raise (anonymity rule)"
+             (sll:name '% 4 2))
+
+;; end to end: generator-built names flow through build + jit
+(t:check "generated names build and run"
+         (= 55
+            ((sll:procedure
+               `((define i64 (@sum10)
+                   (label %entry
+                     ,@(let loop ([i 1] [prev 0] [acc '()])
+                         (if (> i 10)
+                             (reverse (cons `(ret i64 ,prev) acc))
+                             (let ([next (sll:name '%s i)])
+                               (loop (+ i 1) next
+                                     (cons `(= ,next (add i64 ,prev ,i))
+                                           acc))))))))
+               "sum10"))))

@@ -45,7 +45,7 @@ the normalized-entry kind).
   potential*. Ledger invariant: implemented ∪ documented = LLVM IR;
   modeling something later = delete its ledger row + its normalizer
   strip, and the corpus starts testing it.
-- **265 checks** (`make test`), **37 examples** (`make examples`),
+- **273 checks** (`make test`), **37 examples** (`make examples`),
   all green. A large bug hunt (two review agents + adversarial probes)
   just fixed 15 reproduced defects; regressions exist for each.
 - **Tested platforms**: x86-64 Linux and x86-64 FreeBSD (user-verified,
@@ -256,7 +256,7 @@ the normalized-entry kind).
 
 Chez 10 (`scheme` or `chez-scheme`, auto-detected) + LLVM 19 with
 headers. Then: `make build` (compile libs, ~6x faster startups),
-`make test` (265), `make examples` (37), `make reference` (sparse
+`make test` (273), `make examples` (37), `make reference` (sparse
 llvm-project clone for `make corpus`; `git sparse-checkout add
 llvm/docs` inside it for LangRef). `tools/sllc` is self-compiling.
 Platform facts: FreeBSD's image activator REJECTS unbranded SYSV

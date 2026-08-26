@@ -20,7 +20,7 @@
 ;;; defined textually before use.
 (library (sll)
   (export build jit dump unbuild procedure load-sll stackmap-keeper
-          object assembly)
+          object assembly name)
   (import (except (chezscheme) error)
           (prefix (llvm base) base:)
           (prefix (llvm ir) ir:)
@@ -60,6 +60,36 @@
   (define (llvm-name x)   ; %sym -> the name to give LLVM ("" = unnamed)
     (let ([s (strip-sigil x)])
       (if (anonymous-name? s) "" s)))
+
+  ;; Build a %/@ name from pieces -- the generator's replacement for
+  ;; the (string->symbol (format ...)) dance: (name '%p 1) => %p1,
+  ;; (name '@h op) => @h3. The first piece carries the sigil; pieces
+  ;; are symbols, strings, or exact integers; the result is an
+  ;; interned symbol, so name equality stays eq?. A CONSTRUCTED
+  ;; all-digit name raises: it would fall under the anonymity rule
+  ;; (positional, printer-numbered), which is almost always an
+  ;; accident when a name is being built -- spell such names
+  ;; literally if they are really intended.
+  (define (name piece0 . pieces)
+    (define (piece->string p)
+      (cond
+        [(symbol? p) (symbol->string p)]
+        [(string? p) p]
+        [(and (integer? p) (exact? p)) (number->string p)]
+        [else (error "name piece must be a symbol, string or exact integer"
+                     p (cons piece0 pieces))]))
+    (let ([head (piece->string piece0)])
+      (unless (and (> (string-length head) 0)
+                   (memv (string-ref head 0) '(#\% #\@)))
+        (error "the first name piece must carry the % or @ sigil"
+               piece0 (cons piece0 pieces)))
+      (let ([s (apply string-append head (map piece->string pieces))])
+        (when (= (string-length s) 1)
+          (error "constructed name is empty" (cons piece0 pieces)))
+        (when (anonymous-name? (substring s 1 (string-length s)))
+          (error "constructed name is all digits and would be anonymous under the anonymity rule; spell it literally if that is intended"
+                 s (cons piece0 pieces)))
+        (string->symbol s))))
 
   ;; ---- types -----------------------------------------------------------------
 

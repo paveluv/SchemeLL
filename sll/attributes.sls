@@ -19,19 +19,19 @@
   ;; business -- the verifier judges, sll just spells
   (define enum-names
     '(allocalign allocptr alwaysinline builtin cold convergent
-      disable_sanitizer_instrumentation fn_ret_thunk_extern hot
-      inlinehint jumptable minsize mustprogress naked nest noalias
-      nobuiltin nocallback nocapture nocf_check noduplicate nofree
-      noimplicitfloat noinline nomerge nonlazybind nonnull noprofile
-      norecurse noredzone noreturn nosanitize_bounds
-      nosanitize_coverage nosync noundef nounwind
-      null_pointer_is_valid optdebug optforfuzzing optnone optsize
-      presplitcoroutine readnone readonly returned returns_twice
-      safestack sanitize_address sanitize_hwaddress sanitize_memory
-      sanitize_memtag sanitize_numerical_stability sanitize_thread
-      shadowcallstack skipprofile speculatable
-      speculative_load_hardening ssp sspreq sspstrong strictfp
-      swiftasync swifterror swiftself willreturn writeonly))
+       disable_sanitizer_instrumentation fn_ret_thunk_extern hot
+       inlinehint jumptable minsize mustprogress naked nest noalias
+       nobuiltin nocallback nocapture nocf_check noduplicate nofree
+       noimplicitfloat noinline nomerge nonlazybind nonnull noprofile
+       norecurse noredzone noreturn nosanitize_bounds
+       nosanitize_coverage nosync noundef nounwind
+       null_pointer_is_valid optdebug optforfuzzing optnone optsize
+       presplitcoroutine readnone readonly returned returns_twice
+       safestack sanitize_address sanitize_hwaddress sanitize_memory
+       sanitize_memtag sanitize_numerical_stability sanitize_thread
+       shadowcallstack skipprofile speculatable
+       speculative_load_hardening ssp sspreq sspstrong strictfp
+       swiftasync swifterror swiftself willreturn writeonly))
 
   ;; (name . kind) for the names the loaded LLVM knows, resolved lazily
   ;; so importing this library never forces libLLVM to load early
