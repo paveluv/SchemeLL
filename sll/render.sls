@@ -434,15 +434,31 @@
                                            flags))
                        (cc-text cc)
                        (if as (format "addrspace(~a)" as) "")
-                       (string-append
-                         (app->text env (car args) (cadr args)
-                                    (and (memq 'musttail flags)
-                                         (caller-variadic?)
-                                         (pair? (car args))
-                                         (eq? (caar args) 'fn)
-                                         (memq 'variadic (car args))
-                                         #t))
-                         (bundles->text env (cddr args)))))]
+                       (let* ([attr-group?
+                               (lambda (x)
+                                 (and (pair? x)
+                                      (eq? (car x) 'attributes)))]
+                              [agroups (filter attr-group?
+                                               (cddr args))]
+                              [bs (remp attr-group? (cddr args))])
+                         (string-append
+                           (app->text env (car args) (cadr args)
+                                      (and (memq 'musttail flags)
+                                           (caller-variadic?)
+                                           (pair? (car args))
+                                           (eq? (caar args) 'fn)
+                                           (memq 'variadic (car args))
+                                           #t))
+                           ;; call-site attributes: inline, after the
+                           ;; argument list, before any bundles
+                           (if (null? agroups)
+                               ""
+                               (string-append
+                                 " "
+                                 (attrs-words
+                                   (apply append
+                                          (map cdr agroups)))))
+                           (bundles->text env bs)))))]
              [(invoke)
               (let* ([cc (cc-spec (car args))]
                      [args (if cc (cdr args) args)]

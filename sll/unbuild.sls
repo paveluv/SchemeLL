@@ -773,7 +773,8 @@
                    ,@(callee-addrspace-marker st ins)
                    ,(call-type-slot (LLVMGetCalledFunctionType ins))
                    ,(application st ins)
-                   ,@(bundle-forms st ins))]
+                   ,@(bundle-forms st ins)
+                   ,@(callsite-attr-part ins))]
            [(invoke)
             `(invoke ,@(cc-part (ir:instruction-call-conv ins))
                      ,(call-type-slot (LLVMGetCalledFunctionType ins))
@@ -971,30 +972,44 @@
   ;; refused: valued enums (memory(...), uwtable(sync), alignstack(N))
   ;; and type attributes. Probed: value 0 does NOT imply valueless
   ;; (memory(none) has value 0) -- the known-name table is the judge.
+  (define (attr->spec a where)
+    (cond
+      [(ir:attribute-type? a)
+       (not-modeled (string-append "type attributes at " where))]
+      [(ir:attribute-string? a)
+       (let ([k (ir:attribute-string-kind a)]
+             [v (ir:attribute-string-value a)])
+         (if (string=? v "") (list k) (list k v)))]
+      [(ir:attribute-enum? a)
+       (let ([name (attrs:enum-kind->name
+                     (ir:attribute-enum-kind a))])
+         (unless (and name
+                      (zero? (ir:attribute-enum-value a)))
+           (not-modeled (string-append
+                          "valued or unnamed attributes at " where)
+                        (ir:attribute-enum-kind a)))
+         name)]
+      [else (not-modeled (string-append "attribute kind at " where))]))
+
   (define (fn-attr-part f)
     (let ([as (ir:function-attributes f)])
       (if (null? as)
           '()
           `((attributes
-              ,@(map
-                  (lambda (a)
-                    (cond
-                      [(ir:attribute-type? a)
-                       (not-modeled "type attributes at function position")]
-                      [(ir:attribute-string? a)
-                       (let ([k (ir:attribute-string-kind a)]
-                             [v (ir:attribute-string-value a)])
-                         (if (string=? v "") (list k) (list k v)))]
-                      [(ir:attribute-enum? a)
-                       (let ([name (attrs:enum-kind->name
-                                     (ir:attribute-enum-kind a))])
-                         (unless (and name
-                                      (zero? (ir:attribute-enum-value a)))
-                           (not-modeled "valued or unnamed function attributes"
-                                        (ir:attribute-enum-kind a)))
-                         name)]
-                      [else (not-modeled "function attribute kind")]))
-                  as))))))
+              ,@(map (lambda (a)
+                       (attr->spec a "function position"))
+                     as))))))
+
+  ;; function-position call-site attributes (M2: musttail sites carry
+  ;; gc-leaf-function); return/param call-site positions stay
+  ;; not-modeled -- undetected, as before, ledgered
+  (define (callsite-attr-part ins)
+    (let ([as (ir:callsite-attributes ins)])
+      (if (null? as)
+          '()
+          `((attributes
+              ,@(map (lambda (a) (attr->spec a "a call site"))
+                     as))))))
 
   (define (gc-attr f)
     (let ([s (ir:gc-name f)])

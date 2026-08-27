@@ -410,6 +410,31 @@ entry:
 }
 ")
 
+(check-entry! "call-site-attributes"
+  '((define void (@leafcallee)
+      (label %entry
+        (ret void)))
+    (define void (@site)
+      (label %entry
+        (call void (@leafcallee) (attributes ("gc-leaf-function")))
+        (call void (@leafcallee) (attributes nounwind ("k" "v")))
+        (ret void))))
+  "define void @leafcallee() {
+entry:
+  ret void
+}
+
+define void @site() {
+entry:
+  call void @leafcallee() #0
+  call void @leafcallee() #1
+  ret void
+}
+
+attributes #0 = { \"gc-leaf-function\" }
+attributes #1 = { nounwind \"k\"=\"v\" }
+")
+
 (check-entry! "flags"
   '((define i64 (@flags (i64 %a) (i64 %b))
       (label %entry

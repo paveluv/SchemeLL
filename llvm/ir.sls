@@ -85,6 +85,7 @@
     set-instruction-call-conv! instruction-call-conv
     enum-attribute-kind-named create-enum-attribute create-string-attribute
     add-function-attribute! add-callsite-attribute! function-attributes
+    callsite-attributes
     attribute-enum? attribute-string? attribute-type?
     attribute-enum-kind attribute-enum-value
     attribute-string-kind attribute-string-value
@@ -893,6 +894,22 @@
                   (begin (foreign-free buf) acc)
                   (loop (- i 1)
                         (cons (foreign-ref 'void* buf (* 8 i)) acc))))))))
+
+  ;; the function-position attributes of a CALL SITE, same shape
+  (define (callsite-attributes call-inst)
+    (let ([n (LLVMGetCallSiteAttributeCount call-inst
+                                            attr-function-index)])
+      (if (zero? n)
+          '()
+          (let ([buf (foreign-alloc (* 8 n))])
+            (LLVMGetCallSiteAttributes call-inst attr-function-index
+                                       buf)
+            (let loop ([i (- n 1)] [acc '()])
+              (if (< i 0)
+                  (begin (foreign-free buf) acc)
+                  (loop (- i 1)
+                        (cons (foreign-ref 'void* buf (* 8 i))
+                              acc))))))))
 
   ;; probed: LLVMIsEnumAttribute is TRUE for int-VALUED attributes too
   ;; (alignstack(8), uwtable(2), ...), and value 0 does not mean

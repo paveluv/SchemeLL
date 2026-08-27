@@ -767,7 +767,11 @@
                                          (fstate-phis st)))
                   ph)]
                [(call)
-                ;; (call cconv? (addrspace n)? type (callee args...) bundles...)
+                ;; (call cconv? (addrspace n)? type (callee args...)
+                ;;       bundles/attribute-groups...)
+                ;; trailing (attributes ...) groups are CALL-SITE
+                ;; attributes (M2/S1a: musttail sites must carry
+                ;; "gc-leaf-function" so RS4GC skips them)
                 (arity>= 2 "(call type (callee (type arg) ...) bundles...)")
                 (let* ([ccv (cc-spec (car args) form)]
                        [args (if ccv (cdr args) args)]
@@ -787,16 +791,32 @@
                       (error "cannot bind the result of a void call" form))
                     (let* ([callee (resolve-callee st fnty (car app)
                                                    (or callee-as 0))]
-                           [v (if (null? (cddr args))
+                           [attr-group? (lambda (x)
+                                          (and (pair? x)
+                                               (eq? (car x)
+                                                    'attributes)))]
+                           [attr-groups (filter attr-group?
+                                                (cddr args))]
+                           [bundles (remp attr-group? (cddr args))]
+                           [v (if (null? bundles)
                                   (ir:build-call b fnty callee avals name)
                                   (let ([brefs (map (lambda (bf)
                                                       (resolve-bundle st bf))
-                                                    (cddr args))])
+                                                    bundles)])
                                     (let ([v (ir:build-call-bundles
                                                b fnty callee avals brefs name)])
                                       (for-each ir:dispose-operand-bundle! brefs)
                                       v)))])
                       (when ccv (ir:set-instruction-call-conv! v ccv))
+                      (for-each
+                        (lambda (grp)
+                          (for-each
+                            (lambda (spec)
+                              (ir:add-callsite-attribute!
+                                v (resolve-attribute ctx spec grp
+                                                     'call-site)))
+                            (cdr grp)))
+                        attr-groups)
                       v)))]
                [(invoke)
                 ;; (invoke cconv? type (callee args...) bundles... (label %ok) (label %pad))
