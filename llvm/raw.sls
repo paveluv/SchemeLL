@@ -153,7 +153,7 @@
     StripModuleDebugInfo
     InstructionGetAllMetadataOtherThanDebugLoc
     ValueMetadataEntriesGetKind DisposeValueMetadataEntries
-    SetMetadata GlobalClearMetadata
+    SetMetadata GlobalClearMetadata GetMetadata GetMDKindIDInContext
     GetAttributesAtIndex IsEnumAttribute IsStringAttribute
     GetEnumAttributeKind GetStringAttributeKind
     GetEnumAttributeKindForName CreateEnumAttribute CreateStringAttribute
@@ -816,6 +816,11 @@
     "LLVMDisposeValueMetadataEntries" (void*) void)
   (define-getter SetMetadata          ; NULL node clears the kind
     "LLVMSetMetadata" (void* unsigned-int void*) void)
+  (define-getter GetMetadata           ; -> node value or NULL
+    "LLVMGetMetadata" (void* unsigned-int) void*)
+  (define GetMDKindIDInContext
+    (foreign-procedure "LLVMGetMDKindIDInContext"
+                       (void* string unsigned-int) unsigned-int))
   (define-getter GlobalClearMetadata "LLVMGlobalClearMetadata" (void*) void)
   (define-getter GetAttributesAtIndex ; (fn, index, attr-array out)
     "LLVMGetAttributesAtIndex" (void* unsigned-int void*) void)

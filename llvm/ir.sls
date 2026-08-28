@@ -46,6 +46,7 @@
     add-ifunc ifunc-resolver ifunc-set-resolver! module-ifuncs
     set-module-asm!
     metadata-type md-string md-node metadata-value
+    md-kind-id set-instruction-metadata! instruction-metadata
     value-address-space set-atomic-single-thread! set-externally-initialized!
     literal-struct-type? const-splat const-extractelement const-insertelement
     x86mmx-type x86amx-type target-ext-type
@@ -494,6 +495,18 @@
   (define (md-string ctx s)   ; -> MetadataRef; the length is in BYTES
     (LLVMMDStringInContext2 (context-live-ptr ctx) s
                             (bytevector-length (string->utf8 s))))
+  ;; instruction-attached metadata (!kind): presence is the point;
+  ;; the node content is an empty tuple
+  (define (md-kind-id ctx name)
+    (LLVMGetMDKindIDInContext (context-live-ptr ctx) name
+                              (string-length name)))
+  (define (set-instruction-metadata! ctx instr kind-name)
+    (LLVMSetMetadata instr (md-kind-id ctx kind-name)
+                     (metadata-value ctx (md-node ctx '()))))
+  (define (instruction-metadata ctx instr kind-name)
+    (let ([v (LLVMGetMetadata instr (md-kind-id ctx kind-name))])
+      (and (not (base:null-ptr? v)) v)))
+
   (define (md-node ctx mds)   ; MetadataRefs -> MetadataRef
     (base:call-with-pointer-array mds
       (lambda (arr n) (LLVMMDNodeInContext2 (context-live-ptr ctx) arr n))))

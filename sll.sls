@@ -1142,16 +1142,29 @@
        (error "blocks do not nest: (label ...) inside a block"
               form (fstate-fname st))]
       [(eq? (car form) '=)
-       (unless (and (= (length form) 3) (local-name? (cadr form))
-                    (pair? (caddr form)))
-         (error "expected (= %name (op ...))" form (fstate-fname st)))
+       ;; (= %name (op ...)) or, with instruction-attached metadata,
+       ;; (= %name (op ...) (!md "kind")) -- the !kind marker some
+       ;; frontend passes read (presence only; empty node)
+       (unless (and (memv (length form) '(3 4))
+                    (local-name? (cadr form))
+                    (pair? (caddr form))
+                    (or (= (length form) 3)
+                        (let ([m (cadddr form)])
+                          (and (pair? m) (eq? (car m) '!md)
+                               (= (length m) 2)
+                               (string? (cadr m))))))
+         (error "expected (= %name (op ...)) with optional (!md \"kind\")"
+                form (fstate-fname st)))
        (let ([lhs (cadr form)] [rhs (caddr form)])
          (when (memq (car rhs) no-result-ops)
            (error "instruction produces no result to bind" form))
          (when (hashtable-ref (fstate-locals st) lhs #f)
            (error "duplicate local name" lhs (fstate-fname st)))
-         (hashtable-set! (fstate-locals st) lhs
-                         (emit-op st rhs (llvm-name lhs))))]
+         (let ([v (emit-op st rhs (llvm-name lhs))])
+           (when (= (length form) 4)
+             (ir:set-instruction-metadata! (fstate-ctx st) v
+                                           (cadr (cadddr form))))
+           (hashtable-set! (fstate-locals st) lhs v)))]
       [else (emit-op st form "")]))
 
   (define (fixup-phis! st)
