@@ -41,6 +41,7 @@
     GetFirstBasicBlock GetNextBasicBlock
     GetFirstInstruction GetNextInstruction
     GetInstructionOpcode GetICmpPredicate GetFCmpPredicate
+    GetInstructionParent SetOperand PositionBuilderBefore
     GetValueName2 SetValueName2 IsDeclaration
     SetLinkage SetFunctionCallConv SetAlignment
     SetTailCallKind GetTailCallKind
@@ -290,6 +291,12 @@
     (foreign-procedure "LLVMGetNextInstruction" (void*) void*))
   (define GetInstructionOpcode         ; LLVMOpcode enum value
     (foreign-procedure "LLVMGetInstructionOpcode" (void*) int))
+  (define GetInstructionParent         ; instruction -> basic block
+    (foreign-procedure "LLVMGetInstructionParent" (void*) void*))
+  (define SetOperand                   ; (user, index, new-value)
+    (foreign-procedure "LLVMSetOperand" (void* unsigned-int void*) void))
+  (define PositionBuilderBefore        ; insert point: before INSTR
+    (foreign-procedure "LLVMPositionBuilderBefore" (void* void*) void))
   (define GetICmpPredicate             ; only meaningful on icmp instructions
     (foreign-procedure "LLVMGetICmpPredicate" (void*) int))
   (define GetFCmpPredicate             ; only meaningful on fcmp instructions
