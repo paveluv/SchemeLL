@@ -75,7 +75,12 @@ the normalized-entry kind).
   against all 421 distinct corpus layouts, byte-identical; the `n`
   component's first width rides ON the letter — a parser trap).
   configure-module!'s ni merge goes through it (dedupes).
-- `abi/` — the freestanding kernel ABI, raw (no libc; standing goal:
+- `abi/` — MOVED to the Woof repo (2026-08-27): SchemeLL is a pure
+  LLVM wrapper; machine and kernel knowledge live with the systems
+  language (chapter-0 rationale — an owned backend needs the ABI at
+  that layer). Everything below describes it as it now lives in
+  ../Woof/abi/, library names unchanged.
+  The freestanding kernel ABI, raw (no libc; standing goal:
   Meik/Woof/SchemeLL on a bare kernel). `(abi common)` = splice
   generators over (sll asm); per-machine-type modules mirror Chez's
   symbols (`a6le`, `ta6le`→re-export, `a6fb`, `arm64le`, ...);

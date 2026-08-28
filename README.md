@@ -152,7 +152,7 @@ datalayout/triple, and more.
 | `(sll)` | the s-expression dialect: `build`, `jit`, `procedure`, `dump`, and `unbuild` (modules **back** into sll data) |
 | `(sll render)` | `sll->ll`: textual LLVM IR from sll data in pure Scheme |
 | `(sll asm)` | structured inline asm: named operands, computed `$N` numbering, assembled constraint strings |
-| `(abi ...)` | the freestanding kernel ABI: raw syscall and trap splices per machine type (`(abi a6le)`, `(abi a6fb)`, ... — `(abi machine)` picks the host), no libc anywhere |
+| — | the freestanding kernel ABI (`(abi ...)`) moved to the Woof repo (2026-08-27): SchemeLL is a pure LLVM wrapper; machine and kernel knowledge live with the systems language |
 | `tools/sllc.ss` | the `.sll` compiler: `.o` / `.s` / `--run` / `--exe` / IR printing |
 
 The whole stack is about **5,800 lines of Scheme**. There is no C to
