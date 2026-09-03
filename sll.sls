@@ -1720,7 +1720,55 @@
         prog)
       (for-each (lambda (item) (create-type-item! ctx item)) prog)
       (for-each (lambda (item) (fill-type-item! ctx item)) prog)
-      (for-each (lambda (item) (declare-item! ctx m globals item)) prog)
+      ;; declarations are SATISFIED BY DEFINITIONS: a (declare ...)
+      ;; naming a function this module defines, an external global
+      ;; (no initializer) whose name a defining global provides, or a
+      ;; repeat of either, is skipped -- linker semantics, so a unit
+      ;; may declare every extern it uses whether the definition sits
+      ;; in this module or in another one of the same image (M10/S3).
+      ;; Two definitions of one name still collide.
+      (let ([defined (make-eq-hashtable)] [declared (make-eq-hashtable)])
+        (define (global-decl? item)
+          ;; -> (values name definition?) for an = global item
+          (let-values ([(name lk constant? ty-form init attrs as ext-init?)
+                        (parse-global item)])
+            (values name (and init #t))))
+        (define (redundant? name)
+          (or (hashtable-ref defined name #f)
+              (hashtable-ref declared name #f)))
+        (for-each
+          (lambda (item)
+            (case (item-kind item)
+              [(define)
+               (call-with-values (lambda () (item-signature item))
+                 (lambda (retty fname . rest)
+                   (hashtable-set! defined fname #t)))]
+              [(=)
+               (unless (or (alias-item? item) (ifunc-item? item))
+                 (let-values ([(name def?) (global-decl? item)])
+                   (when def? (hashtable-set! defined name #t))))]
+              [else (void)]))
+          prog)
+        (for-each
+          (lambda (item)
+            (case (item-kind item)
+              [(declare)
+               (call-with-values (lambda () (item-signature item))
+                 (lambda (retty fname . rest)
+                   (unless (redundant? fname)
+                     (hashtable-set! declared fname #t)
+                     (declare-item! ctx m globals item))))]
+              [(=)
+               (if (or (alias-item? item) (ifunc-item? item))
+                   (declare-item! ctx m globals item)
+                   (let-values ([(name def?) (global-decl? item)])
+                     (if def?
+                         (declare-item! ctx m globals item)
+                         (unless (redundant? name)
+                           (hashtable-set! declared name #t)
+                           (declare-item! ctx m globals item)))))]
+              [else (declare-item! ctx m globals item)]))
+          prog))
       (for-each (lambda (item) (create-alias! ctx m globals item)) prog)
       (for-each (lambda (item) (create-ifunc! ctx m globals item)) prog)
       (parameterize ([function-blocks (make-eq-hashtable)])
