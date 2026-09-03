@@ -697,6 +697,20 @@
                 (pair? (cdr a)) (null? (cddr a))
                 (fixnum? (cadr a)) (positive? (cadr a)))
            (ir:set-alignment! v (cadr a))]
+          [(and (pair? a) (eq? (car a) 'section)
+                (pair? (cdr a)) (null? (cddr a)) (string? (cadr a)))
+           ;; place the global in a named section -- a zero-size
+           ;; constant in .llvm_stackmaps names a module's map's
+           ;; start under a symbol of the module's own choosing
+           (ir:set-section! v (cadr a))]
+          [(and (pair? a) (eq? (car a) 'visibility)
+                (pair? (cdr a)) (null? (cddr a))
+                (memq (cadr a) '(default hidden protected)))
+           ;; hidden: not exported from the dylib -- a symbol every
+           ;; module of a jit defines binds to ITS OWN definition
+           ;; (the per-module stackmap keeper's need)
+           (ir:set-visibility! v (case (cadr a)
+                                   [(default) 0] [(hidden) 1] [else 2]))]
           [(and (pair? a) (eq? (car a) 'addrspace)
                 (pair? (cdr a)) (null? (cddr a)) (fixnum? (cadr a)))
            ;; the builder places allocas in the datalayout's A space;
@@ -1384,7 +1398,8 @@
              [rhs (if ext-init? (cdr rhs) rhs)]
              [ty-form (cadr rhs)]
              [rest (cddr rhs)]
-             [attr? (lambda (f) (and (pair? f) (eq? (car f) 'align)))]
+             [attr? (lambda (f) (and (pair? f)
+                                     (memq (car f) '(align visibility section))))]
              [init (and (pair? rest) (not (attr? (car rest))) (car rest))]
              [attrs (if init (cdr rest) rest)])
         (unless (for-all attr? attrs)

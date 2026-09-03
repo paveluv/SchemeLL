@@ -55,7 +55,7 @@
     build-call-bundles build-invoke-bundles
     packed-struct-type?
     ;; module-level globals
-    add-global set-initializer! set-global-constant! set-linkage! linkage
+    add-global set-initializer! set-global-constant! set-linkage! set-visibility! set-section! linkage
     module-globals
     ;; basic blocks / positioning
     append-block position-at-end! insert-block
@@ -606,6 +606,9 @@
   (define (set-initializer! g const) (LLVMSetInitializer g const))
   (define (set-global-constant! g) (LLVMSetGlobalConstant g 1))
   (define (set-linkage! g linkage-int) (LLVMSetLinkage g linkage-int))
+  ;; 0 default, 1 hidden, 2 protected
+  (define (set-visibility! g vis-int) (LLVMSetVisibility g vis-int))
+  (define (set-section! g name) (LLVMSetSection g name))
   (define (linkage g) (LLVMGetLinkage g))
 
   (define (module-globals m)
