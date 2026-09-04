@@ -83,12 +83,41 @@
           (dispose! j)
           (loop)))))
 
-  (define (make)
-    (sweep-dead-jits!)
-    (target:initialize-native!)
+  ;; (make)           -> an LLJIT with LLVM's default target machine
+  ;;                     (codegen at the default level, -O2)
+  ;; (make opt-level) -> one whose codegen runs at OPT-LEVEL (none,
+  ;;                     less, default, aggressive): a host-default
+  ;;                     target machine at that level rides a JIT
+  ;;                     target machine builder, which the LLJIT
+  ;;                     builder takes; LLVMOrcCreateLLJIT consumes
+  ;;                     the builder and the machine with it (the
+  ;;                     machine record is simply dropped). 'none is
+  ;;                     FastISel: code that runs a few times -- a
+  ;;                     compiler's meta level -- need not pay -O2
+  ;;                     codegen (MeikScheme M11/S2).
+  (define make
+    (case-lambda
+      [() (make #f)]
+      [(opt-level)
+       (sweep-dead-jits!)
+       (target:initialize-native!)
+       (let ([builder
+              (if opt-level
+                  (let ([b (LLVMOrcCreateLLJITBuilder)]
+                        [tm (target:make-machine (target:default-triple)
+                                                 (target:host-cpu-name)
+                                                 (target:host-cpu-features)
+                                                 opt-level)])
+                    (LLVMOrcLLJITBuilderSetJITTargetMachineBuilder
+                      b (LLVMOrcJITTargetMachineBuilderCreateFromTargetMachine
+                          (target:machine-live-ptr tm)))
+                    b)
+                  base:null-ptr)])
+         (make-with-builder builder))]))
+  (define (make-with-builder builder)
     (let-values ([(err ptr)
                   (base:call-with-out-ptr
-                    (lambda (out) (LLVMOrcCreateLLJIT out base:null-ptr)))])
+                    (lambda (out) (LLVMOrcCreateLLJIT out builder)))])
       (base:check-error-ref 'jit:make err)
       (let ([j ($make-jit ptr
                           (LLVMOrcLLJITGetMainJITDylib ptr)

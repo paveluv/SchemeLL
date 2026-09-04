@@ -189,6 +189,8 @@
     OrcDisposeThreadSafeContext
     OrcCreateNewThreadSafeModule OrcDisposeThreadSafeModule
     OrcCreateLLJITBuilder OrcDisposeLLJITBuilder
+    OrcJITTargetMachineBuilderCreateFromTargetMachine
+    OrcLLJITBuilderSetJITTargetMachineBuilder
     OrcCreateLLJIT OrcDisposeLLJIT
     OrcLLJITGetMainJITDylib OrcLLJITAddLLVMIRModule OrcLLJITLookup
     OrcLLJITGetGlobalPrefix OrcCreateDynamicLibrarySearchGeneratorForProcess
@@ -985,6 +987,10 @@
     (foreign-procedure "LLVMOrcCreateLLJITBuilder" () void*))
   (define OrcDisposeLLJITBuilder
     (foreign-procedure "LLVMOrcDisposeLLJITBuilder" (void*) void))
+  (define OrcJITTargetMachineBuilderCreateFromTargetMachine ; consumes the machine
+    (foreign-procedure "LLVMOrcJITTargetMachineBuilderCreateFromTargetMachine" (void*) void*))
+  (define OrcLLJITBuilderSetJITTargetMachineBuilder ; the builder takes the JTMB
+    (foreign-procedure "LLVMOrcLLJITBuilderSetJITTargetMachineBuilder" (void* void*) void))
   (define OrcCreateLLJIT               ; (LLJIT* out, builder-or-null) -> LLVMErrorRef
     (foreign-procedure "LLVMOrcCreateLLJIT" (void* void*) void*))
   (define OrcDisposeLLJIT              ; -> LLVMErrorRef
