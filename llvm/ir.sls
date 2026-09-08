@@ -585,11 +585,16 @@
 
   (define (packed-struct-type? ty) (not (zero? (LLVMIsPackedStruct ty))))
 
-  ;; bytes of s as an i8 array constant; null-terminate? adds the final \00
+  ;; bytes of s -- a string's utf8, or a bytevector as is -- as an i8 array
+  ;; constant; null-terminate? adds the final \00
   (define (const-string ctx s null-terminate?)
-    (LLVMConstStringInContext2 (context-live-ptr ctx) s
-                               (bytevector-length (string->utf8 s))
-                               (if null-terminate? 0 1)))
+    (if (bytevector? s)
+        (LLVMConstStringInContext2/bytes (context-live-ptr ctx) s
+                                         (bytevector-length s)
+                                         (if null-terminate? 0 1))
+        (LLVMConstStringInContext2 (context-live-ptr ctx) s
+                                   (bytevector-length (string->utf8 s))
+                                   (if null-terminate? 0 1))))
 
   ;; ---- module-level globals -------------------------------------------------
 

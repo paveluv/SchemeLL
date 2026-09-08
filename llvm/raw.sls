@@ -54,7 +54,7 @@
     ;; Core: constants
     ConstInt ConstReal ConstNull ConstPointerNull GetUndef
     ConstVector BlockAddress
-    ConstArray2 ConstStructInContext ConstStringInContext2
+    ConstArray2 ConstStructInContext ConstStringInContext2 ConstStringInContext2/bytes
     ;; module-level globals
     AddGlobal GetFirstGlobal GetNextGlobal
     SetInitializer SetGlobalConstant GetLinkage
@@ -385,6 +385,9 @@
   (define ConstStringInContext2        ; (ctx, bytes, length, dont-null-terminate?)
     (foreign-procedure "LLVMConstStringInContext2"
                        (void* string size_t int) void*))
+  (define ConstStringInContext2/bytes  ; the same over a bytevector's bytes as they are
+    (foreign-procedure "LLVMConstStringInContext2"
+                       (void* u8* size_t int) void*))
 
   ;; --- module-level globals ------------------------------------------------
   (define AddGlobal                    ; created with external linkage, no init

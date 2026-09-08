@@ -258,8 +258,8 @@
          [else (aggregate->text env tyf v)])]
       [else (error "cannot render operand" v)]))
 
-  (define (quoted-bytes s nul?)
-    (string-append "\"" (escape-bytes (string->utf8 s) nul?) "\""))
+  (define (quoted-bytes s nul?)   ; a string (its utf8) or a bytevector (as is)
+    (string-append "\"" (escape-bytes (if (bytevector? s) s (string->utf8 s)) nul?) "\""))
 
   (define (group->text env g)   ; (TY V) -> "TY V"
     (format "~a ~a" (type->text (car g))

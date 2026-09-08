@@ -1282,8 +1282,10 @@
       [(and (integer? form) (exact? form)) (ir:const-int ty form)]
       [(flonum? form) (ir:const-real ty form)]
       [(and (pair? form) (memq (car form) '(c cz)))
-       (unless (and (= (length form) 2) (string? (cadr form)))
-         (error "expected (c \"bytes\") or (cz \"bytes\")" form))
+       ;; a string's utf8, or a bytevector's bytes as they are
+       (unless (and (= (length form) 2)
+                    (or (string? (cadr form)) (bytevector? (cadr form))))
+         (error "expected (c \"bytes\") or (cz \"bytes\"), a string or a bytevector" form))
        (ir:const-string ctx (cadr form) (eq? (car form) 'cz))]
       [(and (pair? form) (eq? (car form) 'blockaddress))
        ;; in initializers: blocks of every define exist before emission

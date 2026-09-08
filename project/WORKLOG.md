@@ -2,6 +2,25 @@
 
 Newest entries first. Format: date, Done / Decided / Next.
 
+## 2026-09-07 — byte-string constants from a bytevector
+
+### Done
+- `(c BYTES)` / `(cz BYTES)` accept a bytevector beside a string, on both
+  paths: the builder through a second raw binding of
+  `LLVMConstStringInContext2` over `u8*` (`ConstStringInContext2/bytes`,
+  `ir:const-string` dispatches), the renderer through `quoted-bytes` taking
+  the bytes as they are. A string's utf8 cannot spell a byte above 127;
+  Woof's base64 global initializer (its P30) hands sll the decoded
+  bytevector for MeikScheme's byte-encoded quote stream (M13/S5).
+- Suite 300/0 unchanged.
+
+### Decided
+- A bytevector in a constant means its bytes exactly; a string still
+  means its utf8. No third spelling.
+
+### Next
+- (unchanged below)
+
 ## 2026-08-22 — coverage plan + harness (levels 1+2)
 
 ### Done
