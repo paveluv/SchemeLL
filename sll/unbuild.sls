@@ -895,6 +895,13 @@
   (align-attr v)
   (let ((a (LLVMGetAlignment v))) (if (zero? a) '() `((align ,a))))]
 
+;; a function's section, as the (section "name") define deco the renderer writes
+[define
+  (section-attr f)
+  [let
+   ((s (base:cstring->string (LLVMGetSection f))))
+   (if (and s (not (string=? s ""))) `((section ,s)) '())]]
+
  ;; ---- instructions
  ;; ------------------------------------------------------------------
 
@@ -1428,9 +1435,6 @@
   [unless
    (zero? (LLVMGetVisibility f))
    (not-modeled "visibility (hidden/protected)")]
-  [let
-   ((s (base:cstring->string (LLVMGetSection f))))
-   (when (and s (not (string=? s ""))) (not-modeled "sections"))]
   ;; attribute indices: return (0), params (1..n); the function position (~0) is
   ;; handled by fn-attr-part
   [do
@@ -1513,6 +1517,7 @@
        ,(unbuild-type (ir:type-return-type fnty))
        (,gname ,@(map unbuild-type (ir:type-param-types fnty)) ,@variadic)
        ,@(fn-attr-part f)
+       ,@(section-attr f)
        ,@(align-attr f)
        ,@(gc-attr f)]
      [let
@@ -1527,6 +1532,7 @@
             params]
          ,@variadic]
         ,@(fn-attr-part f)
+        ,@(section-attr f)
         ,@(align-attr f)
         ,@(gc-attr f)
         ;; the personality is any ptr constant: @fn, null, undef

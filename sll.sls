@@ -537,7 +537,7 @@
          [and
           (pair? b)
           (pair? (car b))
-          (memq (caar b) '(attributes align gc personality))]
+          (memq (caar b) '(attributes section align gc personality))]
          (skip (cdr b))
          b]]]
       (tbl (make-eq-hashtable))]
@@ -2213,6 +2213,14 @@
             (error "expected (gc \"name\")" g fname)]
            (ir:set-gc! f (cadr g))]
           (deco (cdr b))]
+         [(section)
+          [let
+           ((s (car b)))
+           [unless
+            (and (= (length s) 2) (string? (cadr s)))
+            (error "expected (section \"name\")" s fname)]
+           (ir:set-section! f (cadr s))]
+          (deco (cdr b))]
          (else (void))]]]
       (hashtable-set! globals fname f)]]]]]
 
@@ -2255,7 +2263,7 @@
         skip
         ((b full-body0))
         [if
-         (and (pair? b) (pair? (car b)) (memq (caar b) '(attributes align gc)))
+         (and (pair? b) (pair? (car b)) (memq (caar b) '(attributes align gc section)))
          (skip (cdr b))
          b]]]
       ;; optional (personality type @fn) before the first block, as in `define

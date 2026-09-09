@@ -1048,6 +1048,13 @@
         (eq? (caar body) 'attributes)
         (car body)]]
       (body (if attrs (cdr body) body))
+      [sect
+       [and
+        (pair? body)
+        (pair? (car body))
+        (eq? (caar body) 'section)
+        (car body)]]
+      (body (if sect (cdr body) body))
       [algn
        [and
         (pair? body)
@@ -1074,6 +1081,7 @@
        (type->text ty)
        (signature->text env sig #t)
        (if attrs (attrs-words (cdr attrs)) "")
+       (if sect (format "section ~s" (cadr sect)) "")
        (if algn (format "align ~a" (cadr algn)) "")
        (if gc (format "gc ~s" (cadr gc)) "")
        [if

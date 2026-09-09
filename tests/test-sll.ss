@@ -104,6 +104,37 @@
  "align attribute lands in the IR"
  (contains? (sll:dump mem-prog) "align 16")]
 
+(t:section "sll: the define's section deco")
+
+;; (section "name") sits between the attributes and the alignment, as LLVM's
+;; grammar has it; the build applies it and unbuild reads it back. (A function
+;; naming its section is how an alignment below the target's preferred one
+;; reaches the machine code: LLVM's printer keeps a smaller explicit alignment
+;; only then.)
+[define
+ sect-prog
+ '[[define
+    i64
+    (@packed (i64 %x))
+    (attributes nounwind)
+    (section ".text")
+    (align 1)
+    (label %entry (= %r (add i64 %x 1)) (ret i64 %r))]]]
+[t:check
+ "section deco lands in the IR, before the alignment"
+ (contains? (sll:dump sect-prog) "section \".text\" align 1")]
+[let* [(sc (jit:make-context))
+       (m (sll:build (jit:context-ir sc) "sect" sect-prog))
+       (back (sll:unbuild m))
+       (f (car back))]
+ [t:check
+  "unbuild reads the section back, between the attributes and the alignment"
+  (and (equal? (list-ref f 4) '(section ".text"))
+       (equal? (list-ref f 5) '(align 1)))]
+ [t:check
+  "and the JIT runs the packed function"
+  (= ((jit:function (sll:jit sect-prog) "packed") 41) 42)]]
+
 (t:section "sll: casts, select, floats")
 
 [define
