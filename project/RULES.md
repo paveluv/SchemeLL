@@ -109,8 +109,11 @@ A dangling pointer takes down the whole Chez session, so:
 - Initialize the formatter with `git submodule update --init --recursive`,
   or clone SchemeLL with `--recurse-submodules`.
 - Formatting is enforced pre-commit: the hook in `project/hooks/pre-commit`
-  formats the staged Scheme files and aborts the commit if anything changed
-  (review, `git add`, commit again).
+  launches `project/hooks/pre-commit.sps`, which uses `(schematter hook)`
+  to format staged Scheme files (including `.sll`) and Scheme code blocks
+  in `.md` and `.markdown` files. It aborts the commit if anything changed
+  or could not be formatted (review, `git add`, commit again). The launcher
+  honors `CHEZ` and detects `scheme` or `chez-scheme` like the Makefile.
 - One-time setup per clone: `git config core.hooksPath project/hooks`.
 
 ## Procedures

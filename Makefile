@@ -47,18 +47,18 @@ examples: build
 	  ./examples/aot/hello-metaprog && rm -f examples/aot/hello-metaprog
 	@echo "examples ok"
 
-schematter/schematter.ss:
+schematter/schematter.sps:
 	@echo "Schematter is missing; run: git submodule update --init --recursive" >&2
 	@exit 1
 
 # Format all tracked Scheme sources, including .sll (prints changed paths).
-format: schematter/schematter.ss
+format: schematter/schematter.sps
 	git ls-files -z -- $(SCHEME_SOURCES) | \
-	  xargs -0 $(CHEZ) --script schematter/schematter.ss -i --
+	  xargs -0 $(CHEZ) --script schematter/schematter.sps -i --
 
-check-format: schematter/schematter.ss
+check-format: schematter/schematter.sps
 	git ls-files -z -- $(SCHEME_SOURCES) | \
-	  xargs -0 $(CHEZ) --script schematter/schematter.ss --check --
+	  xargs -0 $(CHEZ) --script schematter/schematter.sps --check --
 
 # Compile every library to Chez object files (*.so -- Chez objects,
 # not ELF; gitignored). Any later run with --libdirs reuses them; the

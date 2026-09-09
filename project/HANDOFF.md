@@ -150,8 +150,10 @@ the normalized-entry kind).
   with the module's who (`sll:build`, `sll:unbuild`, ...). The corpus
   classifier matches on these who symbols — renaming one breaks
   tests/corpus.ss classification.
-- `make format` and the pre-commit hook (project/hooks) use the pinned
-  `schematter/schematter.ss` formatter, including for `.sll` files.
+- `make format` uses the pinned `schematter/schematter.sps` formatter,
+  including for `.sll` files. The pre-commit launcher (project/hooks)
+  selects Chez and runs `pre-commit.sps`, which uses `(schematter hook)`
+  for staged Scheme sources and Markdown samples.
   Initialize it with `git submodule update --init --recursive`.
   It REFORMATS: exact-string anchors in files may change. Commits abort
   if it reformats — re-add and commit again. `make check-format` checks

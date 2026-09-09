@@ -2,6 +2,35 @@
 
 Newest entries first. Format: date, Done / Decided / Next.
 
+## 2026-09-09 — Use Schematter's pre-commit helpers
+
+### Done
+- Updated `schematter/` to `d220dcf`, including `(schematter hook)` and the
+  renamed `schematter.sps` CLI.
+- Added `project/hooks/pre-commit.sps`, using `format-staged` to select,
+  format, and report staged Scheme sources (including `.sll`) and Scheme
+  blocks in `.md` and `.markdown` files.
+- Reduced the shell hook to submodule initialization guidance and Chez
+  selection, preserving the `CHEZ` override and `chez-scheme` fallback.
+- Updated the Makefile's CLI path and documented the hook's Markdown support.
+- All 109 upstream CLI tests passed. Local Git fixtures verified commit
+  rejection and retry, all seven extensions, filenames with spaces, Markdown
+  prose preservation, unstaged files, malformed input, missing-submodule
+  guidance, the `CHEZ` override, and a simulated `chez-scheme` fallback.
+- Verified `make check-format`, formatting of the new Scheme entry point and
+  edited Markdown files, shell syntax, and `git diff --check`.
+- Rebased onto `origin/main` at `4e83cf8` and formatted the incoming
+  function-section changes in `sll.sls`, `sll/unbuild.sls`, and
+  `tests/test-sll.ss`. The combined tree passes `make build`, `make test`
+  (303 passed, 0 failed), and the formatting checks.
+
+### Decided
+- Keep Chez executable selection in the shell launcher and use `--script`
+  for the Scheme entry point so its library path is set before imports.
+
+### Next
+- (unchanged below)
+
 ## 2026-09-08 — Reapply Schematter with original form separation
 
 ### Done

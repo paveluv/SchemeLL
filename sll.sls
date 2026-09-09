@@ -2263,7 +2263,10 @@
         skip
         ((b full-body0))
         [if
-         (and (pair? b) (pair? (car b)) (memq (caar b) '(attributes align gc section)))
+         [and
+          (pair? b)
+          (pair? (car b))
+          (memq (caar b) '(attributes align gc section))]
          (skip (cdr b))
          b]]]
       ;; optional (personality type @fn) before the first block, as in `define

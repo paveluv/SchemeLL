@@ -204,7 +204,8 @@ Schematter is pinned as a submodule. Initialize it with
 (or clone with `--recurse-submodules`), then use `make format` to format all
 tracked Scheme sources, including `.sll`, and `make check-format` to check
 them. Enable the pre-commit formatting hook with
-`git config core.hooksPath project/hooks`.
+`git config core.hooksPath project/hooks`. The hook also formats Scheme
+code blocks in staged Markdown files.
 
 Then read **`examples/README.md`** — 37 examples in three buckets:
 sll scripting (21), the binding layers (10), and AOT objects &

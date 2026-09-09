@@ -123,14 +123,16 @@
 [t:check
  "section deco lands in the IR, before the alignment"
  (contains? (sll:dump sect-prog) "section \".text\" align 1")]
-[let* [(sc (jit:make-context))
-       (m (sll:build (jit:context-ir sc) "sect" sect-prog))
-       (back (sll:unbuild m))
-       (f (car back))]
+[let*
+ [(sc (jit:make-context))
+  (m (sll:build (jit:context-ir sc) "sect" sect-prog))
+  (back (sll:unbuild m))
+  (f (car back))]
  [t:check
   "unbuild reads the section back, between the attributes and the alignment"
-  (and (equal? (list-ref f 4) '(section ".text"))
-       (equal? (list-ref f 5) '(align 1)))]
+  [and
+   (equal? (list-ref f 4) '(section ".text"))
+   (equal? (list-ref f 5) '(align 1))]]
  [t:check
   "and the JIT runs the packed function"
   (= ((jit:function (sll:jit sect-prog) "packed") 41) 42)]]

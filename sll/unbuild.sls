@@ -895,8 +895,9 @@
   (align-attr v)
   (let ((a (LLVMGetAlignment v))) (if (zero? a) '() `((align ,a))))]
 
-;; a function's section, as the (section "name") define deco the renderer writes
-[define
+ ;; a function's section, as the (section "name") define deco the renderer
+ ;; writes
+ [define
   (section-attr f)
   [let
    ((s (base:cstring->string (LLVMGetSection f))))

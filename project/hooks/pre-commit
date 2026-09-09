@@ -1,13 +1,8 @@
 #!/bin/sh
-# pre-commit: keep Scheme sources formatted (see project/RULES.md).
+# pre-commit: format Scheme sources and Markdown samples with Schematter.
 # Install once per clone:  git config core.hooksPath project/hooks
 
-FORMAT=schematter/schematter.ss
-
-set -- '*.sls' '*.ss' '*.scm' '*.sps' '*.sll'
-git diff --cached --quiet --diff-filter=ACMR -- "$@" && exit 0
-
-if [ ! -f "$FORMAT" ]; then
+if [ ! -f schematter/schematter/hook.sls ]; then
     echo "pre-commit: Schematter is missing; run: git submodule update --init --recursive" >&2
     exit 1
 fi
@@ -19,14 +14,4 @@ if [ -z "$CHEZ" ]; then
     fi
 fi
 
-changed=$(git diff --cached --name-only -z --diff-filter=ACMR -- "$@" |
-    xargs -0 "$CHEZ" --script "$FORMAT" -i --) || exit 1
-
-if [ -n "$changed" ]; then
-    echo "pre-commit: Schematter reformatted:" >&2
-    echo "$changed" >&2
-    echo "review the changes, git add them, and commit again." >&2
-    exit 1
-fi
-
-exit 0
+exec "$CHEZ" --script project/hooks/pre-commit.sps
