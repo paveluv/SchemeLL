@@ -2,6 +2,34 @@
 
 Newest entries first. Format: date, Done / Decided / Next.
 
+## 2026-09-08 — Schematter submodule and formatting
+
+### Done
+- Added `https://github.com/paveluv/Schematter.git` as the `schematter/`
+  submodule, now pinned at `d7943eb43e4e0008718f375019741b850bdba45d`.
+- Reformatted all 73 tracked Scheme sources, including the `.sll` examples.
+- Switched `make format` and the pre-commit hook to Schematter; added
+  `make check-format`. All three cover `.sls`, `.ss`, `.scm`, `.sps`, and
+  `.sll`, with filenames passed using NUL delimiters.
+- Documented submodule initialization and the formatting workflow in the
+  README, rules, and handoff notes.
+- Formatted all three Scheme code samples in `README.md` with Schematter,
+  verified that a second pass leaves them unchanged, and added an explicit
+  note about the canonical form before the first sample.
+- Pulled Schematter's native Markdown support and ran its CLI directly on
+  `README.md` with `-i` and `--check`. The README stayed byte-identical;
+  all 12 upstream Markdown tests and `make check-format` passed.
+- Verified `make check-format`, `make test` (300 passed, 0 failed),
+  `make examples`, and `git diff --check`. Integration smoke checks covered
+  all five extensions, filenames with spaces, missing-submodule guidance,
+  and the hook's reformat/re-add workflow.
+
+### Decided
+- Keep the formatter pinned with the project and use its canonical defaults.
+
+### Next
+- (unchanged below)
+
 ## 2026-09-07 — byte-string constants from a bytevector
 
 ### Done

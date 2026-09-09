@@ -14,24 +14,33 @@ compiler in Scheme, sll is the data structure you lower to — then JIT
 it, optimize it, or emit native objects, all from the same
 representation.
 
+The project's Scheme code, including the samples below, uses
+[Schematter](https://github.com/paveluv/Schematter) canonical form:
+`(...)` for single-line lists and `[...]` for multiline lists.
+
 ```scheme
 (import (chezscheme) (prefix (sll) sll:))
 
-(define fact
-  (sll:procedure
-    '((define i64 (@fact (i64 %n))
-        (label %entry
-          (= %base (icmp slt i64 %n 2))
-          (br i1 %base (label %one) (label %rec)))
-        (label %one (ret i64 1))
-        (label %rec
-          (= %n1 (sub i64 %n 1))
-          (= %f (call i64 (@fact (i64 %n1))))
-          (= %r (mul i64 %n %f))
-          (ret i64 %r))))
-    "fact"))
+[define
+ fact
+ [sll:procedure
+  '[[define
+     i64
+     (@fact (i64 %n))
+     [label
+      %entry
+      (= %base (icmp slt i64 %n 2))
+      (br i1 %base (label %one) (label %rec))]
+     (label %one (ret i64 1))
+     [label
+      %rec
+      (= %n1 (sub i64 %n 1))
+      (= %f (call i64 (@fact (i64 %n1))))
+      (= %r (mul i64 %n %f))
+      (ret i64 %r)]]]
+  "fact"]]
 
-(fact 20)   ; => 2432902008176640000, running as native code
+(fact 20)                       ; => 2432902008176640000, running as native code
 ```
 
 That's the whole program: one import, and IR-as-data becomes a
@@ -45,17 +54,24 @@ Because an sll program is a list, generating code is just building
 lists. Here is a fully unrolled `x^n`, specialized at run time:
 
 ```scheme
-(define (power-prog n)
-  `((define i64 (@pow (i64 %x))
-      (label %entry
-        ,@(let loop ([i 1] [prev '%x] [acc '()])
-            (if (>= i n)
-                (reverse (cons `(ret i64 ,prev) acc))
-                (let ([next (sll:name '%p i)])
-                  (loop (+ i 1) next
-                        (cons `(= ,next (mul i64 ,prev %x)) acc)))))))))
+[define
+ (power-prog n)
+ `[[define
+    i64
+    (@pow (i64 %x))
+    [label
+     %entry
+     ,@[let
+        loop
+        ((i 1) (prev '%x) (acc '()))
+        [if
+         (>= i n)
+         (reverse (cons `(ret i64 ,prev) acc))
+         [let
+          ((next (sll:name '%p i)))
+          (loop (+ i 1) next (cons `(= ,next (mul i64 ,prev %x)) acc))]]]]]]]
 
-((sll:procedure (power-prog 11) "pow") 2)   ; => 2048
+((sll:procedure (power-prog 11) "pow") 2) ; => 2048
 ```
 
 (`sll:name` assembles `%`/`@` names from symbol, string, and integer
@@ -83,20 +99,25 @@ the host's kernel ABI and builds its inline asm structurally, at
 compile time:
 
 ```scheme
-(scheme
-  (import (prefix (sll asm) asm:))
-  (define-values (instr nr-reg ret-reg arg-regs clobbers sys-write sys-exit)
-    (case (machine-type)
-      [(a6le ta6le)       (values "syscall" 'rax 'rax '(rdi rsi rdx) '(rcx r11) 1 231)]
-      [(arm64le tarm64le) (values "svc #0"  'x8  'x0  '(x0 x1 x2)   '()        64 94)]))
-  (define (syscall nr . args) ...))          ; a few lines of generator
+[scheme
+ (import (prefix (sll asm) asm:))
+ [define-values
+  (instr nr-reg ret-reg arg-regs clobbers sys-write sys-exit)
+  [case
+   (machine-type)
+   ((a6le ta6le) (values "syscall" 'rax 'rax '(rdi rsi rdx) '(rcx r11) 1 231))
+   ((arm64le tarm64le) (values "svc #0" 'x8 'x0 '(x0 x1 x2) '() 64 94))]]
+ (define (syscall nr . args) ...)] ; a few lines of generator
 
-(define void (@_start)
-  (label %entry
-    ...                                      ; plain sll, verbatim
-    ,@(syscall sys-write '(i64 1) '(ptr %buf) '(i64 17))
-    ,@(syscall sys-exit)
-    (unreachable)))
+[define
+ void
+ (@_start)
+ [label
+  %entry
+  ...                           ; plain sll, verbatim
+  ,@(syscall sys-write '(i64 1) '(ptr %buf) '(i64 17))
+  ,@(syscall sys-exit)
+  (unreachable)]]
 ```
 
 ```
@@ -177,6 +198,13 @@ $ make reference   # (optional) fetch LLVM's test corpus for `make corpus`
 $ scheme --libdirs . --script examples/sll/01-add.ss
 2 + 40 = 42
 ```
+
+Schematter is pinned as a submodule. Initialize it with
+`git submodule update --init --recursive`
+(or clone with `--recurse-submodules`), then use `make format` to format all
+tracked Scheme sources, including `.sll`, and `make check-format` to check
+them. Enable the pre-commit formatting hook with
+`git config core.hooksPath project/hooks`.
 
 Then read **`examples/README.md`** — 37 examples in three buckets:
 sll scripting (21), the binding layers (10), and AOT objects &

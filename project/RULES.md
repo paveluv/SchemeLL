@@ -102,9 +102,12 @@ A dangling pointer takes down the whole Chez session, so:
 
 ## Formatting
 
-- All Scheme sources (`*.sls`, `*.ss`) are formatted with
-  `~/.e/tools/scheme-format` (`-i` for in-place). `make format` formats every
-  tracked Scheme file.
+- All tracked Scheme sources (`*.sls`, `*.ss`, `*.scm`, `*.sps`, and `*.sll`)
+  are formatted with [Schematter](../schematter/README.md), pinned as the
+  `schematter/` submodule. `make format` formats them in place;
+  `make check-format` checks without writing.
+- Initialize the formatter with `git submodule update --init --recursive`,
+  or clone SchemeLL with `--recurse-submodules`.
 - Formatting is enforced pre-commit: the hook in `project/hooks/pre-commit`
   formats the staged Scheme files and aborts the commit if anything changed
   (review, `git add`, commit again).

@@ -5,53 +5,62 @@
 ;;
 ;;                    -- Queen, "I'm in Love with My Car"
 ;;
-;; hello-metaprog.sll -- the inverted format: the file IS sll data, and
-;; Scheme is escaped INTO it. A .sll file is one big quasiquote body:
-;; ,expr and ,@expr evaluate at compile time, and top-level
-;; (scheme ...) forms hold the definitions (and imports!) they use.
+;; hello-metaprog.sll -- the inverted format: the file IS sll data, and Scheme
+;; is escaped INTO it. A .sll file is one big quasiquote body: ,expr and ,@expr
+;; evaluate at compile time, and top-level (scheme ...) forms hold the
+;; definitions (and imports!) they use.
 ;;
-;; This is the portable syscall hello as a single self-contained .sll.
-;; It adapts to the compiling host (x86-64 or ARM64 Linux) by picking
-;; the kernel ABI at compile time, and it builds its inline asm with
-;; (sll asm) -- registers as symbols, constraint strings computed.
+;; This is the portable syscall hello as a single self-contained .sll. It adapts
+;; to the compiling host (x86-64 or ARM64 Linux) by picking the kernel ABI at
+;; compile time, and it builds its inline asm with (sll asm) -- registers as
+;; symbols, constraint strings computed.
 ;;
 ;;   sllc --render-llvm-ir examples/aot/hello-metaprog.sll  (see the result)
 ;;   sllc --opt O2 --exe   examples/aot/hello-metaprog.sll  (x86-64 Linux)
 
-(scheme
-  (import (prefix (sll asm) asm:))
+[scheme
+ (import (prefix (sll asm) asm:))
 
-  ;; the compiling host's kernel ABI, bound by name
-  (define-values (instr nr-reg ret-reg arg-regs clobbers sys-write sys-exit)
-    (case (machine-type)
-      [(a6le ta6le)                                    ; x86-64 Linux
-       (values "syscall" 'rax 'rax '(rdi rsi rdx) '(rcx r11) 1 231)]
-      [(arm64le tarm64le)                              ; ARM64 Linux
-       (values "svc #0" 'x8 'x0 '(x0 x1 x2) '() 64 94)]
-      [(a6fb ta6fb)                                    ; FreeBSD amd64
-       (values "syscall" 'rax 'rax '(rdi rsi rdx) '(rcx r11) 4 1)]
-      [else (error 'hello-metaprog "no syscall table for this host"
-                   (machine-type))]))
+ ;; the compiling host's kernel ABI, bound by name
+ [define-values
+  (instr nr-reg ret-reg arg-regs clobbers sys-write sys-exit)
+  [case
+   (machine-type)
+   [(a6le ta6le)                ; x86-64 Linux
+    (values "syscall" 'rax 'rax '(rdi rsi rdx) '(rcx r11) 1 231)]
+   [(arm64le tarm64le)          ; ARM64 Linux
+    (values "svc #0" 'x8 'x0 '(x0 x1 x2) '() 64 94)]
+   [(a6fb ta6fb)                ; FreeBSD amd64
+    (values "syscall" 'rax 'rax '(rdi rsi rdx) '(rcx r11) 4 1)]
+   [else
+    (error 'hello-metaprog "no syscall table for this host" (machine-type))]]]
 
-  (define (syscall nr . args)   ; -> the sll forms for one syscall
-    `((call i64 (,(asm:expr
-                    (list `(out (reg ,ret-reg))
-                          `(in (reg ,nr-reg))
-                          (map (lambda (r) `(in (reg ,r)))
-                               (list-head arg-regs (length args)))
-                          `(clobber ,@clobbers memory))
-                    instr
-                    'sideeffect)
-                 (i64 ,nr) ,@args)))))
+ [define
+  (syscall nr . args)           ; -> the sll forms for one syscall
+  `[[call
+     i64
+     [,[asm:expr
+        [list
+         `(out (reg ,ret-reg))
+         `(in (reg ,nr-reg))
+         (map (lambda (r) `(in (reg ,r))) (list-head arg-regs (length args)))
+         `(clobber ,@clobbers memory)]
+        instr
+        'sideeffect]
+      (i64 ,nr)
+      ,@args]]]]]
 
-(define void (@_start)
-  (label %entry
-    (= %buf (alloca (array 24 i8) (align 8)))
-    (store (i64 5989836361474794824) (ptr %buf) (align 8))   ; "Hello, S"
-    (= %p8 (getelementptr i8 (ptr %buf) (i64 8)))
-    (store (i64 2399376699992402019) (ptr %p8) (align 8))    ; "chemeLL!"
-    (= %p16 (getelementptr i8 (ptr %buf) (i64 16)))
-    (store (i8 10) (ptr %p16))
-    ,@(syscall sys-write '(i64 1) '(ptr %buf) '(i64 17))
-    ,@(syscall sys-exit '(i64 0))
-    (unreachable)))
+[define
+ void
+ (@_start)
+ [label
+  %entry
+  (= %buf (alloca (array 24 i8) (align 8)))
+  (store (i64 5989836361474794824) (ptr %buf) (align 8)) ; "Hello, S"
+  (= %p8 (getelementptr i8 (ptr %buf) (i64 8)))
+  (store (i64 2399376699992402019) (ptr %p8) (align 8))  ; "chemeLL!"
+  (= %p16 (getelementptr i8 (ptr %buf) (i64 16)))
+  (store (i8 10) (ptr %p16))
+  ,@(syscall sys-write '(i64 1) '(ptr %buf) '(i64 17))
+  ,@(syscall sys-exit '(i64 0))
+  (unreachable)]]

@@ -2,20 +2,28 @@
 # pre-commit: keep Scheme sources formatted (see project/RULES.md).
 # Install once per clone:  git config core.hooksPath project/hooks
 
-FORMAT="$HOME/.e/tools/scheme-format"
+FORMAT=schematter/schematter.ss
 
-files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(sls|ss)$')
-[ -z "$files" ] && exit 0
+set -- '*.sls' '*.ss' '*.scm' '*.sps' '*.sll'
+git diff --cached --quiet --diff-filter=ACMR -- "$@" && exit 0
 
-if [ ! -x "$FORMAT" ]; then
-    echo "pre-commit: $FORMAT not found or not executable; cannot format" >&2
+if [ ! -f "$FORMAT" ]; then
+    echo "pre-commit: Schematter is missing; run: git submodule update --init --recursive" >&2
     exit 1
 fi
 
-changed=$("$FORMAT" -i $files) || exit 1
+# Match the Makefile's Chez selection, including FreeBSD and $CHEZ overrides.
+if [ -z "$CHEZ" ]; then
+    if command -v scheme >/dev/null 2>&1; then CHEZ=scheme
+    else CHEZ=chez-scheme
+    fi
+fi
+
+changed=$(git diff --cached --name-only -z --diff-filter=ACMR -- "$@" |
+    xargs -0 "$CHEZ" --script "$FORMAT" -i --) || exit 1
 
 if [ -n "$changed" ]; then
-    echo "pre-commit: scheme-format reformatted:" >&2
+    echo "pre-commit: Schematter reformatted:" >&2
     echo "$changed" >&2
     echo "review the changes, git add them, and commit again." >&2
     exit 1

@@ -1,338 +1,471 @@
 ;;; (tests normalize) -- strip constructs sll does not model from a parsed
-;;; module, so the corpus round-trip measures what sll DOES model on files
-;;; that also use what it doesn't (see project/coverage-plan.md, level 3).
-;;; Every strip below corresponds to a row in project/not-modeled.md;
-;;; modeling a construct later means deleting its strip here, at which
-;;; point thousands of corpus files start testing it.
-;;; Import as: (prefix (tests normalize) n:)
-(library (tests normalize)
-  (export normalize-module! comparable-ir)
-  (import (chezscheme)
-          (prefix (llvm base) base:)
-          (prefix (llvm raw) LLVM)
-          (prefix (llvm ir) ir:))
+;;; module, so the corpus round-trip measures what sll DOES model on files that
+;;; also use what it doesn't (see project/coverage-plan.md, level 3). Every
+;;; strip below corresponds to a row in project/not-modeled.md; modeling a
+;;; construct later means deleting its strip here, at which point thousands of
+;;; corpus files start testing it. Import as: (prefix (tests normalize) n:)
+[library
+ (tests normalize)
+ (export normalize-module! comparable-ir)
+ [import
+  (chezscheme)
+  (prefix (llvm base) base:)
+  (prefix (llvm raw) LLVM)
+  (prefix (llvm ir) ir:)]
 
-  (define function-index 4294967295)   ; LLVMAttributeIndex ~0U
+ (define function-index 4294967295) ; LLVMAttributeIndex ~0U
 
-  ;; strip every attribute at one index of a function or call site
-  (define (strip-attrs-at! v idx count-at get-at remove-enum remove-string)
-    (let ([n (count-at v idx)])
-      (unless (zero? n)
-        (let ([arr (foreign-alloc (fx* 8 n))])
-          (get-at v idx arr)
-          (do ([i 0 (fx+ i 1)])
-              ((fx= i n))
-            (let ([a (foreign-ref 'unsigned-64 arr (fx* 8 i))])
-              (if (zero? (LLVMIsStringAttribute a))
-                  ;; enum and type attributes both carry an enum kind
-                  (remove-enum v idx (LLVMGetEnumAttributeKind a))
-                  (let-values ([(kp klen)
-                                (base:call-with-out-ptr
-                                  (lambda (out)
-                                    (LLVMGetStringAttributeKind a out)))])
-                    (let ([k (base:cstring->string/len kp klen)])
-                      (remove-string v idx k (string-length k)))))))
-          (foreign-free arr)))))
+ ;; strip every attribute at one index of a function or call site
+ [define
+  (strip-attrs-at! v idx count-at get-at remove-enum remove-string)
+  [let
+   ((n (count-at v idx)))
+   [unless
+    (zero? n)
+    [let
+     ((arr (foreign-alloc (fx* 8 n))))
+     (get-at v idx arr)
+     [do
+      ((i 0 (fx+ i 1)))
+      ((fx= i n))
+      [let
+       ((a (foreign-ref 'unsigned-64 arr (fx* 8 i))))
+       [if
+        (zero? (LLVMIsStringAttribute a))
+        ;; enum and type attributes both carry an enum kind
+        (remove-enum v idx (LLVMGetEnumAttributeKind a))
+        [let-values
+         [[(kp klen)
+           [base:call-with-out-ptr
+            (lambda (out) (LLVMGetStringAttributeKind a out))]]]
+         [let
+          ((k (base:cstring->string/len kp klen)))
+          (remove-string v idx k (string-length k))]]]]]
+     (foreign-free arr)]]]]
 
-  (define (strip-fn-attrs! f nparams)
-    (do ([i -1 (+ i 1)])
-        ((> i nparams))
-      (strip-attrs-at! f (if (= i -1) function-index i)
-                       LLVMGetAttributeCountAtIndex
-                       LLVMGetAttributesAtIndex
-                       LLVMRemoveEnumAttributeAtIndex
-                       LLVMRemoveStringAttributeAtIndex)))
+ [define
+  (strip-fn-attrs! f nparams)
+  [do
+   ((i -1 (+ i 1)))
+   ((> i nparams))
+   [strip-attrs-at!
+    f
+    (if (= i -1) function-index i)
+    LLVMGetAttributeCountAtIndex
+    LLVMGetAttributesAtIndex
+    LLVMRemoveEnumAttributeAtIndex
+    LLVMRemoveStringAttributeAtIndex]]]
 
-  (define (strip-callsite-attrs! c nargs)
-    (do ([i -1 (+ i 1)])
-        ((> i nargs))
-      (strip-attrs-at! c (if (= i -1) function-index i)
-                       LLVMGetCallSiteAttributeCount
-                       LLVMGetCallSiteAttributes
-                       LLVMRemoveCallSiteEnumAttribute
-                       LLVMRemoveCallSiteStringAttribute)))
+ [define
+  (strip-callsite-attrs! c nargs)
+  [do
+   ((i -1 (+ i 1)))
+   ((> i nargs))
+   [strip-attrs-at!
+    c
+    (if (= i -1) function-index i)
+    LLVMGetCallSiteAttributeCount
+    LLVMGetCallSiteAttributes
+    LLVMRemoveCallSiteEnumAttribute
+    LLVMRemoveCallSiteStringAttribute]]]
 
-  ;; clear non-debug metadata attachments (debug ones go with
-  ;; StripModuleDebugInfo at the module level)
-  (define (strip-instruction-metadata! ins)
-    (let ([nout (foreign-alloc 8)])
-      (foreign-set! 'unsigned-64 nout 0 0)
-      (let* ([entries (LLVMInstructionGetAllMetadataOtherThanDebugLoc ins nout)]
-             [n (foreign-ref 'unsigned-64 nout 0)])
-        (foreign-free nout)
-        (do ([i 0 (fx+ i 1)])
-            ((fx= i n))
-          (LLVMSetMetadata ins (LLVMValueMetadataEntriesGetKind entries i)
-                           base:null-ptr))
-        (unless (base:null-ptr? entries)
-          (LLVMDisposeValueMetadataEntries entries)))))
+ ;; clear non-debug metadata attachments (debug ones go with
+ ;; StripModuleDebugInfo at the module level)
+ [define
+  (strip-instruction-metadata! ins)
+  [let
+   ((nout (foreign-alloc 8)))
+   (foreign-set! 'unsigned-64 nout 0 0)
+   [let*
+    [(entries (LLVMInstructionGetAllMetadataOtherThanDebugLoc ins nout))
+     (n (foreign-ref 'unsigned-64 nout 0))]
+    (foreign-free nout)
+    [do
+     ((i 0 (fx+ i 1)))
+     ((fx= i n))
+     [LLVMSetMetadata
+      ins
+      (LLVMValueMetadataEntriesGetKind entries i)
+      base:null-ptr]]
+    [unless
+     (base:null-ptr? entries)
+     (LLVMDisposeValueMetadataEntries entries)]]]]
 
-  (define call-opcodes '(45 5 67))     ; call, invoke, callbr
+ (define call-opcodes '(45 5 67)) ; call, invoke, callbr
 
-  (define (normalize-instruction! ins)
-    (strip-instruction-metadata! ins)
-    (when (memv (ir:instruction-opcode ins) call-opcodes)
-      (LLVMSetInstructionCallConv ins 0)
-      (strip-callsite-attrs! ins (LLVMGetNumArgOperands ins))))
+ [define
+  (normalize-instruction! ins)
+  (strip-instruction-metadata! ins)
+  [when
+   (memv (ir:instruction-opcode ins) call-opcodes)
+   (LLVMSetInstructionCallConv ins 0)
+   (strip-callsite-attrs! ins (LLVMGetNumArgOperands ins))]]
 
-  (define (normalize-function! f)
-    (LLVMGlobalClearMetadata f)
-    (LLVMSetComdat f base:null-ptr)
-    (LLVMSetDLLStorageClass f 0)
-    (LLVMSetFunctionCallConv f 0)
-    (LLVMSetVisibility f 0)
-    (LLVMSetSection f "")
-    (LLVMSetUnnamedAddress f 0)
-    (strip-fn-attrs! f (length (ir:function-params f)))
-    (for-each
-      (lambda (bb)
-        (for-each normalize-instruction! (ir:block-instructions bb)))
-      (ir:function-blocks f)))
+ [define
+  (normalize-function! f)
+  (LLVMGlobalClearMetadata f)
+  (LLVMSetComdat f base:null-ptr)
+  (LLVMSetDLLStorageClass f 0)
+  (LLVMSetFunctionCallConv f 0)
+  (LLVMSetVisibility f 0)
+  (LLVMSetSection f "")
+  (LLVMSetUnnamedAddress f 0)
+  (strip-fn-attrs! f (length (ir:function-params f)))
+  [for-each
+   (lambda (bb) (for-each normalize-instruction! (ir:block-instructions bb)))
+   (ir:function-blocks f)]]
 
-  (define (normalize-alias! a)
-    (LLVMGlobalClearMetadata a)
-    (LLVMSetDLLStorageClass a 0)
-    (LLVMSetVisibility a 0)
-    (LLVMSetUnnamedAddress a 0))
+ [define
+  (normalize-alias! a)
+  (LLVMGlobalClearMetadata a)
+  (LLVMSetDLLStorageClass a 0)
+  (LLVMSetVisibility a 0)
+  (LLVMSetUnnamedAddress a 0)]
 
-  (define (normalize-global! g)
-    (LLVMGlobalClearMetadata g)
-    (LLVMSetComdat g base:null-ptr)
-    (LLVMSetDLLStorageClass g 0)
-    (LLVMSetVisibility g 0)
-    (LLVMSetSection g "")
-    (LLVMSetUnnamedAddress g 0)
-    (LLVMSetThreadLocal g 0))
+ [define
+  (normalize-global! g)
+  (LLVMGlobalClearMetadata g)
+  (LLVMSetComdat g base:null-ptr)
+  (LLVMSetDLLStorageClass g 0)
+  (LLVMSetVisibility g 0)
+  (LLVMSetSection g "")
+  (LLVMSetUnnamedAddress g 0)
+  (LLVMSetThreadLocal g 0)]
 
-  ;; ---- textual canonicalization for the round-trip comparison ---------
-  ;; Some constructs have no C API accessors at all in LLVM 19 and can
-  ;; only be excluded from the comparison textually; each is a row in
-  ;; project/not-modeled.md: dso_local, alloca swifterror/inalloca bits,
-  ;; named syncscopes, global attributes (#N), plus ! metadata and
-  ;; $ comdat declaration lines and blank separators.
+ ;; ---- textual canonicalization for the round-trip comparison --------- Some
+ ;; constructs have no C API accessors at all in LLVM 19 and can only be
+ ;; excluded from the comparison textually; each is a row in
+ ;; project/not-modeled.md: dso_local, alloca swifterror/inalloca bits, named
+ ;; syncscopes, global attributes (#N), plus ! metadata and $ comdat declaration
+ ;; lines and blank separators.
 
-  (define (find-sub s sub start)
-    (let ([n (string-length s)] [m (string-length sub)])
-      (let loop ([i start])
-        (cond
-          [(> (+ i m) n) #f]
-          [(string=? (substring s i (+ i m)) sub) i]
-          [else (loop (+ i 1))]))))
+ [define
+  (find-sub s sub start)
+  [let
+   ((n (string-length s)) (m (string-length sub)))
+   [let
+    loop
+    ((i start))
+    [cond
+     ((> (+ i m) n) #f)
+     ((string=? (substring s i (+ i m)) sub) i)
+     (else (loop (+ i 1)))]]]]
 
-  (define (strip-token l tok)   ; remove every " tok " leaving one space
-    (let loop ([l l])
-      (let ([i (find-sub l (string-append " " tok " ") 0)])
-        (if i
-            (loop (string-append (substring l 0 i)
-                                 (substring l (+ i 1 (string-length tok))
-                                            (string-length l))))
-            l))))
+ [define
+  (strip-token l tok)           ; remove every " tok " leaving one space
+  [let
+   loop
+   ((l l))
+   [let
+    ((i (find-sub l (string-append " " tok " ") 0)))
+    [if
+     i
+     [loop
+      [string-append
+       (substring l 0 i)
+       (substring l (+ i 1 (string-length tok)) (string-length l))]]
+     l]]]]
 
-  (define (strip-syncscope l)   ; remove ` syncscope("...")`
-    (let ([i (find-sub l " syncscope(\"" 0)])
-      (if i
-          (let ([close (find-sub l "\")" i)])
-            (if close
-                (string-append (substring l 0 i)
-                               (substring l (+ close 2) (string-length l)))
-                l))
-          l)))
+ [define
+  (strip-syncscope l)           ; remove ` syncscope("...")`
+  [let
+   ((i (find-sub l " syncscope(\"" 0)))
+   [if
+    i
+    [let
+     ((close (find-sub l "\")" i)))
+     [if
+      close
+      [string-append
+       (substring l 0 i)
+       (substring l (+ close 2) (string-length l))]
+      l]]
+    l]]]
 
-  (define (strip-global-attr l)  ; drop a trailing " #N" on @-lines
-    (if (and (> (string-length l) 0) (char=? (string-ref l 0) #\@))
-        (let loop ([i (- (string-length l) 1)])
-          (cond
-            [(and (> i 1) (char-numeric? (string-ref l i))) (loop (- i 1))]
-            [(and (> i 1) (char=? (string-ref l i) #\#)
-                  (char=? (string-ref l (- i 1)) #\space)
-                  (< (+ i 1) (string-length l)))
-             (substring l 0 (- i 1))]
-            [else l]))
-        l))
+ [define
+  (strip-global-attr l)         ; drop a trailing " #N" on @-lines
+  [if
+   (and (> (string-length l) 0) (char=? (string-ref l 0) #\@))
+   [let
+    loop
+    ((i (- (string-length l) 1)))
+    [cond
+     ((and (> i 1) (char-numeric? (string-ref l i))) (loop (- i 1)))
+     [[and
+       (> i 1)
+       (char=? (string-ref l i) #\#)
+       (char=? (string-ref l (- i 1)) #\space)
+       (< (+ i 1) (string-length l))]
+      (substring l 0 (- i 1))]
+     (else l)]]
+   l]]
 
-  (define (strip-comma-token l tok)  ; remove every ", tok"
-    (let loop ([l l])
-      (let ([i (find-sub l (string-append ", " tok) 0)])
-        (if i
-            (loop (string-append
-                    (substring l 0 i)
-                    (substring l (+ i 2 (string-length tok))
-                               (string-length l))))
-            l))))
+ [define
+  (strip-comma-token l tok)     ; remove every ", tok"
+  [let
+   loop
+   ((l l))
+   [let
+    ((i (find-sub l (string-append ", " tok) 0)))
+    [if
+     i
+     [loop
+      [string-append
+       (substring l 0 i)
+       (substring l (+ i 2 (string-length tok)) (string-length l))]]
+     l]]]]
 
-  (define (strip-code-model l)  ; remove `, code_model "..."` (no C API)
-    (let ([i (find-sub l ", code_model \"" 0)])
-      (if i
-          (let ([close (find-sub l "\"" (+ i 14))])
-            (if close
-                (string-append (substring l 0 i)
-                               (substring l (+ close 1) (string-length l)))
-                l))
-          l)))
+ [define
+  (strip-code-model l)          ; remove `, code_model "..."` (no C API)
+  [let
+   ((i (find-sub l ", code_model \"" 0)))
+   [if
+    i
+    [let
+     ((close (find-sub l "\"" (+ i 14))))
+     [if
+      close
+      [string-append
+       (substring l 0 i)
+       (substring l (+ close 1) (string-length l))]
+      l]]
+    l]]]
 
-  (define (strip-partition l)   ; `[,] partition "..."` (no C API)
-    (let ([i (or (find-sub l ", partition \"" 0)
-                 (find-sub l " partition \"" 0))])
-      (if i
-          (let ([open (find-sub l "\"" i)])
-            (let ([close (find-sub l "\"" (+ open 1))])
-              (if close
-                  (string-append (substring l 0 i)
-                                 (substring l (+ close 1)
-                                            (string-length l)))
-                  l)))
-          l)))
+ [define
+  (strip-partition l)           ; `[,] partition "..."` (no C API)
+  [let
+   ((i (or (find-sub l ", partition \"" 0) (find-sub l " partition \"" 0))))
+   [if
+    i
+    [let
+     ((open (find-sub l "\"" i)))
+     [let
+      ((close (find-sub l "\"" (+ open 1))))
+      [if
+       close
+       [string-append
+        (substring l 0 i)
+        (substring l (+ close 1) (string-length l))]
+       l]]]
+    l]]]
 
-  (define (strip-preds-comment l)  ; `; preds = ...` reflects use-list
-    (let ([i (find-sub l "; preds = " 0)])   ; order, which is not modeled
-      (if i
-          (let rtrim ([j i])
-            (if (and (> j 0) (char=? (string-ref l (- j 1)) #\space))
-                (rtrim (- j 1))
-                (substring l 0 j)))
-          l)))
+ [define
+  (strip-preds-comment l)       ; `; preds = ...` reflects use-list
+  [let
+   ((i (find-sub l "; preds = " 0))) ; order, which is not modeled
+   [if
+    i
+    [let
+     rtrim
+     ((j i))
+     [if
+      (and (> j 0) (char=? (string-ref l (- j 1)) #\space))
+      (rtrim (- j 1))
+      (substring l 0 j)]]
+    l]]]
 
-  (define (canonical-line l)
-    (strip-global-attr
-      (strip-preds-comment
-        (strip-partition
-          (strip-code-model
-            (strip-syncscope
-              (strip-comma-token
-                (strip-comma-token
-                  (strip-comma-token
-                    (strip-comma-token
-                      (strip-token (strip-token (strip-token l "dso_local")
-                                                "swifterror")
-                                   "inalloca")
-                      "no_sanitize_address")
-                    "no_sanitize_hwaddress")
-                  "sanitize_address_dyninit")
-                "sanitize_memtag")))))))
+ [define
+  (canonical-line l)
+  [strip-global-attr
+   [strip-preds-comment
+    [strip-partition
+     [strip-code-model
+      [strip-syncscope
+       [strip-comma-token
+        [strip-comma-token
+         [strip-comma-token
+          [strip-comma-token
+           [strip-token
+            (strip-token (strip-token l "dso_local") "swifterror")
+            "inalloca"]
+           "no_sanitize_address"]
+          "no_sanitize_hwaddress"]
+         "sanitize_address_dyninit"]
+        "sanitize_memtag"]]]]]]]
 
-  ;; printed module -> comparable text: drops module-identity lines,
-  ;; ! metadata and $ comdat lines, blank lines; canonicalizes the rest
-  ;; metadata ids (!4) are print-order artifacts: the definitions are
-  ;; dropped from the comparison, so ids in retained lines are renamed
-  ;; densely by first occurrence -- both sides get the same canonical
-  ;; names iff their reference STRUCTURE matches
-  (define (canonicalize-md-ids s)
-    (let ([out (open-output-string)] [n (string-length s)]
-          [ids (make-hashtable string-hash string=?)] [k 0])
-      (let loop ([i 0])
-        (if (>= i n)
-            (get-output-string out)
-            (let ([c (string-ref s i)])
-              (if (or (and (char=? c #\!) (< (+ i 1) n)
-                           (char-numeric? (string-ref s (+ i 1))))
-                      ;; unenumerated nodes print as raw pointers <0x...>
-                      (and (char=? c #\<) (< (+ i 2) n)
-                           (char=? (string-ref s (+ i 1)) #\0)
-                           (char=? (string-ref s (+ i 2)) #\x)))
-                  (let scan ([j (+ i 1)])
-                    (if (and (< j n)
-                             (or (char-numeric? (string-ref s j))
-                                 (memv (string-ref s j)
-                                       '(#\a #\b #\c #\d #\e #\f #\x #\>))))
-                        (scan (+ j 1))
-                        (let* ([id (substring s i j)]
-                               [canon (or (hashtable-ref ids id #f)
-                                          (let ([nm (string-append
-                                                      "!c"
-                                                      (number->string k))])
-                                            (set! k (+ k 1))
-                                            (hashtable-set! ids id nm)
-                                            nm))])
-                          (put-string out canon)
-                          (loop j))))
-                  (begin (put-char out c) (loop (+ i 1)))))))))
+ ;; printed module -> comparable text: drops module-identity lines, ! metadata
+ ;; and $ comdat lines, blank lines; canonicalizes the rest metadata ids (!4)
+ ;; are print-order artifacts: the definitions are dropped from the comparison,
+ ;; so ids in retained lines are renamed densely by first occurrence -- both
+ ;; sides get the same canonical names iff their reference STRUCTURE matches
+ [define
+  (canonicalize-md-ids s)
+  [let
+   [(out (open-output-string))
+    (n (string-length s))
+    (ids (make-hashtable string-hash string=?))
+    (k 0)]
+   [let
+    loop
+    ((i 0))
+    [if
+     (>= i n)
+     (get-output-string out)
+     [let
+      ((c (string-ref s i)))
+      [if
+       [or
+        [and
+         (char=? c #\!)
+         (< (+ i 1) n)
+         (char-numeric? (string-ref s (+ i 1)))]
+        ;; unenumerated nodes print as raw pointers <0x...>
+        [and
+         (char=? c #\<)
+         (< (+ i 2) n)
+         (char=? (string-ref s (+ i 1)) #\0)
+         (char=? (string-ref s (+ i 2)) #\x)]]
+       [let
+        scan
+        ((j (+ i 1)))
+        [if
+         [and
+          (< j n)
+          [or
+           (char-numeric? (string-ref s j))
+           (memv (string-ref s j) '(#\a #\b #\c #\d #\e #\f #\x #\>))]]
+         (scan (+ j 1))
+         [let*
+          [(id (substring s i j))
+           [canon
+            [or
+             (hashtable-ref ids id #f)
+             [let
+              ((nm (string-append "!c" (number->string k))))
+              (set! k (+ k 1))
+              (hashtable-set! ids id nm)
+              nm]]]]
+          (put-string out canon)
+          (loop j)]]]
+       (begin (put-char out c) (loop (+ i 1)))]]]]]]
 
-  ;; a `%name = type ...` line whose name appears nowhere else in the
-  ;; retained text is a print artifact: LLVM's TypeFinder also walks
-  ;; named metadata, which this comparison textually ignores
-  (define (drop-unused-type-defs text)
-    (let ([p (open-string-input-port text)] [lines '()])
-      (let loop ()
-        (let ([l (get-line p)])
-          (unless (eof-object? l)
-            (set! lines (cons l lines))
-            (loop))))
-      (let* ([lines (reverse lines)]
-             [type-def-name
-              (lambda (l)
-                (and (> (string-length l) 1)
-                     (char=? (string-ref l 0) #\%)
-                     (let ([i (find-sub l " = type " 0)])
-                       (and i (substring l 0 i)))))]
-             [used?
-              (lambda (nm)
-                (let ([m (string-length nm)])
-                  (exists
-                    (lambda (l)
-                      (and (not (equal? (type-def-name l) nm))
-                           (let scan ([i 0])
-                             (let ([j (find-sub l nm i)])
-                               (and j
-                                    (or (let ([k (+ j m)])
-                                          (or (>= k (string-length l))
-                                              (not (let ([c (string-ref l k)])
-                                                     (or (char-alphabetic? c)
-                                                         (char-numeric? c)
-                                                         (memv c '(#\. #\_ #\$ #\-)))))))
-                                        (scan (+ j 1))))))))
-                    lines)))]
-             [out (open-output-string)])
-        (for-each
-          (lambda (l)
-            (let ([nm (type-def-name l)])
-              (unless (and nm (not (used? nm)))
-                (put-string out l)
-                (put-char out #\newline))))
-          lines)
-        (get-output-string out))))
+ ;; a `%name = type ...` line whose name appears nowhere else in the retained
+ ;; text is a print artifact: LLVM's TypeFinder also walks named metadata, which
+ ;; this comparison textually ignores
+ [define
+  (drop-unused-type-defs text)
+  [let
+   ((p (open-string-input-port text)) (lines '()))
+   [let
+    loop
+    ()
+    [let
+     ((l (get-line p)))
+     (unless (eof-object? l) (set! lines (cons l lines)) (loop))]]
+   [let*
+    [(lines (reverse lines))
+     [type-def-name
+      [lambda
+       (l)
+       [and
+        (> (string-length l) 1)
+        (char=? (string-ref l 0) #\%)
+        (let ((i (find-sub l " = type " 0))) (and i (substring l 0 i)))]]]
+     [used?
+      [lambda
+       (nm)
+       [let
+        ((m (string-length nm)))
+        [exists
+         [lambda
+          (l)
+          [and
+           (not (equal? (type-def-name l) nm))
+           [let
+            scan
+            ((i 0))
+            [let
+             ((j (find-sub l nm i)))
+             [and
+              j
+              [or
+               [let
+                ((k (+ j m)))
+                [or
+                 (>= k (string-length l))
+                 [not
+                  [let
+                   ((c (string-ref l k)))
+                   [or
+                    (char-alphabetic? c)
+                    (char-numeric? c)
+                    (memv c '(#\. #\_ #\$ #\-))]]]]]
+               (scan (+ j 1))]]]]]]
+         lines]]]]
+     (out (open-output-string))]
+    [for-each
+     [lambda
+      (l)
+      [let
+       ((nm (type-def-name l)))
+       [unless
+        (and nm (not (used? nm)))
+        (put-string out l)
+        (put-char out #\newline)]]]
+     lines]
+    (get-output-string out)]]]
 
-  (define (comparable-ir s)
-    (let ([p (open-string-input-port s)] [out (open-output-string)])
-      (let loop ()
-        (let ([l (get-line p)])
-          (unless (eof-object? l)
-            (unless (or (zero? (string-length l))
-                        (memv (string-ref l 0) '(#\; #\! #\$))
-                        (and (>= (string-length l) 12)
-                             (string=? (substring l 0 12) "attributes #"))
-                        (and (>= (string-length l) 15)
-                             (string=? (substring l 0 15) "source_filename")))
-              (put-string out (canonical-line l))
-              (put-char out #\newline))
-            (loop))))
-      ;; iterate: dropping a def may orphan defs it referenced
-      (canonicalize-md-ids
-        (let fixpoint ([t (get-output-string out)])
-          (let ([t2 (drop-unused-type-defs t)])
-            (if (string=? t t2) t (fixpoint t2)))))))
+ [define
+  (comparable-ir s)
+  [let
+   ((p (open-string-input-port s)) (out (open-output-string)))
+   [let
+    loop
+    ()
+    [let
+     ((l (get-line p)))
+     [unless
+      (eof-object? l)
+      [unless
+       [or
+        (zero? (string-length l))
+        (memv (string-ref l 0) '(#\; #\! #\$))
+        [and
+         (>= (string-length l) 12)
+         (string=? (substring l 0 12) "attributes #")]
+        [and
+         (>= (string-length l) 15)
+         (string=? (substring l 0 15) "source_filename")]]
+       (put-string out (canonical-line l))
+       (put-char out #\newline)]
+      (loop)]]]
+   ;; iterate: dropping a def may orphan defs it referenced
+   [canonicalize-md-ids
+    [let
+     fixpoint
+     ((t (get-output-string out)))
+     [let
+      ((t2 (drop-unused-type-defs t)))
+      (if (string=? t t2) t (fixpoint t2))]]]]]
 
-  ;; NOT strippable via the C API (LLVM 19): dso_local, comdat,
-  ;; externally_initialized, DLL storage, gc names, prefix/prologue data,
-  ;; named module metadata. Files using them land in the mismatch or
-  ;; not-modeled buckets and are accounted there.
-  (define (normalize-module! m)
-    (let ([mp (ir:module-live-ptr m)])
-      ;; guarded: LLVM crashes stripping intentionally-malformed debug
-      ;; info (e.g. Verifier/verify-dwarf-no-operands.ll -- a DISubprogram
-      ;; with no operands); the leftover metadata then classifies the
-      ;; file honestly as unmodeled instruction metadata
-      (guard (e [#t #f]) (LLVMStripModuleDebugInfo mp)))
-    ;; StripModuleDebugInfo removes the dbg-intrinsic CALLS but leaves
-    ;; their declarations behind; the dead stumps would otherwise trip
-    ;; on their metadata-typed parameters
-    (for-each
-      (lambda (f)
-        (let ([name (ir:value-name f)])
-          (when (and (>= (string-length name) 9)
-                     (string=? (substring name 0 9) "llvm.dbg.")
-                     (base:null-ptr? (LLVMGetFirstUse f)))
-            (LLVMDeleteFunction f))))
-      (ir:module-functions m))
-    (for-each normalize-global! (ir:module-globals m))
-    (for-each normalize-alias! (ir:module-aliases m))
-    (for-each normalize-function! (ir:module-functions m))))
+ ;; NOT strippable via the C API (LLVM 19): dso_local, comdat,
+ ;; externally_initialized, DLL storage, gc names, prefix/prologue data, named
+ ;; module metadata. Files using them land in the mismatch or not-modeled
+ ;; buckets and are accounted there.
+ [define
+  (normalize-module! m)
+  [let
+   ((mp (ir:module-live-ptr m)))
+   ;; guarded: LLVM crashes stripping intentionally-malformed debug info (e.g.
+   ;; Verifier/verify-dwarf-no-operands.ll -- a DISubprogram with no operands);
+   ;; the leftover metadata then classifies the file honestly as unmodeled
+   ;; instruction metadata
+   (guard (e (#t #f)) (LLVMStripModuleDebugInfo mp))]
+  ;; StripModuleDebugInfo removes the dbg-intrinsic CALLS but leaves their
+  ;; declarations behind; the dead stumps would otherwise trip on their
+  ;; metadata-typed parameters
+  [for-each
+   [lambda
+    (f)
+    [let
+     ((name (ir:value-name f)))
+     [when
+      [and
+       (>= (string-length name) 9)
+       (string=? (substring name 0 9) "llvm.dbg.")
+       (base:null-ptr? (LLVMGetFirstUse f))]
+      (LLVMDeleteFunction f)]]]
+   (ir:module-functions m)]
+  (for-each normalize-global! (ir:module-globals m))
+  (for-each normalize-alias! (ir:module-aliases m))
+  (for-each normalize-function! (ir:module-functions m))]]

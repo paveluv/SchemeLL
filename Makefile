@@ -4,8 +4,9 @@
 CHEZ_DETECTED != command -v scheme >/dev/null 2>&1 && echo scheme || echo chez-scheme
 CHEZ ?= $(CHEZ_DETECTED)
 LIBDIRS = .
+SCHEME_SOURCES = '*.sls' '*.ss' '*.scm' '*.sps' '*.sll'
 
-.PHONY: test repl build corpus format clean examples reference
+.PHONY: test repl build corpus format check-format clean examples reference
 
 test:
 	$(CHEZ) --libdirs $(LIBDIRS) --script tests/run.ss
@@ -19,7 +20,6 @@ CORPUS_DIR = reference/llvm-project/llvm/test
 corpus:
 	$(CHEZ) --libdirs $(LIBDIRS) --script tests/corpus.ss $(CORPUS_DIR)
 
-# Format all tracked Scheme sources in place (prints the files it changed)
 # Populate reference/ with what the tests need: LLVM's regression
 # corpus (for `make corpus`), pinned to the LLVM version the bindings
 # target. Idempotent. See project/RULES.md ("The reference/ directory")
@@ -47,8 +47,18 @@ examples: build
 	  ./examples/aot/hello-metaprog && rm -f examples/aot/hello-metaprog
 	@echo "examples ok"
 
-format:
-	~/.e/tools/scheme-format -i $$(git ls-files '*.sls' '*.ss')
+schematter/schematter.ss:
+	@echo "Schematter is missing; run: git submodule update --init --recursive" >&2
+	@exit 1
+
+# Format all tracked Scheme sources, including .sll (prints changed paths).
+format: schematter/schematter.ss
+	git ls-files -z -- $(SCHEME_SOURCES) | \
+	  xargs -0 $(CHEZ) --script schematter/schematter.ss -i --
+
+check-format: schematter/schematter.ss
+	git ls-files -z -- $(SCHEME_SOURCES) | \
+	  xargs -0 $(CHEZ) --script schematter/schematter.ss --check --
 
 # Compile every library to Chez object files (*.so -- Chez objects,
 # not ELF; gitignored). Any later run with --libdirs reuses them; the

@@ -150,10 +150,12 @@ the normalized-entry kind).
   with the module's who (`sll:build`, `sll:unbuild`, ...). The corpus
   classifier matches on these who symbols — renaming one breaks
   tests/corpus.ss classification.
-- `~/.e/tools/scheme-format -i` runs in the pre-commit hook
-  (project/hooks). It REFORMATS: after `make format`, exact-string
-  anchors in files may change. Commits abort if it reformats — re-add
-  and commit again.
+- `make format` and the pre-commit hook (project/hooks) use the pinned
+  `schematter/schematter.ss` formatter, including for `.sll` files.
+  Initialize it with `git submodule update --init --recursive`.
+  It REFORMATS: exact-string anchors in files may change. Commits abort
+  if it reformats — re-add and commit again. `make check-format` checks
+  without writing.
 - Commit style: imperative subject, story-telling body, **NO
   Co-Authored-By trailers** (user's global rule). Multi-line messages
   via `git commit -F -` heredoc (backticks in `-m` get shell-expanded).
