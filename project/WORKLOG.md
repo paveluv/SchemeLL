@@ -2,6 +2,19 @@
 
 Newest entries first. Format: date, Done / Decided / Next.
 
+## 2026-09-09 — Record model attribution and Scheme-only tooling
+
+### Done
+
+- Added AGENTS.md with the user's exact-model Co-Authored-By requirement
+  and the Scheme-only tooling rule, including temporary probes and scripts.
+- Replaced conflicting older co-author guidance in RULES and HANDOFF.
+- Checked Markdown formatting and whitespace; implementation is unchanged.
+
+### Next
+
+- Apply these rules to future work in this repository.
+
 ## 2026-09-09 — Use Schematter's pre-commit helpers
 
 ### Done

@@ -158,8 +158,8 @@ the normalized-entry kind).
   It REFORMATS: exact-string anchors in files may change. Commits abort
   if it reformats — re-add and commit again. `make check-format` checks
   without writing.
-- Commit style: imperative subject, story-telling body, **NO
-  Co-Authored-By trailers** (user's global rule). Multi-line messages
+- Commit style: imperative subject, story-telling body, exact-model
+  Co-Authored-By trailers per AGENTS.md (user's current rule). Multi-line messages
   via `git commit -F -` heredoc (backticks in `-m` get shell-expanded).
 - The user tests on FreeBSD themselves; keep BSD make compatibility
   (no `$(shell ...)` — use `!=`; recipes are plain sh).

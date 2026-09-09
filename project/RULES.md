@@ -127,7 +127,8 @@ A dangling pointer takes down the whole Chez session, so:
 - Tests write temp files only under `tests/tmp/` (gitignored).
 - Work tracking lives in `project/WORKLOG.md`: dated entries, "Done / Decided / Next".
   Update it at the end of every working session.
-- Commit style: imperative subject line; no Co-Authored-By trailers.
+- Commit style: imperative subject line; exact-model Co-Authored-By trailers
+  as required by AGENTS.md.
 
 ## The `reference/` directory
 
