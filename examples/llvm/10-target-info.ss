@@ -3,11 +3,8 @@
 (import (chezscheme) (prefix (llvm target) target:))
 
 (target:initialize-native!)
-
 (printf "default triple: ~a~%" (target:default-triple))
-
 (printf "host cpu:       ~a~%" (target:host-cpu-name))
-
 [let
  ((feats (target:host-cpu-features)))
  [printf

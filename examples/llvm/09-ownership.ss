@@ -3,13 +3,10 @@
 (import (chezscheme) (prefix (llvm ir) ir:))
 
 (define ctx (ir:make-context))
-
 (define m (ir:make-module ctx "owned"))
-
 (printf "module alive: ~s~%" (ir:module? m))
 
 (ir:module-dispose! m)
-
 [guard
  [e
   [#t
@@ -19,7 +16,6 @@
  (ir:module->string m)]
 
 (ir:context-dispose! ctx)
-
 [guard
  [e
   [#t

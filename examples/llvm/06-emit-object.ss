@@ -2,7 +2,6 @@
 (import (chezscheme) (prefix (llvm ir) ir:) (prefix (llvm target) target:))
 
 (define ctx (ir:make-context))
-
 [define
  m
  [ir:parse-ir
@@ -16,13 +15,9 @@ entry:
 }"]]
 
 (target:initialize-native!)
-
 (define tm (target:make-machine))
-
 (target:configure-module! m tm)
-
 (define bytes (target:emit-object-bytevector tm m))
-
 [printf
  "emitted a ~a-byte relocatable object (ELF magic: ~x ~c~c~c)~%"
  (bytevector-length bytes)

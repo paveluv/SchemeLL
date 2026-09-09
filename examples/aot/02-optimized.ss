@@ -23,19 +23,11 @@
     (label %exit (ret i64 %acc1))]]]
 
 (define ctx (ir:make-context))
-
 (define m (sll:build ctx "sums" prog))
-
 (target:initialize-native!)
-
 (define tm (target:make-machine))
-
 (target:configure-module! m tm)
-
 (ir:run-module-passes! m "default<O2>")
-
 (printf "=== optimized IR ===~%~a~%" (ir:module->string m))
-
 (target:emit-object-file tm m "/tmp/sums.o")
-
 (printf "wrote /tmp/sums.o~%")

@@ -21,5 +21,4 @@
      (ret i64 %r)]]]]
 
 (define fib (sll:procedure prog "fib"))
-
 (do ((i 0 (+ i 1))) ((> i 12)) (printf "fib(~a) = ~a~%" i (fib i)))

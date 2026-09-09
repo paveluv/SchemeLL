@@ -28,13 +28,9 @@
 ;; ---- arguments -------------------------------------------------------------
 
 (define args (cdr (command-line)))
-
 (define mode #f)                ; #f = the default, object emission
-
 (define opt-level #f)
-
 (define out-path #f)
-
 (define in-path #f)
 
 [define
@@ -89,7 +85,6 @@
      (loop (cdr a))]]]]]
 
 (unless in-path (usage!))
-
 (unless mode (set! mode 'object))
 
 [define
@@ -110,9 +105,7 @@
 (define prog (sll:load-sll in-path))
 
 (define ctx (ir:make-context))
-
 (define m (sll:build ctx (path-last in-path) prog))
-
 (ir:verify-module m)
 
 ;; a (triple "...") item in the program selects the target; without one, the
@@ -189,9 +182,7 @@
 ;; a real linker provides (relocations, external symbols, data sections).
 
 (define (bv-u16 bv i) (bytevector-u16-ref bv i (endianness little)))
-
 (define (bv-u32 bv i) (bytevector-u32-ref bv i (endianness little)))
-
 (define (bv-u64 bv i) (bytevector-u64-ref bv i (endianness little)))
 
 [define
@@ -235,17 +226,11 @@
       acc]]]]]]
 
 (define (s-name s) (list-ref s 0))
-
 (define (s-type s) (list-ref s 1))
-
 (define (s-flags s) (list-ref s 2))
-
 (define (s-off s) (list-ref s 3))
-
 (define (s-size s) (list-ref s 4))
-
 (define (s-link s) (list-ref s 5))
-
 (define (s-align s) (list-ref s 6))
 
 [define

@@ -20,5 +20,4 @@
      (ret i64 %v)]]]]
 
 (define read-third (sll:procedure prog "read_third"))
-
 (printf "*@third = ~a~%" (read-third))

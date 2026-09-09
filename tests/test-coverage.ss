@@ -20,21 +20,13 @@
 ;; ---- the oracle and the ledger ------------------------------------------
 
 (define opcode-oracle (o:enum-alist "Core.h" "LLVMOpcode"))
-
 (define int-pred-oracle (o:enum-alist "Core.h" "LLVMIntPredicate"))
-
 (define real-pred-oracle (o:enum-alist "Core.h" "LLVMRealPredicate"))
-
 (define fmf-oracle (o:bitmask-alist "Core.h" "LLVMFastMath"))
-
 (define gep-flag-oracle (o:bitmask-alist "Core.h" "LLVMGEPFlag"))
-
 (define ordering-oracle (o:enum-alist "Core.h" "LLVMAtomicOrdering"))
-
 (define rmw-oracle (o:enum-alist "Core.h" "LLVMAtomicRMWBinOp"))
-
 (define linkage-oracle (o:enum-alist "Core.h" "LLVMLinkage"))
-
 (define tailkind-oracle (o:enum-alist "Core.h" "LLVMTailCallKind"))
 
 (define exclusions (call-with-input-file "project/coverage-exclusions.ss" read))
@@ -51,39 +43,24 @@
   (cond ((null? a) #f) ((= (cdar a) value) (caar a)) (else (loop (cdr a))))]]
 
 (define icmp-opcode (cdr (assq 'LLVMICmp opcode-oracle)))
-
 (define fcmp-opcode (cdr (assq 'LLVMFCmp opcode-oracle)))
-
 (define gep-opcode (cdr (assq 'LLVMGetElementPtr opcode-oracle)))
-
 (define load-opcode (cdr (assq 'LLVMLoad opcode-oracle)))
-
 (define store-opcode (cdr (assq 'LLVMStore opcode-oracle)))
-
 (define rmw-opcode (cdr (assq 'LLVMAtomicRMW opcode-oracle)))
-
 (define call-opcode (cdr (assq 'LLVMCall opcode-oracle)))
-
 (define cmpxchg-opcode (cdr (assq 'LLVMAtomicCmpXchg opcode-oracle)))
 
 ;; ---- observation ------------------------------------------------------------
 
 (define observed-opcodes (make-eqv-hashtable))
-
 (define observed-int-preds (make-eqv-hashtable))
-
 (define observed-real-preds (make-eqv-hashtable))
-
 (define observed-fmf (make-eqv-hashtable))
-
 (define observed-gep-flags (make-eqv-hashtable))
-
 (define observed-orderings (make-eqv-hashtable))
-
 (define observed-rmw-ops (make-eqv-hashtable))
-
 (define observed-linkages (make-eqv-hashtable))
-
 (define observed-tail-kinds (make-eqv-hashtable))
 
 [define
@@ -1240,19 +1217,15 @@ compute:
     (@f)
     (attributes nounwind ("gc-leaf-function"))
     (label %entry (ret void))]]]
-
 [t:check-exn
  "unbuild rejects valued function attributes"
  (unbuild-of-ir "define void @f() alignstack(8) {\nentry:\n  ret void\n}")]
-
 [t:check-exn
  "unbuild rejects parameter attributes"
  (unbuild-of-ir "define void @f(i64 noundef %x) {\nentry:\n  ret void\n}")]
-
 [t:check-exn
  "unbuild rejects instruction metadata"
  (unbuild-of-ir "define void @f() {\nentry:\n  ret void, !x !0\n}\n!0 = !{}")]
-
 [t:check
  "unbuild names unnamed identified struct types by print slot"
  [equal?
@@ -1263,24 +1236,20 @@ compute:
      "t"
      "%0 = type { i64, i64 }\ndefine void @f(ptr %p) {\nentry:\n  %v = load %0, ptr %p\n  ret void\n}"]]]
   '(type %0 (struct i64 i64))]]
-
 ;; regression: render's local `error` once wrapped itself (infinite recursion)
 ;; instead of base:error -- this hung rather than raised
 [t:check-exn
  "render raises (not loops) on unknown items"
  (render:sll->ll '((bogus-item)))]
-
 [t:check-exn
  "unbuild rejects function prefix data"
  (unbuild-of-ir "define void @f() prefix i32 7 {\nentry:\n  ret void\n}")]
-
 ;; calling conventions are modeled now; pin the round-trip shape here
 [t:check
  "unbuild spells calling conventions"
  [equal?
   (car (unbuild-of-ir "define fastcc void @f() {\nentry:\n  ret void\n}"))
   '(define fastcc void (@f) (label %entry (ret void)))]]
-
 [t:check-exn
  "unbuild rejects nuw+nsw constexpr binops (no C constructor)"
  [unbuild-of-ir
@@ -1768,43 +1737,32 @@ entry:
    (and (null? missing) (null? overlap) (null? stale))]]]
 
 (check-axis! "opcodes" 'opcode opcode-oracle observed-opcodes)
-
 [check-axis!
  "icmp predicates"
  'int-predicate
  int-pred-oracle
  observed-int-preds]
-
 [check-axis!
  "fcmp predicates"
  'real-predicate
  real-pred-oracle
  observed-real-preds]
-
 (check-axis! "fast-math flags" 'fast-math fmf-oracle observed-fmf)
-
 (check-axis! "gep flags" 'gep-flag gep-flag-oracle observed-gep-flags)
-
 (check-axis! "atomic orderings" 'ordering ordering-oracle observed-orderings)
-
 (check-axis! "atomicrmw ops" 'rmw-binop rmw-oracle observed-rmw-ops)
-
 (check-axis! "linkages" 'linkage linkage-oracle observed-linkages)
-
 (check-axis! "tail-call kinds" 'tail-kind tailkind-oracle observed-tail-kinds)
 
 [t:check
  "oracle extraction sane: LLVMRet = 1"
  (= (cdr (assq 'LLVMRet opcode-oracle)) 1)]
-
 [t:check
  "oracle extraction sane: LLVMIntEQ = 32"
  (= (cdr (assq 'LLVMIntEQ int-pred-oracle)) 32)]
-
 [t:check
  "oracle extraction sane: LLVMFastMathNoNaNs = 2"
  (= (cdr (assq 'LLVMFastMathNoNaNs fmf-oracle)) 2)]
-
 [t:check
  "oracle extraction sane: LLVMGEPFlagNUW = 4"
  (= (cdr (assq 'LLVMGEPFlagNUW gep-flag-oracle)) 4)]

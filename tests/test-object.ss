@@ -8,9 +8,7 @@
 (t:section "target: host queries")
 
 (t:check "default-triple" (string? (target:default-triple)))
-
 (t:check "host-cpu-name" (string? (target:host-cpu-name)))
-
 [t:check
  "host-cpu-features non-empty"
  [let
@@ -20,23 +18,15 @@
 (t:section "target: emitting objects")
 
 (define ctx (ir:make-context))
-
 (define mod (ir:make-module ctx "obj_test"))
-
 (define b (ir:make-builder ctx))
-
 (define i32 (ir:int32-type ctx))
-
 (define f (ir:add-function mod "answer" (ir:function-type i32 '())))
-
 (ir:position-at-end! b (ir:append-block ctx f "entry"))
-
 (ir:build-ret b (ir:const-int i32 42))
-
 (ir:verify-module mod)
 
 (define tm (target:make-machine))
-
 (target:configure-module! mod tm)
 
 [t:check
@@ -55,21 +45,15 @@
   (= (bytevector-u8-ref bv 3) (char->integer #\F))]]
 
 (t:check "in-memory object is ELF" (elf? obj))
-
 (t:check "object is non-trivial" (> (bytevector-length obj) 100))
 
 (unless (file-directory? "tests/tmp") (mkdir "tests/tmp"))
-
 (define obj-path "tests/tmp/answer.o")
-
 (define asm-path "tests/tmp/answer.s")
-
 (when (file-exists? obj-path) (delete-file obj-path))
-
 (when (file-exists? asm-path) (delete-file asm-path))
 
 (target:emit-object-file tm mod obj-path)
-
 [t:check
  "object file written and is ELF"
  [let*
@@ -78,7 +62,6 @@
   (elf? bv)]]
 
 (target:emit-assembly-file tm mod asm-path)
-
 [t:check
  "assembly file mentions the function"
  [let*
@@ -99,15 +82,11 @@
  (target:emit-object-file tm mod "/nonexistent-dir/x.o")]
 
 (target:machine-dispose! tm)
-
 [t:check-exn
  "using a disposed target machine raises"
  (target:emit-object-bytevector tm mod)]
-
 (ir:builder-dispose! b)
-
 (ir:module-dispose! mod)
-
 (ir:context-dispose! ctx)
 
 (t:section "target: non-integral datalayout + one-call pipelines")

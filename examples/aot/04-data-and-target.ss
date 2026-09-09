@@ -17,15 +17,9 @@
     (label %entry (= %v (load i32 (ptr @version))) (ret i32 %v))]]]
 
 (define ctx (ir:make-context))
-
 (define m (sll:build ctx "libgreet" prog))
-
 (target:initialize-native!)
-
 (define tm (target:make-machine))
-
 (target:configure-module! m tm)
-
 (target:emit-object-file tm m "/tmp/libgreet.o")
-
 (printf "wrote /tmp/libgreet.o (data + code sections)~%")

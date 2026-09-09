@@ -2,6 +2,28 @@
 
 Newest entries first. Format: date, Done / Decided / Next.
 
+## 2026-09-08 — Reapply Schematter with original form separation
+
+### Done
+- Updated `schematter/` to `5ed2579`, which preserves existing blank
+  separators without adding them between adjacent top-level forms.
+- Reformatted all 73 Scheme sources from `93e3c9a`, the commit before the
+  Schematter migration. Removed 362 blank separator lines across 41 files;
+  the source diff contains no other changes.
+- Reprocessed the three original README samples while preserving the
+  current prose and formatter setup notes; the README output is unchanged.
+- Verified datum equivalence against the committed sources,
+  `make check-format`, the native README formatting check, `make test`
+  (300 passed, 0 failed), and `git diff --check`.
+
+### Decided
+- Use the original source spacing as input so separators inserted by the
+  previous formatter do not become permanent.
+- Keep this update in a separate commit after `5ff52e8`.
+
+### Next
+- (unchanged below)
+
 ## 2026-09-08 — Schematter submodule and formatting
 
 ### Done

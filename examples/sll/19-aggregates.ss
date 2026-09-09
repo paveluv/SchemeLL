@@ -22,5 +22,4 @@
      (ret i64 %v)]]]]
 
 (define lookup (sll:procedure prog "lookup"))
-
 (do ((i 0 (+ i 1))) ((> i 2)) (printf "kv[~a].value = ~a~%" i (lookup i)))

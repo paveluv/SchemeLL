@@ -23,7 +23,5 @@
      (ret i64 %r)]]]]
 
 (define fetch-add (sll:procedure prog "fetch_add"))
-
 (printf "fetch-add 5 -> old value ~a~%" (fetch-add 5))
-
 (printf "fetch-add 0 -> now ~a~%" (fetch-add 0))

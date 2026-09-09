@@ -105,5 +105,4 @@
  abis]
 
 (printf "~%The ABI table is symbols and numbers; the constraint strings~%")
-
 (printf "above were computed by (sll asm), never written by hand.~%")

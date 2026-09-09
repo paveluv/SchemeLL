@@ -63,18 +63,15 @@
   '[(in  a (tied nothing))
     (out b r             )]
   "nop"]]
-
 [t:check-exn
  "duplicate names rejected"
  [asm:expr
   '[(out x r)
     (in  x r)]
   "nop"]]
-
 [t:check-exn
  "unknown template operand rejected"
  (asm:expr '((out x r)) '("mov " y))]
-
 (t:check-exn "unknown flag rejected" (asm:expr '((out x r)) "nop" 'sideffect))
 
 (t:section "asm: end to end")
@@ -139,22 +136,18 @@
      (in  a r)]
    '("addq $" a "1, " d)]
   '(asm "addq $$${1}1, ${0}" "=r,r")]]
-
 [t:check
  "anonymous inout with explicit #f name"
  (equal? (asm:expr '((inout #f r)) "incq $0") '(asm "incq $0" "=r,0"))]
-
 [t:check-exn
  "tied to an anonymous operand is an error"
  [asm:expr
   '[(out #f r        )
     (in  a  (tied #f))]
   "nop"]]
-
 [t:check-exn
  "malformed (reg ...) does not concatenate"
  (asm:expr '((in a (reg rax rbx))) "nop")]
-
 [t:check-exn
  "malformed (tied ...) does not concatenate"
  [asm:expr

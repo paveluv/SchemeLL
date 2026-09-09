@@ -25,5 +25,4 @@
      (ret i64 %r)]]]]
 
 (define lbs (sll:procedure prog "low_byte_squared"))
-
 (printf "low-byte(#x1234567890abcd11)^2 = ~a~%" (lbs #x1234567890abcd11))

@@ -91,7 +91,5 @@
  targets]
 
 (printf "~%Both objects came from ONE source; only the generated tail~%")
-
 (printf "differs. For the host target, sllc --exe turns the x86-64 one~%")
-
 (printf "into a standalone executable (see hello-linux-x86.sll).~%")

@@ -6,7 +6,6 @@
  (prefix (llvm target) target:)]
 
 (define ctx (ir:make-context))
-
 [define
  m
  [sll:build
@@ -23,13 +22,8 @@
       (ret i64 %r)]]]]]
 
 (target:initialize-native!)
-
 (define tm (target:make-machine))
-
 (target:configure-module! m tm)
-
 (ir:run-module-passes! m "default<O2>")
-
 (target:emit-assembly-file tm m "/tmp/iabs.s")
-
 (display (call-with-input-file "/tmp/iabs.s" get-string-all))

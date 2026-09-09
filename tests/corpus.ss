@@ -64,9 +64,7 @@
 ;; ---- classification ---------------------------------------------------------
 
 (define stats (make-hashtable string-hash string=?))
-
 (define failures '())           ; (path . bucket) for MISMATCH / build-fail
-
 (define bucketed '())           ; (path . bucket) for every non-PASS file
 
 (define (bucket! key) (hashtable-update! stats key (lambda (n) (+ n 1)) 0))
@@ -160,11 +158,8 @@
 ;; C-API build vs pure-Scheme render + LLVM parse (one shot each; the corpus
 ;; size smooths the noise)
 (define bench-n 0)
-
 (define build-ns 0)
-
 (define render-ns 0)
-
 (define parse-ns 0)
 
 [define
@@ -271,9 +266,7 @@
 ;; --------------------------------------------------------------------------
 
 (printf "collecting .ll files under ~a ...~%" root)
-
 (define files (find-ll-files root))
-
 (printf "~a files~%" (length files))
 
 [let
@@ -292,7 +285,6 @@
 ;; -----------------------------------------------------------------------
 
 (printf "~%==== corpus report: ~a ====~%" root)
-
 [let-values
  (((keys vals) (hashtable-entries stats)))
  [let

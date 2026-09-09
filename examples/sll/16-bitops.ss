@@ -21,5 +21,4 @@
   "popcount"]]
 
 (printf "popcount(#xFF00FF)   = ~a~%" (popcount #xFF00FF))
-
 (printf "popcount(#b10110111) = ~a~%" (popcount #b10110111))

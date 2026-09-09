@@ -15,15 +15,11 @@
     (label %entry (= %t (mul nsw i64 %x 3)) (ret i64 %t))]]]
 
 (define ctx (ir:make-context))
-
 (define m (sll:build ctx "demo" prog))
 
 (printf "=== unbuild: module -> sll data ===~%")
-
 (write (sll:unbuild m))
-
 (newline)
 
 (printf "~%=== render: sll data -> textual IR, in pure Scheme ===~%")
-
 (display (render:sll->ll (sll:unbuild m)))

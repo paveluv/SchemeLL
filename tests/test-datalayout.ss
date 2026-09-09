@@ -56,11 +56,9 @@
  [equal?
   (map car (list (car (dl:parse "p0:32:32")) (car (dl:parse "p:32:32"))))
   '(ptr ptr)]]
-
 [t:check
  "explicit p0 keeps its addrspace marker"
  (equal? (dl:parse "p0:32:32") '((ptr (addrspace 0) 32 32)))]
-
 (t:check "bare p has none" (equal? (dl:parse "p:32:32") '((ptr 32 32))))
 
 [t:check
@@ -81,11 +79,8 @@
 (t:section "datalayout: unparse strictness")
 
 (t:check-exn "unknown component form" (dl:unparse '((frob 1))))
-
 (t:check-exn "ni:0 rejected" (dl:unparse '((non-integral 0))))
-
 (t:check-exn "endian must be little or big" (dl:unparse '((endian sideways))))
-
 (t:check-exn "raw takes one string" (dl:unparse '((raw 42))))
 
 (t:section "datalayout: configure-module! integration")

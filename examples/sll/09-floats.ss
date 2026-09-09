@@ -17,5 +17,4 @@
   "clamped_mean"]]
 
 (printf "mean(3.0, 4.0)     = ~a~%" (clamped-mean 3.0 4.0))
-
 (printf "mean(300.0, 400.0) = ~a (clamped)~%" (clamped-mean 300.0 400.0))

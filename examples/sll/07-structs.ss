@@ -29,5 +29,4 @@
      (ret i64 %s)]]]]
 
 (define diag (sll:procedure prog "diag"))
-
 (printf "diag(21) = ~a~%" (diag 21))

@@ -17,7 +17,5 @@
   "bump"]]
 
 (printf "bump 5  -> ~a~%" (bump 5))
-
 (printf "bump 10 -> ~a~%" (bump 10))
-
 (printf "bump 1  -> ~a~%" (bump 1))

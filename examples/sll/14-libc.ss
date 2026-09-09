@@ -26,5 +26,4 @@
      (ret double %r)]]]]
 
 (define cos-deg (sll:procedure prog "cos_deg"))
-
 (printf "cos(60deg) = ~a~%" (cos-deg 60.0))

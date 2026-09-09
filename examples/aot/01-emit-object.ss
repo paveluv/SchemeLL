@@ -14,17 +14,11 @@
     (label %entry (= %r (mul nsw i64 %x %x)) (ret i64 %r))]]]
 
 (define ctx (ir:make-context))
-
 (define m (sll:build ctx "square" prog))
-
 (ir:verify-module m)
 
 (target:initialize-native!)
-
 (define tm (target:make-machine))
-
 (target:configure-module! m tm)
-
 (target:emit-object-file tm m "/tmp/square.o")
-
 (printf "wrote /tmp/square.o for ~a~%" (target:default-triple))

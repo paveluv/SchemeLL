@@ -3,7 +3,6 @@
 (import (chezscheme) (prefix (llvm ir) ir:) (prefix (llvm target) target:))
 
 (define ctx (ir:make-context))
-
 [define
  m
  [ir:parse-ir
@@ -22,9 +21,6 @@ next:
 }"]]
 
 (printf "=== before ===~%~a~%" (ir:module->string m))
-
 (target:initialize-native!)
-
 (ir:run-module-passes! m "default<O2>")
-
 (printf "=== after default<O2> ===~%~a" (ir:module->string m))

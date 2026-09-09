@@ -21,17 +21,10 @@
      (ret i32 0)]]]]
 
 (define ctx (ir:make-context))
-
 (define m (sll:build ctx "main" prog))
-
 (ir:verify-module m)
-
 (target:initialize-native!)
-
 (define tm (target:make-machine))
-
 (target:configure-module! m tm)
-
 (target:emit-object-file tm m "/tmp/sll-main.o")
-
 (printf "wrote /tmp/sll-main.o -- link with: cc /tmp/sll-main.o -o demo~%")

@@ -29,5 +29,4 @@
   "cycle_lo"]]
 
 (printf "rdtsc low word: ~a~%" (cycle-lo))
-
 (printf "rdtsc low word: ~a (later)~%" (cycle-lo))

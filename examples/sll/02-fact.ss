@@ -26,7 +26,5 @@
 (define fact (sll:procedure fact-prog "fact"))
 
 (printf "=== calling the JIT'd code ===~%")
-
 (do ((i 0 (+ i 1))) ((> i 10)) (printf "fact(~a) = ~a~%" i (fact i)))
-
 (printf "fact(20) = ~a~%" (fact 20))
