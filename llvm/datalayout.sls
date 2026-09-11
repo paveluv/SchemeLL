@@ -24,10 +24,40 @@
 ;;;                                            future components)
 [library
  (llvm datalayout)
- (export parse unparse)
+ (export parse unparse with-non-integral)
  (import (except (chezscheme) error) (prefix (llvm base) base:))
 
  (define (error msg . irritants) (apply base:error 'dl:parse msg irritants))
+
+ [define
+  (with-non-integral layout spaces)
+  [unless
+   [and
+    (list? spaces)
+    (for-all (lambda (n) (and (fixnum? n) (positive? n))) spaces)]
+   [base:error
+    'datalayout
+    "non-integral address spaces must be positive fixnums"
+    spaces]]
+  [if
+   (null? spaces)
+   layout
+   [let*
+    [(forms (parse layout))
+     [existing
+      [apply
+       append
+       (map cdr (filter (lambda (f) (eq? (car f) 'non-integral)) forms))]]]
+    [unparse
+     [append
+      (filter (lambda (f) (not (eq? (car f) 'non-integral))) forms)
+      [list
+       [cons
+        'non-integral
+        [fold-left
+         (lambda (xs n) (if (memv n xs) xs (append xs (list n))))
+         '()
+         (append existing spaces)]]]]]]]]
 
  ;; ---- little string utilities -------------------------------------
 

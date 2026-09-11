@@ -2278,60 +2278,68 @@
         (eq? (caar full-body) 'personality)]]
       (body (if pers? (cdr full-body) full-body))
       (builder (ir:make-builder ctx))]
-     [when
-      pers?
-      [let
-       ((p (car full-body)))
-       [unless
-        (= (length p) 3)
-        (error "expected (personality type value)" p fname)]
-       ;; any constant: @fn, null, undef, integers, constexprs
-       [ir:set-personality-fn!
-        f
-        (resolve-constant ctx globals (resolve-type ctx (cadr p)) (caddr p))]]]
-     (when (null? body) (error "function body is empty" fname))
-     [let
-      [[st
-        [make-fstate
-         ctx
-         builder
-         globals
-         (make-eq-hashtable)
-         (hashtable-ref (function-blocks) fname #f)
-         fname
-         f
-         '()
-         #f
-         (make-eq-hashtable)]]]
-      ;; bind and name the parameters (skipping a variadic marker)
-      [let-values
-       (((params variadic?) (split-variadic params)))
+     [dynamic-wind
+      (lambda () (void))
+      [lambda
+       ()
+       [when
+        pers?
+        [let
+         ((p (car full-body)))
+         [unless
+          (= (length p) 3)
+          (error "expected (personality type value)" p fname)]
+         ;; any constant: @fn, null, undef, integers, constexprs
+         [ir:set-personality-fn!
+          f
+          [resolve-constant
+           ctx
+           globals
+           (resolve-type ctx (cadr p))
+           (caddr p)]]]]
+       (when (null? body) (error "function body is empty" fname))
        [let
-        loop
-        ((ps params) (i 0))
-        [unless
-         (null? ps)
+        [[st
+          [make-fstate
+           ctx
+           builder
+           globals
+           (make-eq-hashtable)
+           (hashtable-ref (function-blocks) fname #f)
+           fname
+           f
+           '()
+           #f
+           (make-eq-hashtable)]]]
+        ;; bind and name the parameters (skipping a variadic marker)
+        [let-values
+         (((params variadic?) (split-variadic params)))
          [let
-          ((pname (cadr (car ps))) (pv (ir:function-param f i)))
-          [when
-           (hashtable-ref (fstate-locals st) pname #f)
-           (error "duplicate parameter name" pname fname)]
-          [let
-           ((nm (llvm-name pname)))
-           (unless (string=? nm "") (ir:set-value-name! pv nm))]
-          (hashtable-set! (fstate-locals st) pname pv)
-          (loop (cdr ps) (+ i 1))]]]
-       ;; blocks were created in the prepare pass (so blockaddress may reference
-       ;; them across functions); emit into them
-       [for-each
-        [lambda
-         (g)
-         (ir:position-at-end! builder (block-by-name st (cadr g)))
-         (for-each (lambda (fm) (emit-insn! st fm)) (cddr g))]
-        body]
-       (fixup-phis! st)
-       (fixup-forwards! st)
-       (ir:builder-dispose! builder)]]]]]]
+          loop
+          ((ps params) (i 0))
+          [unless
+           (null? ps)
+           [let
+            ((pname (cadr (car ps))) (pv (ir:function-param f i)))
+            [when
+             (hashtable-ref (fstate-locals st) pname #f)
+             (error "duplicate parameter name" pname fname)]
+            [let
+             ((nm (llvm-name pname)))
+             (unless (string=? nm "") (ir:set-value-name! pv nm))]
+            (hashtable-set! (fstate-locals st) pname pv)
+            (loop (cdr ps) (+ i 1))]]]
+         ;; blocks were created in the prepare pass (so blockaddress may
+         ;; reference them across functions); emit into them
+         [for-each
+          [lambda
+           (g)
+           (ir:position-at-end! builder (block-by-name st (cadr g)))
+           (for-each (lambda (fm) (emit-insn! st fm)) (cddr g))]
+          body]
+         (fixup-phis! st)
+         (fixup-forwards! st)]]]
+      (lambda () (ir:builder-dispose! builder))]]]]]
 
  ;; ---- entry points
  ;; --------------------------------------------------------------------------
@@ -2429,7 +2437,15 @@
  [define
   (build ctx name prog)
   [let
-   ((m (ir:make-module ctx name)) (globals (make-eq-hashtable)))
+   ((m (ir:make-module ctx name)) (complete? #f))
+   [dynamic-wind
+    (lambda () (void))
+    (lambda () (populate-module! ctx m prog) (set! complete? #t) m)
+    (lambda () (unless complete? (ir:module-dispose! m)))]]]
+ [define
+  (populate-module! ctx m prog)
+  [let
+   ((globals (make-eq-hashtable)))
    (anon-types (make-hashtable string-hash string=?))
    ;; target strings first: datalayout drives default alignments the builder
    ;; bakes into instructions (e.g. alloca)

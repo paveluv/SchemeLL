@@ -44,6 +44,23 @@
 
 (t:section "sll: dump")
 
+[let
+ ((ctx (ir:make-context)))
+ [dynamic-wind
+  (lambda () (void))
+  [lambda
+   ()
+   [t:check-exn
+    "failed building releases partial native state"
+    (sll:build ctx "bad" '((define i64 (@bad) (label %entry (bogus)))))]
+   [let
+    ((m (sll:build ctx "good" fact-prog)))
+    [t:check
+     "the same context accepts a valid build after a failed one"
+     (begin (ir:verify-module m) #t)]
+    (ir:module-dispose! m)]]
+  (lambda () (ir:context-dispose! ctx))]]
+
 (define ir-text (sll:dump fact-prog))
 (t:check "dump produces text" (string? ir-text))
 (t:check "dump defines @fact" (contains? ir-text "define i64 @fact(i64 %n)"))

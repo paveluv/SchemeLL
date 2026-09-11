@@ -57,6 +57,12 @@
 (ir:builder-dispose! b)
 
 (define j (jit:make))
+[t:check
+ "JIT exposes its actual host triple and layout before any module"
+ [and
+  (string=? (jit:target-triple j) (target:default-triple))
+  (positive? (string-length (jit:data-layout j)))
+  (member '(non-integral 3) (dl:parse (jit:data-layout j '(3))))]]
 (jit:add-module! j jc mod)
 
 [t:check

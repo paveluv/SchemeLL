@@ -2,6 +2,29 @@
 
 Newest entries first. Format: date, Done / Decided / Next.
 
+## 2026-09-10 — Execution configuration and failed-build ownership
+
+### Done
+
+- Added LLJIT triple and data-layout queries. The C strings are borrowed
+  from LLJIT and copied without freeing them; signatures and ownership were
+  checked against the local LLVM 19.1.7 `llvm-c/LLJIT.h`.
+- Exposed target-machine data layout without constructing a temporary
+  module. Shared non-integral-space composition preserves the target's
+  existing spaces, removes duplicates, and refuses AS0.
+- Made `sll:build` release partial modules and function builders when
+  construction raises or escapes. Successful modules still belong to the
+  caller. The API adds no new LLVM version or target.
+- `make test`: 309 passed. Regression coverage includes querying target
+  facts before module addition, policy composition, and retrying a valid
+  build in the same context after an instruction-building error. The new
+  target-layout equality check also corrected an old test's quote offset.
+
+### Next
+
+- Woof owns configured execution and its runtime metadata contract. Resource
+  trackers and per-module unloading remain separate work.
+
 ## 2026-09-09 — Record model attribution and Scheme-only tooling
 
 ### Done

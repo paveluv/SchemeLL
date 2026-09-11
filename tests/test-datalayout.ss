@@ -83,6 +83,15 @@
 (t:check-exn "endian must be little or big" (dl:unparse '((endian sideways))))
 (t:check-exn "raw takes one string" (dl:unparse '((raw 42))))
 
+[t:check
+ "adding non-integral spaces preserves target policy and removes duplicates"
+ [string=?
+  (dl:with-non-integral "e-ni:2-i64:64-ni:3" '(1 2 1))
+  "e-i64:64-ni:2:3:1"]]
+[t:check-exn
+ "adding non-integral AS0 is refused"
+ (dl:with-non-integral "e" '(0))]
+
 (t:section "datalayout: configure-module! integration")
 
 ;; the machine's stock layout must survive parse->unparse untouched
@@ -105,11 +114,14 @@
          [and
           (> (string-length l) 17)
           (string=? (substring l 0 17) "target datalayout")]
-         (substring l 20 (- (string-length l) 1))
+         (substring l 21 (- (string-length l) 1))
          (loop)]]]]]]
    [t:check
     "host layout round-trips byte-identically"
-    (string=? (dl:unparse (dl:parse stock)) stock)]]
+    (string=? (dl:unparse (dl:parse stock)) stock)]
+   [t:check
+    "target layout can be read without a temporary module"
+    (string=? (target:machine-data-layout tm) stock)]]
   ;; configuring twice with ni must not duplicate the component
   (target:configure-module! m tm '(1))
   (target:configure-module! m tm '(1))

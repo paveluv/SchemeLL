@@ -14,6 +14,15 @@ compiler in Scheme, sll is the data structure you lower to — then JIT
 it, optimize it, or emit native objects, all from the same
 representation.
 
+Clients that prepare modules themselves can query `(llvm jit)`'s
+`target-triple` and `data-layout`, or `(llvm target)`'s `machine-triple` and
+`machine-data-layout`, before building instructions. Supply these as sll
+`triple` and `datalayout` headers so builder alignments and optimization see
+the target from the start. Both layout queries accept an optional list of
+non-integral address spaces to add to the target's policy. `sll:build`
+releases partial modules and builders on failure; a successful module still
+belongs to its caller. Woof clients normally use Woof's owned execution API.
+
 The project's Scheme code, including the samples below, uses
 [Schematter](https://github.com/paveluv/Schematter) canonical form:
 `(...)` for single-line lists and `[...]` for multiline lists.

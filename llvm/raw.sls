@@ -470,6 +470,8 @@
   OrcCreateLLJIT
   OrcDisposeLLJIT
   OrcLLJITGetMainJITDylib
+  OrcLLJITGetTripleString
+  OrcLLJITGetDataLayoutStr
   OrcLLJITAddLLVMIRModule
   OrcLLJITLookup
   OrcLLJITGetGlobalPrefix
@@ -1791,6 +1793,12 @@
  [define
   OrcLLJITGetGlobalPrefix
   (foreign-procedure "LLVMOrcLLJITGetGlobalPrefix" (void*) char)]
+ [define
+  OrcLLJITGetTripleString
+  (foreign-procedure "LLVMOrcLLJITGetTripleString" (void*) void*)]
+ [define
+  OrcLLJITGetDataLayoutStr
+  (foreign-procedure "LLVMOrcLLJITGetDataLayoutStr" (void*) void*)]
  [define
   OrcCreateDynamicLibrarySearchGeneratorForProcess
   [foreign-procedure

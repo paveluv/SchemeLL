@@ -29,6 +29,8 @@
   jit?
   make
   dispose!
+  target-triple
+  data-layout
   context?
   make-context
   context-ir
@@ -42,7 +44,8 @@
   (prefix (llvm raw) LLVM)
   (prefix (llvm base) base:)
   (prefix (llvm ir) ir:)
-  (prefix (llvm target) target:)]
+  (prefix (llvm target) target:)
+  (prefix (llvm datalayout) dl:)]
 
  ;; ---- jit contexts (ORC ThreadSafeContext) -------------------------------
 
@@ -98,6 +101,19 @@
  ;; Dispose jits that became unreachable (their generated procedures keep them
  ;; reachable, so this never frees code that can still be called).
  (define jit-guardian (make-guardian))
+
+ ;; Borrowed LLJIT strings: copy them, never dispose the native pointers.
+ [define
+  (target-triple j)
+  (base:cstring->string (LLVMOrcLLJITGetTripleString (jit-live-ptr j)))]
+ [define
+  data-layout
+  [case-lambda
+   ((j) (data-layout j '()))
+   [(j non-integral)
+    [dl:with-non-integral
+     (base:cstring->string (LLVMOrcLLJITGetDataLayoutStr (jit-live-ptr j)))
+     non-integral]]]]
 
  [define
   (sweep-dead-jits!)

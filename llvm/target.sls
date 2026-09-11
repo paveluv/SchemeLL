@@ -13,6 +13,7 @@
   machine-dispose!
   machine-live-ptr
   machine-triple
+  machine-data-layout
   configure-module!
   emit-object-file
   emit-assembly-file
@@ -162,33 +163,19 @@
   [case-lambda
    ((m tm) (configure-module! m tm '()))
    [(m tm non-integral)
-    [unless
-     [and
-      (list? non-integral)
-      (for-all (lambda (n) (and (fixnum? n) (positive? n))) non-integral)]
-     [base:error
-      'target:configure-module!
-      "non-integral address spaces must be positive fixnums"
-      non-integral]]
-    (ir:set-module-target-triple! m (machine-triple tm))
+    (ir:set-module-data-layout! m (machine-data-layout tm non-integral))
+    (ir:set-module-target-triple! m (machine-triple tm))]]]
+ [define
+  machine-data-layout
+  [case-lambda
+   ((tm) (machine-data-layout tm '()))
+   [(tm non-integral)
     [let*
      [(td (LLVMCreateTargetDataLayout (machine-live-ptr tm)))
       [layout
        (base:cstring->string/dispose (LLVMCopyStringRepOfTargetData td))]]
      (LLVMDisposeTargetData td)
-     [ir:set-module-data-layout!
-      m
-      [if
-       (null? non-integral)
-       layout
-       ;; structured merge (llvm datalayout): drop any ni the layout already
-       ;; carries, append ours -- no duplicates
-       [dl:unparse
-        [append
-         [filter
-          (lambda (f) (not (eq? (car f) 'non-integral)))
-          (dl:parse layout)]
-         (list (cons 'non-integral non-integral))]]]]]]]]
+     (dl:with-non-integral layout non-integral)]]]]
 
  ;; ---- emission
  ;; ---------------------------------------------------------------
