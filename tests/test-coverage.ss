@@ -14,6 +14,7 @@
  (prefix (tests oracle) o:)
  (prefix (tests normalize) n:)
  (prefix (llvm ir) ir:)
+ (prefix (llvm config) config:)
  (prefix (sll) sll:)
  (prefix (sll render) render:)]
 
@@ -802,6 +803,51 @@ entry:
   %r16 = atomicrmw udec_wrap ptr %p, i64 %v monotonic, align 8
   ret void
 }
+"]
+
+[when
+ (config:capability? 'atomic-usub)
+ [check-entry!
+  "fp-cast-fast-math"
+  '[[define
+     double
+     (@casts (double %x))
+     [label
+      %entry
+      (= %a (fptrunc fast double %x float))
+      (= %b (fpext nnan float %a double))
+      (ret double %b)]]]
+  "define double @casts(double %x) {
+entry:
+  %a = fptrunc fast double %x to float
+  %b = fpext nnan float %a to double
+  ret double %b
+}
+"]
+ [check-entry!
+  "rmw-usub"
+  '[[define
+     void
+     (@usubs (ptr %p) (i64 %v))
+     [label
+      %entry
+      (= %a (atomicrmw usub_cond (ptr %p) (i64 %v) monotonic))
+      (= %b (atomicrmw usub_sat (ptr %p) (i64 %v) monotonic))
+      (ret void)]]]
+  "define void @usubs(ptr %p, i64 %v) {
+entry:
+  %a = atomicrmw usub_cond ptr %p, i64 %v monotonic, align 8
+  %b = atomicrmw usub_sat ptr %p, i64 %v monotonic, align 8
+  ret void
+}
+"]]
+
+[check-entry!
+ "alias-address-space"
+ '[(= @g (global (addrspace 1) i32 0)                      )
+   (= @a (alias (addrspace 1) i32 ((ptr (addrspace 1)) @g)))]
+ "@g = addrspace(1) global i32 0
+@a = alias i32, ptr addrspace(1) @g
 "]
 
 [check-entry!

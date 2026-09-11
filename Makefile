@@ -9,7 +9,7 @@ SCHEME_SOURCES = '*.sls' '*.ss' '*.scm' '*.sps' '*.sll'
 .PHONY: test repl build corpus format check-format clean examples reference
 
 test:
-	$(CHEZ) --libdirs $(LIBDIRS) --script tests/run.ss
+	CHEZ=$(CHEZ) $(CHEZ) --libdirs $(LIBDIRS) --script tests/run.ss
 
 repl:
 	$(CHEZ) --libdirs $(LIBDIRS)
@@ -19,6 +19,15 @@ repl:
 CORPUS_DIR = reference/llvm-project/llvm/test
 corpus:
 	$(CHEZ) --libdirs $(LIBDIRS) --script tests/corpus.ss $(CORPUS_DIR)
+
+CORPUS_FILE =
+corpus-case:
+	$(CHEZ) --libdirs $(LIBDIRS) --script tests/corpus-case.ss "$(CORPUS_FILE)"
+.PHONY: corpus-case
+
+test-version-cache:
+	CHEZ=$(CHEZ) $(CHEZ) --script tests/version-cache.ss
+.PHONY: test-version-cache
 
 # Populate reference/ with what the tests need: LLVM's regression
 # corpus (for `make corpus`), pinned to the LLVM version the bindings

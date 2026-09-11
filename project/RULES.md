@@ -27,7 +27,8 @@ definition -- the same rule as for exports.
 | Layer | Library | Contents |
 |-------|---------|----------|
 | 0 | `(llvm raw)` | 1:1 `foreign-procedure` bindings to the LLVM C API. No logic. |
-| 0 | `(llvm config)` | The ONLY file that knows the LLVM version and shared-object name. |
+| 0 | `(llvm config)` | Installation selection, exact release verification, and C API capability facts. |
+| 1/2 | `(llvm jit-layout)` | Version-qualified LLJIT admission compatibility; preserves non-integral layouts through code generation. |
 | 1 | `(llvm base)` | FFI utilities: C strings, out-params, pointer arrays, error → condition. |
 | 1 | `(llvm ir)` | Safe handles (context/module/builder records with ownership state), IR construction. |
 | 1/2 | `(llvm target)` | Native target init, target machines, object/assembly emission. |
@@ -59,8 +60,12 @@ definition -- the same rule as for exports.
 
 ## Environment pins
 
-- **LLVM 19** (`libLLVM-19.so`, Debian package). Version-specific knowledge goes in
-  `llvm/config.sls` and `llvm/raw.sls` ONLY.
+- **LLVM 19.1.7 / 20.1.8**, with 19 as the default. Installation/version facts
+  and named capabilities live in `llvm/config.sls`; C signatures in `llvm/raw.sls`;
+  compatibility behavior lives in SchemeLL's adapters. Higher layers query
+  named capabilities rather than distributing numeric version tests. Woof owns
+  its runtime qualification, and Meik owns neither set of version branches.
+  See [version selection and qualification](llvm-versions.md).
 - **Chez Scheme 10.0**, machine type `ta6le` (x86_64 Linux, threaded).
 - 64-bit platform is assumed in `(llvm base)` (pointers are 8 bytes).
 
@@ -144,6 +149,10 @@ exact command/URL to recreate it.
 | `reference/nanopass/` | `git clone https://github.com/nanopass/nanopass-framework-scheme.git reference/nanopass` | Nanopass framework, for layer 3. |
 | `reference/sham/` | `git clone https://github.com/rjnw/sham.git reference/sham` | Racket's Sham: prior art for an LLVM DSL in a Scheme. |
 
-Note: the LLVM **C API headers are already installed** at
-`/usr/include/llvm-c-19/llvm-c/` — that is the primary reference for signatures,
-enums, and ownership comments. Check there before cloning llvm-project.
+The selected installation's **C API headers** are the primary reference for
+signatures, enums and ownership comments. Use `(llvm config)`'s
+`header-directory` and `validate-headers!` to ensure they match the loaded
+library. On this Debian host, both releases are installed under
+`/usr/lib/llvm-N/include/llvm-c/`. Check the matching headers before cloning
+llvm-project. The S5 corpus/source checkout procedure is in
+[version qualification](llvm-versions.md).

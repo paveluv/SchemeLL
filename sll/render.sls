@@ -946,7 +946,6 @@
    [words
     (format "~a =" (name->text (cadr item)))
     (if lk (symbol->string lk) "")
-    (if as (format "addrspace(~a)" as) "")
     "alias"
     (type->text (car rest))
     (format ", ~a" (group->text env (cadr rest)))]]]

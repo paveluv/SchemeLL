@@ -190,18 +190,21 @@ compile: everything talks to stock `libLLVM` through Chez's FFI.
 
 ## Getting started
 
-Requirements: Chez Scheme 10, LLVM 19 (`libLLVM-19.so`; the Debian
-`llvm-19` packages work as-is).
+Requirements: Chez Scheme 10 and LLVM 19.1.7 (default) or 20.1.8. On Debian,
+`llvm-19-dev` / `llvm-20-dev` provide the library, tools, and coverage headers.
+Use `SCHEMELL_LLVM_VERSION=20` before starting the process to select 20;
+`SCHEMELL_LLVM_PREFIX` optionally selects its installation directory.
 
 **Status: work in progress.** SchemeLL has so far been tested only on
-x86-64 Linux and x86-64 FreeBSD (including the freestanding `--exe`
-executables on both), always with LLVM 19 — the only supported LLVM
-version at the moment. Newer LLVM versions and more platforms are
-planned.
+x86-64 Linux and x86-64 FreeBSD with LLVM 19 (including the freestanding
+`--exe` executables on both). LLVM 20 qualification is on x86-64 Linux.
+See [version selection, compatibility, and qualification](project/llvm-versions.md).
 
 ```
 $ make build       # compile the libraries to .so (later runs start ~5x faster)
-$ make test        # 313 checks
+$ make test        # selected-version suite
+$ SCHEMELL_LLVM_VERSION=20 make test
+$ make test-version-cache  # needs both releases installed
 $ make examples    # smoke-runs all 37 examples end to end
 $ make reference   # (optional) fetch LLVM's test corpus for `make corpus`
 $ scheme --libdirs . --script examples/sll/01-add.ss

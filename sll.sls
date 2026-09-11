@@ -790,7 +790,9 @@
     (fmax      . 13)
     (fmin      . 14)
     (uinc_wrap . 15)
-    (udec_wrap . 16)]]
+    (udec_wrap . 16)
+    (usub_cond . 17)
+    (usub_sat  . 18)]]
 
  ;; ---- instruction flags -----------------------------------------------------
  ;; Flags sit where IR writes them: between the opcode and the type (for fcmp,

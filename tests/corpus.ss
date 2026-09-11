@@ -18,6 +18,7 @@
 [import
  (chezscheme)
  (prefix (llvm ir) ir:)
+ (prefix (llvm config) config:)
  (prefix (sll) sll:)
  (prefix (tests normalize) n:)
  (prefix (sll render) render:)]
@@ -265,8 +266,12 @@
 ;; ---- run
 ;; --------------------------------------------------------------------------
 
-(printf "collecting .ll files under ~a ...~%" root)
+[unless
+ (file-directory? root)
+ (error 'corpus "missing LLVM corpus directory" root)]
+(printf "LLVM ~s; collecting .ll files under ~a ...~%" (config:version) root)
 (define files (find-ll-files root))
+(when (null? files) (error 'corpus "no LLVM IR files found" root))
 (printf "~a files~%" (length files))
 
 [let
@@ -313,8 +318,7 @@
         (hashtable-ref stats "skipped (> 2MB)" 0)
         (hashtable-ref stats "unreadable file" 0)]]]]]]]]
 
-[unless
- (null? failures)
+[begin
  (unless (file-directory? "tests/tmp") (mkdir "tests/tmp"))
  [call-with-output-file
   "tests/tmp/corpus-failures.txt"
@@ -358,3 +362,15 @@
    (null? bench-failed)
    (printf "  RENDER-FAIL on ~a PASS files:~%" (length bench-failed))
    (for-each (lambda (f) (printf "    ~a~%" f)) bench-failed)]]]
+
+;; A report containing unexplained mismatches is a failed gate, even when every
+;; input file was readable. Always overwrite the ledgers above so an empty
+;; successful run cannot leave a previous failure list behind.
+[exit
+ [if
+  [and
+   (null? failures)
+   (null? bench-failed)
+   (zero? (hashtable-ref stats "unreadable file" 0))]
+  0
+  1]]

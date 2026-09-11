@@ -45,6 +45,7 @@
   (prefix (llvm base) base:)
   (prefix (llvm ir) ir:)
   (prefix (llvm target) target:)
+  (prefix (llvm jit-layout) layout:)
   (prefix (llvm datalayout) dl:)]
 
  ;; ---- jit contexts (ORC ThreadSafeContext) -------------------------------
@@ -95,8 +96,9 @@
    (immutable ptr jit-ptr)
    (immutable dylib jit-dylib)
    (immutable signatures jit-signatures)
+   (immutable release-layout jit-release-layout)
    (mutable state jit-state jit-state-set!)]
-  (nongenerative llvm-jit-v0)]
+  (nongenerative llvm-jit-v1)]
 
  ;; Dispose jits that became unreachable (their generated procedures keep them
  ;; reachable, so this never frees code that can still be called).
@@ -169,21 +171,26 @@
        ptr
        (LLVMOrcLLJITGetMainJITDylib ptr)
        (make-hashtable string-hash string=?)
+       [layout:install!
+        ptr
+        (base:cstring->string (LLVMOrcLLJITGetDataLayoutStr ptr))]
        'owned]]]
     ;; resolve process symbols (libc, the Scheme runtime, ...) so JIT'd code may
     ;; call declared externals
-    [let-values
-     [[(err gen)
-       [base:call-with-out-ptr
-        [lambda
-         (out)
-         [LLVMOrcCreateDynamicLibrarySearchGeneratorForProcess
-          out
-          (LLVMOrcLLJITGetGlobalPrefix ptr)
-          base:null-ptr
-          base:null-ptr]]]]]
-     (base:check-error-ref 'jit:make err)
-     (LLVMOrcJITDylibAddGenerator (jit-dylib j) gen)]
+    [guard
+     (e (else (dispose! j) (raise e)))
+     [let-values
+      [[(err gen)
+        [base:call-with-out-ptr
+         [lambda
+          (out)
+          [LLVMOrcCreateDynamicLibrarySearchGeneratorForProcess
+           out
+           (LLVMOrcLLJITGetGlobalPrefix ptr)
+           base:null-ptr
+           base:null-ptr]]]]]
+      (base:check-error-ref 'jit:make err)
+      (LLVMOrcJITDylibAddGenerator (jit-dylib j) gen)]]
     (jit-guardian j)
     j]]]
 
@@ -202,7 +209,8 @@
    [let
     ((err (LLVMOrcDisposeLLJIT (jit-ptr j))))
     ;; may run from the guardian sweep; swallow rather than raise
-    (unless (base:null-ptr? err) (LLVMConsumeError err))]]]
+    (unless (base:null-ptr? err) (LLVMConsumeError err))]
+   ((jit-release-layout j))]]
 
  ;; ---- signature capture
  ;; -------------------------------------------------------
@@ -331,6 +339,7 @@
       "module targets a different platform than this JIT's host"
       mt
       host]]]]
+  (layout:prepare! (ir:module-live-ptr m) (data-layout j))
   (capture-signatures! j m)
   [let
    ((mod-ptr (ir:module-live-ptr m)) (tsctx (context-live-tsctx jc)))

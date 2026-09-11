@@ -6,6 +6,8 @@
  (export enum-alist bitmask-alist)
  (import (chezscheme) (prefix (llvm config) config:))
 
+ (define checked-headers (config:validate-headers!))
+
  (define (read-file path) (call-with-input-file path get-string-all))
 
  [define

@@ -7,6 +7,7 @@
 (load "tests/test-object.ss")
 (load "tests/test-sll.ss")
 (load "tests/test-asm.ss")
+(load "tests/test-version.ss")
 (load "tests/test-coverage.ss")
 
 (t:summary-and-exit)

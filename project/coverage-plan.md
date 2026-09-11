@@ -1,5 +1,14 @@
 # Plan: verifiable 100% IR coverage for (sll)
 
+Current qualification (2026-09-11): LLVM 19.1.7 and 20.1.8 use their own
+installed-header oracle and matching source corpus. Atomic RMW coverage is
+17/17 on 19 and 19/19 on 20. Both corpus gates finish with zero unexplained
+mismatches or rendering failures, under the existing normalizer and named
+exclusions. The [work log](WORKLOG.md) records exact totals and the
+`samesign` limitation; [version selection](llvm-versions.md) describes the
+process and compiled-cache contract. The campaign history below retains its
+original LLVM 19 measurements.
+
 Status: Levels 1+2 IMPLEMENTED (2026-08-22): `tests/test-coverage.ss` +
 `tests/oracle.sls` (enum extraction from installed headers) +
 `project/coverage-exclusions.ss` (the ledger). Score at implementation:
@@ -72,14 +81,14 @@ missing.
 
 | Axis | Oracle |
 |---|---|
-| Instructions | `LLVMOpcode` enum, llvm-c-19/Core.h (~68 opcodes) |
+| Instructions | `LLVMOpcode` enum, selected release's `llvm-c/Core.h` |
 | Types | `LLVMTypeKind` enum |
 | icmp/fcmp predicates | `LLVMIntPredicate` / `LLVMRealPredicate` enums |
 | Instruction flags | C API setters: `LLVMSetNSW`/`NUW`/`Exact`/`IsInBounds`/`FastMathFlags` |
 | Linkage, visibility, callconv, atomic orderings | enums in Core.h |
 | Module-level items | C API function inventory (globals, aliases, ...) |
 | Semantics | LLVM's own parser: `LLVMParseIRInContext` (IRReader.h) |
-| (llvm raw) completeness | exported `LLVM*` symbols in libLLVM-19.so (1267) |
+| (llvm raw) bound-entry availability | exported `LLVM*` symbols in the selected library; this checks our bindings, not full API coverage |
 
 Enums are trivially extractable from the header text with Scheme string
 processing — no C parser needed — so the extraction can live inside the test

@@ -1,4 +1,5 @@
-;;; (llvm raw) -- layer 0: 1:1 foreign-procedure bindings to the LLVM 19 C API.
+;;; (llvm raw) -- layer 0: foreign-procedure bindings to the selected LLVM C
+;;; API.
 ;;;
 ;;; Conventions (see project/RULES.md):
 ;;;   LLVM*Ref            -> void*        (exact integer address, 0 = NULL)
@@ -218,6 +219,13 @@
   GetErrorMessage
   DisposeErrorMessage
   ConsumeError
+  CreateStringError
+  GetModuleContext
+  GetModuleFlag
+  AddModuleFlag
+  OrcLLJITGetIRTransformLayer
+  OrcIRTransformLayerSetTransform
+  OrcThreadSafeModuleWithModuleDo
   ;; TargetMachine.h / Target.h
   GetDefaultTargetTriple
   GetHostCPUName
@@ -481,6 +489,34 @@
 
  ;; Must run before any foreign-procedure below is evaluated.
  (define llvm-loaded (config:load!))
+
+ [define
+  CreateStringError
+  (foreign-procedure "LLVMCreateStringError" (string) void*)]
+ [define
+  GetModuleContext
+  (foreign-procedure "LLVMGetModuleContext" (void*) void*)]
+ [define
+  GetModuleFlag
+  (foreign-procedure "LLVMGetModuleFlag" (void* string size_t) void*)]
+ [define
+  AddModuleFlag
+  (foreign-procedure "LLVMAddModuleFlag" (void* int string size_t void*) void)]
+ [define
+  OrcLLJITGetIRTransformLayer
+  (foreign-procedure "LLVMOrcLLJITGetIRTransformLayer" (void*) void*)]
+ [define
+  OrcIRTransformLayerSetTransform
+  [foreign-procedure
+   "LLVMOrcIRTransformLayerSetTransform"
+   (void* void* void*)
+   void]]
+ [define
+  OrcThreadSafeModuleWithModuleDo
+  [foreign-procedure
+   "LLVMOrcThreadSafeModuleWithModuleDo"
+   (void* void* void*)
+   void*]]
 
  ;; --- Core: context / module / builder ---------------------------------
  (define ContextCreate (foreign-procedure "LLVMContextCreate" () void*))
@@ -1185,7 +1221,14 @@
   GetMDNodeOperands             ; fills a ValueRef array
   (foreign-procedure "LLVMGetMDNodeOperands" (void* void*) void)]
  (define-getter MetadataTypeInContext "LLVMMetadataTypeInContext" (void*) void*)
- (define-getter X86MMXTypeInContext "LLVMX86MMXTypeInContext" (void*) void*)
+ ;; LLVM 20 removed MMX. Keep the public binding, but refuse its use without
+ ;; trying to resolve a removed C entry while importing the library.
+ [define
+  X86MMXTypeInContext
+  [if
+   (config:capability? 'x86-mmx)
+   (foreign-procedure "LLVMX86MMXTypeInContext" (void*) void*)
+   (lambda (ctx) (config:require-capability! 'x86-mmx))]]
  (define-getter X86AMXTypeInContext "LLVMX86AMXTypeInContext" (void*) void*)
  [define-getter
   TargetExtTypeInContext        ; (ctx, name, ty*, n, uint*, n)

@@ -267,7 +267,11 @@
   build-int->ptr
   build-bitcast
   build-addrspacecast]
- (import (chezscheme) (prefix (llvm raw) LLVM) (prefix (llvm base) base:))
+ [import
+  (chezscheme)
+  (prefix (llvm raw) LLVM)
+  (prefix (llvm base) base:)
+  (prefix (llvm config) config:)]
 
  ;; ---- contexts -----------------------------------------------------------
 
@@ -548,7 +552,7 @@
    elems
    (lambda (arr n) (LLVMStructSetBody ty arr n (if packed? 1 0)))]]
 
- ;; Index order matches the LLVMTypeKind enum in llvm-c-19/Core.h.
+ ;; LLVM 19/20 preserve these numeric values; 20 leaves the old MMX slot empty.
  [define
   type-kinds
   '#(void
@@ -1196,6 +1200,7 @@
   (LLVMBuildFence (builder-live-ptr b) ordering 0 "")]
  [define
   (build-atomicrmw b rmw-op ptr val ordering name)
+  (when (memv rmw-op '(17 18)) (config:require-capability! 'atomic-usub))
   [let
    ((v (LLVMBuildAtomicRMW (builder-live-ptr b) rmw-op ptr val ordering 0)))
    (unless (string=? name "") (set-value-name! v name))

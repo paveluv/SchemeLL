@@ -2,6 +2,71 @@
 
 Newest entries first. Format: date, Done / Decided / Next.
 
+## 2026-09-11 — Qualify LLVM 19.1.7 and 20.1.8
+
+### Done
+
+- Added explicit per-process LLVM selection, installed-library identity checks,
+  matching-header validation, and named capabilities. The default stays 19;
+  `SCHEMELL_LLVM_VERSION=20` selects 20.1.8. Wrong releases, mismatched prefixes
+  or headers, preloaded LLVM, and unsupported features fail explicitly.
+- Kept the removed MMX constructor usable on 19 and refused it on 20. Added
+  the two new atomic subtraction operations, floating-point cast fast-math
+  round trips, and correct alias address-space rendering. LLVM 20's
+  `icmp samesign` is explicitly rejected because its poison contract has no
+  C API accessor; it is never silently dropped.
+- Used LLJIT's public IR transform hook to preserve non-integral pointer
+  layouts across LLVM 20's stricter admission check. A reserved module flag
+  survives context cloning; only extra non-integral spaces are admissible.
+  Restoration precedes compilation, callback errors become LLVM errors,
+  and callbacks remain locked until JIT disposal. Physical-layout changes
+  are refused. The tests observe the restored layout and deliberately fail
+  restoration to check materialization failure.
+- Hardened the corpus gate: missing/empty input, unexplained failures and
+  rendering failures now fail the process. Successful runs also replace
+  ledgers, so stale failures cannot survive. Added a reproducible single-file
+  corpus probe and an isolated compiled-binding cache test.
+
+### Validation and limits
+
+Unit tests pass 323 checks on 19 and 333 on 20. The C-entry audit checks every
+bound name against the selected library, and enum coverage uses its installed
+headers. Config/raw compiled once under 19 also pass fresh-process execution
+under 20/19/20 without rebuilding. Tests include JIT execution through the
+cached bindings, not just successful imports. Final error-path review also
+guards exception formatting itself: even a non-condition Scheme exception
+returns through LLVM's lookup error, rather than escaping through C++.
+
+Both complete, unmodified LLVM source corpora pass with zero unexplained
+mismatches or rendering failures:
+
+| Release | All files | Parse failures | Strict passes | Text-renderer passes | Folding fixed points |
+|---|---:|---:|---:|---:|---:|
+| 19.1.7 | 36,488 | 779 | 32,452 | 2,870 | 2 |
+| 20.1.8 | 38,367 | 806 | 34,168 | 2,953 | 2 |
+
+These are within-version comparisons under the existing normalizer and
+documented exclusion contract. LLVM 20 has 24 explicitly rejected `samesign`
+files. Totals are 35,324 and 37,123 verified files, respectively; neither
+total claims all LLVM inputs are modeled. Meik's
+[S5 evidence](../../../probes/woof-s5/README.md) retains the corpus logs
+alongside integration and performance qualification for all representations.
+
+### Decided
+
+Version-specific C API behavior belongs in SchemeLL. Woof separately owns
+target/runtime protocol qualification. The JIT adapter uses public C entry
+points and no native shim. The ordinary target-machine emission C API resets
+the module layout in both releases, so it cannot replace this adapter while
+claiming to preserve non-integral properties through code generation. That
+existing AOT boundary remains an explicit validation/proof obligation.
+See [selection and qualification](llvm-versions.md).
+
+### Next
+
+Future LLVM majors are separate sequential qualifications. Resource trackers,
+per-module unloading and the AOT proof boundary remain separate work.
+
 ## 2026-09-10 — Execution configuration and failed-build ownership
 
 ### Done

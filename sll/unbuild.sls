@@ -23,6 +23,8 @@
   (prefix (llvm base) base:)
   (prefix (llvm raw) LLVM)
   (prefix (llvm ir) ir:)
+  (prefix (llvm config) config:)
+  (prefix (llvm text-flags) text:)
   (prefix (sll attributes) attrs:)]
 
  (define (error msg . irritants) (apply base:error 'sll:unbuild msg irritants))
@@ -212,7 +214,9 @@
     (13 . fmax     )
     (14 . fmin     )
     (15 . uinc_wrap)
-    (16 . udec_wrap)]]
+    (16 . udec_wrap)
+    (17 . usub_cond)
+    (18 . usub_sat )]]
 
  [define
   linkage-names                 ; external (0) is the default and is omitted
@@ -1098,6 +1102,7 @@
       (and (not (tolerate-folds)) (eqv? (LLVMTypeOf (op0)) ty))
       (not-modeled "no-op casts (the C-API builder folds them away)")]
      `[,op
+       ,@(fmf-flags ins)
        ,@(if (eq? op 'trunc) (wrap-flags ins) '())
        ,@(if (and (memq op '(zext uitofp)) (nz? (LLVMGetNNeg ins))) '(nneg) '())
        ,(unbuild-type (LLVMTypeOf (op0)))
@@ -1149,6 +1154,11 @@
       ((unreachable) '(unreachable))
       ((fneg) `(fneg ,@(fmf-flags ins) ,(unbuild-type ty) ,(operand st (op0))))
       [(icmp)
+       [when
+        [and
+         (config:capability? 'icmp-samesign-text)
+         (text:leading-flag? ins 'samesign)]
+        (not-modeled "icmp samesign flag (no C API accessor or setter)")]
        `[icmp
          ,(enum-name int-pred-names (ir:icmp-predicate ins) "icmp predicate")
          ,(unbuild-type (LLVMTypeOf (op0)))

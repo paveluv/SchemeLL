@@ -1,7 +1,7 @@
 # What sll does not model
 
 The complete ledger of LLVM IR constructs outside (sll)'s grammar,
-as of 2026-08-22 (LLVM 19). Companion to `project/sll-design.md` (what IS
+initially recorded 2026-08-22, updated for LLVM 19/20 in S5. Companion to `project/sll-design.md` (what IS
 modeled) and `project/coverage-plan.md` (how coverage is verified).
 
 **Detection column**: `sll:unbuild` is strict — *detected* means it raises a
@@ -18,7 +18,6 @@ corpus purposes) out of the harness normalizer — same ledger discipline as
 
 | Construct | Detection |
 |---|---|
-| aliases in non-zero address spaces | detected |
 | `thread_local` aliases (the thread-local accessors unwrap GlobalVariable) | detected (textually, from the printed alias) |
 | named module metadata (`!llvm.module.flags`, `!llvm.ident`, ...) | detected; `(sll:unbuild m 'ignore-named-metadata)` opts out explicitly (the corpus harness does, stripping `!` lines from the comparison) |
 | comdat sections | undetected; the normalizer clears per-global comdats, declaration lines excluded textually |
@@ -65,6 +64,7 @@ entry `function-attributes` is the pin.
 | Construct | Detection |
 |---|---|
 | attached metadata (`!dbg`, `!tbaa`, `!prof`, `!range`, ...) | detected |
+| LLVM 20 `icmp samesign` (no C API accessor or setter) | detected from the printed instruction's opcode prefix; quoted SSA names are skipped; never silently dropped |
 | call-site attributes at return/parameter positions | undetected |
 | operand bundles on callbr | detected (call and invoke bundles are modeled) |
 | calls through null/undef pointer constants in non-zero address spaces (the untyped callee slot cannot carry the addrspace) | detected |
@@ -86,7 +86,7 @@ entry `function-attributes` is the pin.
 
 | Construct | Detection |
 |---|---|
-| `label` in first-class type positions | detected (x86_mmx, x86_amx, target-ext, metadata, and token are modeled) |
+| `label` in first-class type positions | detected (x86_amx, target-ext, metadata, and token are modeled; x86_mmx is available on LLVM 19 and explicitly refused on 20, which removed the type) |
 
 ## Constants
 

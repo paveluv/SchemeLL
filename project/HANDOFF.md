@@ -2,13 +2,14 @@
 
 Context for continuing work on this repo that is NOT obvious from the
 tree: hard-won LLVM/Chez knowledge, methodology, and direction.
-Maintained alongside the code; last full pass 2026-08-24. Reading
-order: `README.md`, `project/RULES.md`, then this.
+Last full pass 2026-08-24; LLVM qualification/status refreshed 2026-09-11.
+Reading order: `README.md`, `project/RULES.md`,
+[current version contract](llvm-versions.md), then these historical lessons.
 
 ## What this project is (and where it's going)
 
-LLVM 19 bindings for Chez Scheme plus **sll** ("Scheme's Low Level"),
-a complete s-expression dialect of LLVM IR. Terminology is strict:
+LLVM 19.1.7/20.1.8 bindings for Chez Scheme plus **sll** ("Scheme's Low Level"),
+an s-expression dialect of LLVM IR with explicit coverage limits. Terminology is strict:
 **ll** = LLVM IR itself (`.ll` files, in-memory modules); **sll** = its
 Scheme counterpart. The project is a **lowering target** for compilers
 written in Scheme.
@@ -37,27 +38,25 @@ the normalized-entry kind).
 
 ## Current state
 
-- **Coverage campaign COMPLETE** (project/coverage-plan.md): 35k+ of
-  LLVM's own 36,488-file regression corpus round-trips byte-identically
-  (98.9% of parseable); zero unexplained failures; every remaining file
-  is in a named bucket in project/not-modeled.md, each a documented
-  C-API gap. Agreed definition of 100%: *utilizing the C API to full
-  potential*. Ledger invariant: implemented ∪ documented = LLVM IR;
-  modeling something later = delete its ledger row + its normalizer
-  strip, and the corpus starts testing it.
-- **313 checks** (`make test`), **37 examples** (`make examples`),
-  all green. A large bug hunt (two review agents + adversarial probes)
-  just fixed 15 reproduced defects; regressions exist for each.
-- **Tested platforms**: x86-64 Linux and x86-64 FreeBSD (user-verified,
-  including `--exe` executables), LLVM 19 only. Newer LLVM planned:
-  the version pin lives entirely in `llvm/config.sls` + `llvm/raw.sls`.
+- **Corpus qualification**: 35,324 verified files on 19 and 37,123 on 20,
+  with zero unexplained mismatches or rendering failures. Comparisons use
+  the existing normalizer and named exclusions, including grammar choices;
+  this is not a claim that every LLVM input is modeled. The work log gives
+  strict/renderer/fixed-point counts. The gate now exits unsuccessfully for
+  unexplained failures and always replaces its ledgers.
+- **323 checks on 19, 333 on 20** (`make test`). The separate compiled-cache
+  test runs the same config/raw objects under 20/19/20 in fresh processes.
+- **Platforms**: current two-release qualification is on x86-64 Linux.
+  Historical LLVM 19 FreeBSD verification remains recorded; it was not rerun
+  for S5. SchemeLL owns C API/ORC differences; Woof owns runtime protocols.
+  LLVM 19 remains the default.
 
 ## The stack, one line each
 
-- `llvm/config.sls` — version pin; auto-detects header dir (Debian /
-  FreeBSD port / generic) and loads `libLLVM-19.so`.
+- `llvm/config.sls` — fixed per-process selection, installation identity,
+  matching headers and C API capabilities; optional installation prefix.
 - `llvm/raw.sls` — C API verbatim; `(prefix (llvm raw) LLVM)`
-  reconstructs exact C names. 233 foreign procedures + enum constants.
+  reconstructs exact C names. The test audits every bound entry name.
 - `llvm/base.sls` — error raising + **LLVM diagnostic capture** (see
   quirks below); `base:error` attaches drained diagnostics to whatever
   it raises.
@@ -66,6 +65,10 @@ the normalized-entry kind).
 - `llvm/jit.sls` — ORC LLJIT; FFI signatures derived from LLVM types;
   process-symbol resolution (libc callable); **refuses modules with a
   foreign triple** (arch+OS compared, vendor ignored).
+- `llvm/jit-layout.sls` — LLVM 20 non-integral-layout admission bridge;
+  exact restoration before compilation, using the public IR transform hook.
+  Physical differences and failed restoration are refused. The existing
+  AOT layout reset remains a separate validation/proof boundary.
 - `llvm/target.sls` — objects/asm, host or cross
   (`initialize-target!` by backend name); machine-type → backend map
   includes a6le/ta6le/a6fb/ta6fb.
@@ -79,7 +82,7 @@ the normalized-entry kind).
   LLVM wrapper; machine and kernel knowledge live with the systems
   language (chapter-0 rationale — an owned backend needs the ABI at
   that layer). Everything below describes it as it now lives in
-  ../Woof/abi/, library names unchanged.
+  ../abi/ in the parent Woof checkout, library names unchanged.
   The freestanding kernel ABI, raw (no libc; standing goal:
   Meik/Woof/SchemeLL on a bare kernel). `(abi common)` = splice
   generators over (sll asm); per-machine-type modules mirror Chez's
@@ -334,9 +337,10 @@ the normalized-entry kind).
 
 ## Env setup on a new machine
 
-Chez 10 (`scheme` or `chez-scheme`, auto-detected) + LLVM 19 with
-headers. Then: `make build` (compile libs, ~6x faster startups),
-`make test` (313), `make examples` (37), `make reference` (sparse
+Chez 10 (`scheme` or `chez-scheme`, auto-detected) + LLVM 19.1.7 or 20.1.8
+with matching headers. Select 20 with `SCHEMELL_LLVM_VERSION=20`; the default
+is 19. Then: `make build` (compile libraries), `make test`, `make examples`,
+`make test-version-cache` (both releases installed), `make reference` (sparse
 llvm-project clone for `make corpus`; `git sparse-checkout add
 llvm/docs` inside it for LangRef). `tools/sllc` is self-compiling.
 Platform facts: FreeBSD's image activator REJECTS unbranded SYSV
@@ -368,8 +372,9 @@ non-alloc and `.eh_frame`/X86_64_UNWIND drop silently.
    normalizer still strips ALL attributes, a future fidelity
    campaign). One-call AOT pipeline: `sll:object` / `sll:assembly`
    ('machine / 'passes / 'non-integral options).
-3. LLVM 20 support: re-run the oracle + corpus against a new pin;
-   constexpr kinds shrink again upstream.
+3. LLVM 20.1.8 support is implemented. Future majors are separate sequential
+   qualifications with oracle, corpus and downstream runtime gates; changing
+   the default is a separate decision.
 4. medl design (separate repo): nanopass over sll; sll grammar was
    deliberately built prefix-only/no-mid-form-keywords for this.
 5. Maybe: `sllc --triple` flag (cross flags exist internally),
