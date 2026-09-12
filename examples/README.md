@@ -3,6 +3,11 @@
 Run any example with `scheme --libdirs . --script <file>` from the
 repository root (or `make examples` to smoke-run everything).
 
+Every example runs on LLVM 16, 19 and 20. The four that use instruction
+flags (`sll/09-floats`, `sll/11-casts`, `sll/20-unbuild`,
+`aot/01-emit-object`) need the LLVM 18 flag setters and print a skip note
+on 16 instead (see the capability table in `project/llvm-versions.md`).
+
 ## examples/sll -- sll scripting (JIT)
 
 Programs are plain data; `sll:procedure` compiles one in memory and

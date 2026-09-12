@@ -2,7 +2,15 @@
 (load "host/bootstrap.ss")
 
 ;;; Floating point: arithmetic, fast-math flags, fcmp, select.
-(import (chezscheme) (prefix (sll) sll:))
+(import (chezscheme) (prefix (sll) sll:) (prefix (llvm config) config:))
+
+;; fast-math flags need the LLVM 18 flag setters
+[unless
+ (config:capability? 'flag-accessors)
+ [printf
+  "skipped: fast-math flags need the LLVM 18 C API (this is LLVM ~a)~%"
+  config:major-version]
+ (exit 0)]
 
 [define
  clamped-mean

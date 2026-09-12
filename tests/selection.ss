@@ -14,6 +14,17 @@
 [check
  "default is LLVM 19"
  (= 19 (s:selection-ref (s:make-selection '()) 'major-version))]
+[check
+ "16 and 20 are qualified majors"
+ [and
+  [=
+   16
+   (s:selection-ref (s:make-selection '((major-version . 16))) 'major-version)]
+  [=
+   20
+   [s:selection-ref
+    (s:make-selection '((major-version . 20)))
+    'major-version]]]]
 [for-each
  [lambda
   (entries)

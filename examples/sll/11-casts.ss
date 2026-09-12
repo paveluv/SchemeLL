@@ -3,7 +3,15 @@
 
 ;;; The cast family: truncation, extension (with nuw/nsw/nneg flags), and
 ;;; pointer<->integer round trips.
-(import (chezscheme) (prefix (sll) sll:))
+(import (chezscheme) (prefix (sll) sll:) (prefix (llvm config) config:))
+
+;; the nneg/nsw flags need the LLVM 18 flag setters
+[unless
+ (config:capability? 'flag-accessors)
+ [printf
+  "skipped: instruction flags need the LLVM 18 C API (this is LLVM ~a)~%"
+  config:major-version]
+ (exit 0)]
 
 [define
  prog

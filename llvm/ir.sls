@@ -94,6 +94,19 @@
   fast-math-flags
   can-use-fast-math-flags?
   gep-no-wrap-flags
+  nsw-flag?
+  nuw-flag?
+  exact-flag?
+  nneg-flag?
+  disjoint-flag?
+  array-length
+  prefix-data?
+  prologue-data?
+  value-as-metadata?
+  ;; typed pointers (LLVM 16) and bitcode output
+  context-use-typed-pointers!
+  typed-pointer-type
+  module->bitcode
   const-int
   const-real
   const-null
@@ -271,7 +284,8 @@
   (chezscheme)
   (prefix (llvm raw) LLVM)
   (prefix (llvm base) base:)
-  (prefix (llvm config) config:)]
+  (prefix (llvm config) config:)
+  (prefix (llvm text-flags) text:)]
 
  ;; ---- contexts -----------------------------------------------------------
 
@@ -529,7 +543,19 @@
        n
        (if packed? 1 0)]]]]]]
 
- (define (array-type elem-type count) (LLVMArrayType2 elem-type count))
+ ;; 64-bit array lengths are LLVM 17; before that the C API takes unsigned
+ [define
+  (array-type elem-type count)
+  [if
+   (config:capability? 'array-length-64)
+   (LLVMArrayType2 elem-type count)
+   (LLVMArrayType elem-type count)]]
+ [define
+  (array-length ty)
+  [if
+   (config:capability? 'array-length-64)
+   (LLVMGetArrayLength2 ty)
+   (LLVMGetArrayLength ty)]]
 
  (define (vector-type elem-type count) (LLVMVectorType elem-type count))
 
@@ -646,7 +672,10 @@
 
  (define (set-alignment! v bytes) (LLVMSetAlignment v bytes))
 
- ;; instruction flags: setters set the flag; getters return bitmasks/booleans
+ ;; instruction flags: setters set the flag; getters return bitmasks/booleans.
+ ;; The setters are LLVM 18 C API (the raw bindings refuse them before that);
+ ;; the getters fall back to reading LLVM's own printer through (llvm
+ ;; text-flags) on releases without accessors.
  (define (set-nsw! v) (LLVMSetNSW v 1))
  (define (set-nuw! v) (LLVMSetNUW v 1))
  (define (set-exact! v) (LLVMSetExact v 1))
@@ -654,13 +683,149 @@
  (define (set-disjoint! v) (LLVMSetIsDisjoint v 1))
  (define (set-volatile! v) (LLVMSetVolatile v 1))
  (define (set-fast-math-flags! v mask) (LLVMSetFastMathFlags v mask))
- (define (fast-math-flags v) (LLVMGetFastMathFlags v))
+ (define flag-accessors? (config:capability? 'flag-accessors))
+ [define
+  (flag-getter c-get flag)
+  [lambda
+   (v)
+   (if flag-accessors? (not (zero? (c-get v))) (text:leading-flag? v flag))]]
+ (define nsw-flag? (flag-getter (lambda (v) (LLVMGetNSW v)) 'nsw))
+ (define nuw-flag? (flag-getter (lambda (v) (LLVMGetNUW v)) 'nuw))
+ (define exact-flag? (flag-getter (lambda (v) (LLVMGetExact v)) 'exact))
+ (define nneg-flag? (flag-getter (lambda (v) (LLVMGetNNeg v)) 'nneg))
+ [define
+  disjoint-flag?
+  (flag-getter (lambda (v) (LLVMGetIsDisjoint v)) 'disjoint)]
+ ;; LLVMFastMathFlags bits, as printed
+ [define
+  fast-math-words
+  '[(reassoc  . 1  )
+    (nnan     . 2  )
+    (ninf     . 4  )
+    (nsz      . 8  )
+    (arcp     . 16 )
+    (contract . 32 )
+    (afn      . 64 )
+    (fast     . 127)]]
+ [define
+  (fast-math-flags v)
+  [if
+   flag-accessors?
+   (LLVMGetFastMathFlags v)
+   [fold-left
+    [lambda
+     (mask flag)
+     [let
+      ((e (assq flag fast-math-words)))
+      (if e (bitwise-ior mask (cdr e)) mask)]]
+    0
+    (text:leading-flags v)]]]
+ ;; the FPMathOperators, for releases without LLVMCanValueUseFastMathFlags
+ (define fp-math-opcodes '(fneg fadd fsub fmul fdiv frem fcmp select phi call))
  [define
   (can-use-fast-math-flags? v)
-  (not (zero? (LLVMCanValueUseFastMathFlags v)))]
- (define (gep-no-wrap-flags v) (LLVMGEPGetNoWrapFlags v))
+  [if
+   flag-accessors?
+   (not (zero? (LLVMCanValueUseFastMathFlags v)))
+   [let-values
+    (((op flags) (text:instruction-head v)))
+    (and (memq op fp-math-opcodes) #t)]]]
+ ;; LLVMGEPNoWrapFlags: inbounds 1 (implies nusw 2), nuw 4. Before LLVM 19 only
+ ;; inbounds exists, read through LLVMIsInBounds.
+ [define
+  (gep-no-wrap-flags v)
+  [if
+   (config:capability? 'gep-no-wrap-flags)
+   (LLVMGEPGetNoWrapFlags v)
+   (if (zero? (LLVMIsInBounds v)) 0 3)]]
 
  (define (declaration? f) (not (zero? (LLVMIsDeclaration f))))
+
+ ;; prefix/prologue data: LLVM 18 accessors; before that, the printed function
+ ;; header carries the keywords
+ [define
+  (function-header-has? f word)
+  [let*
+   [(text (base:cstring->string/dispose (LLVMPrintValueToString f)))
+    (n (string-length text))
+    [end
+     [let
+      loop
+      ((i 0))
+      [cond
+       ((= i n) n)
+       ((memv (string-ref text i) '(#\{ #\newline)) i)
+       (else (loop (+ i 1)))]]]
+    (header (substring text 0 end))
+    (m (string-length word))]
+   [let
+    loop
+    ((i 0))
+    [and
+     (<= (+ i m) (string-length header))
+     (or (string=? word (substring header i (+ i m))) (loop (+ i 1)))]]]]
+ [define
+  (prefix-data? f)
+  [if
+   (config:capability? 'prefix-data-inspection)
+   (not (zero? (LLVMHasPrefixData f)))
+   (function-header-has? f " prefix ")]]
+ [define
+  (prologue-data? f)
+  [if
+   (config:capability? 'prefix-data-inspection)
+   (not (zero? (LLVMHasPrologueData f)))
+   (function-header-has? f " prologue ")]]
+
+ ;; a metadata-typed value that wraps an SSA value (LLVMIsAValueAsMetadata is
+ ;; LLVM 17; before that: metadata-typed, neither string nor node)
+ [define
+  (value-as-metadata? v)
+  [if
+   (config:capability? 'value-as-metadata-inspection)
+   (not (zero? (LLVMIsAValueAsMetadata v)))
+   [and
+    (eq? (type-kind (LLVMTypeOf v)) 'metadata)
+    (zero? (LLVMIsAMDString v))
+    (zero? (LLVMIsAMDNode v))]]]
+
+ ;; ---- typed pointers (LLVM 16) and bitcode ----------------------------------
+
+ ;; Switch a fresh context to typed pointers, before any type is created in it.
+ ;; Only LLVM 16 can (the capability is refused elsewhere); IR parsed or built
+ ;; in the context then carries element types, and its bitcode is readable by
+ ;; consumers that predate opaque pointers.
+ [define
+  (context-use-typed-pointers! ctx)
+  (config:require-capability! 'typed-pointers)
+  (LLVMContextSetOpaquePointers (context-live-ptr ctx) 0)]
+
+ ;; a pointer type to elem-type in an address space; the element type is ignored
+ ;; by opaque-pointer contexts
+ [define
+  typed-pointer-type
+  [case-lambda
+   ((elem-type) (typed-pointer-type elem-type 0))
+   ((elem-type addrspace) (LLVMPointerType elem-type addrspace))]]
+
+ ;; the module's bitcode, as a fresh bytevector
+ [define
+  (module->bitcode m)
+  [let
+   ((mb (LLVMWriteBitcodeToMemoryBuffer (module-live-ptr m))))
+   [dynamic-wind
+    void
+    [lambda
+     ()
+     [let*
+      [(start (LLVMGetBufferStart mb))
+       (n (LLVMGetBufferSize mb))
+       (bv (make-bytevector n))]
+      [do
+       ((i 0 (fx+ i 1)))
+       ((fx= i n) bv)
+       (bytevector-u8-set! bv i (foreign-ref 'unsigned-8 start i))]]]
+    (lambda () (LLVMDisposeMemoryBuffer mb))]]]
 
  [define
   (const-int ty n)
@@ -691,7 +856,12 @@
   (const-array elem-type constants)
   [base:call-with-pointer-array
    constants
-   (lambda (arr n) (LLVMConstArray2 elem-type arr n))]]
+   [lambda
+    (arr n)
+    [if
+     (config:capability? 'array-length-64)
+     (LLVMConstArray2 elem-type arr n)
+     (LLVMConstArray elem-type arr n)]]]]
 
  ;; the name of an identified struct type, #f for literal structs
  [define
@@ -927,11 +1097,28 @@
    a
    b]]
 
+ ;; GEP no-wrap masks before LLVM 19: only plain (0) and inbounds (1, which
+ ;; implies nusw 2) have builders; nusw alone and nuw need the flag API
+ [define
+  (gep-flags-buildable? flags)
+  (or (config:capability? 'gep-no-wrap-flags) (memv flags '(0 1 3)))]
+ [define
+  (require-gep-flags! flags)
+  [unless
+   (gep-flags-buildable? flags)
+   (config:require-capability! 'gep-no-wrap-flags)]]
  [define
   (const-gep src-elem-ty ptr indices flags)
+  (require-gep-flags! flags)
   [base:call-with-pointer-array
    indices
-   (lambda (arr n) (LLVMConstGEPWithNoWrapFlags src-elem-ty ptr arr n flags))]]
+   [lambda
+    (arr n)
+    [cond
+     [(config:capability? 'gep-no-wrap-flags)
+      (LLVMConstGEPWithNoWrapFlags src-elem-ty ptr arr n flags)]
+     ((zero? flags) (LLVMConstGEP2 src-elem-ty ptr arr n))
+     (else (LLVMConstInBoundsGEP2 src-elem-ty ptr arr n))]]]]
 
  [define
   (const-named-struct ty constants)
@@ -960,18 +1147,21 @@
  ;; constant; null-terminate? adds the final \00
  [define
   (const-string ctx s null-terminate?)
-  [if
-   (bytevector? s)
-   [LLVMConstStringInContext2/bytes
-    (context-live-ptr ctx)
-    s
-    (bytevector-length s)
-    (if null-terminate? 0 1)]
-   [LLVMConstStringInContext2
-    (context-live-ptr ctx)
-    s
-    (bytevector-length (string->utf8 s))
-    (if null-terminate? 0 1)]]]
+  [let
+   [(sized? (config:capability? 'sized-string-constants))
+    (dont-terminate (if null-terminate? 0 1))]
+   [if
+    (bytevector? s)
+    [(if sized? LLVMConstStringInContext2/bytes LLVMConstStringInContext/bytes)
+     (context-live-ptr ctx)
+     s
+     (bytevector-length s)
+     dont-terminate]
+    [(if sized? LLVMConstStringInContext2 LLVMConstStringInContext)
+     (context-live-ptr ctx)
+     s
+     (bytevector-length (string->utf8 s))
+     dont-terminate]]]]
 
  ;; ---- module-level globals -------------------------------------------------
 
@@ -1200,6 +1390,7 @@
   (LLVMBuildFence (builder-live-ptr b) ordering 0 "")]
  [define
   (build-atomicrmw b rmw-op ptr val ordering name)
+  (when (memv rmw-op '(15 16)) (config:require-capability! 'atomic-uinc-wrap))
   (when (memv rmw-op '(17 18)) (config:require-capability! 'atomic-usub))
   [let
    ((v (LLVMBuildAtomicRMW (builder-live-ptr b) rmw-op ptr val ordering 0)))
@@ -1221,7 +1412,42 @@
    v]]
 
  (define (set-ordering! v ordering) (LLVMSetOrdering v ordering))
- (define (instruction-ordering v) (LLVMGetOrdering v))
+ ;; LLVMGetOrdering reads loads, stores and atomicrmw everywhere, but on LLVM 16
+ ;; it casts a fence to atomicrmw and returns garbage (probed: acquire reads as
+ ;; 2, seq_cst as 3); read fences from the printer there. Fences are built with
+ ;; their ordering, so no setter is involved.
+ [define
+  ordering-words
+  '[(unordered . 1)
+    (monotonic . 2)
+    (acquire   . 4)
+    (release   . 5)
+    (acq_rel   . 6)
+    (seq_cst   . 7)]]
+ (define fence-opcode 55)
+ [define
+  (instruction-ordering v)
+  [if
+   [or
+    (config:capability? 'fence-ordering-accessor)
+    (not (= (LLVMGetInstructionOpcode v) fence-opcode))]
+   (LLVMGetOrdering v)
+   [let*
+    [(text (base:cstring->string/dispose (LLVMPrintValueToString v)))
+     (p (open-string-input-port text))]
+    [let
+     loop
+     ((last #f))
+     [let
+      ((tok (read p)))
+      [if
+       (eof-object? tok)
+       [or
+        [and
+         (symbol? last)
+         (cond ((assq last ordering-words) => cdr) (else #f))]
+        (base:error 'ir:instruction-ordering "unreadable fence ordering" text)]
+       (loop tok)]]]]]]
  (define (set-weak! v) (LLVMSetWeak v 1))
  (define (atomicrmw-binop v) (LLVMGetAtomicRMWBinOp v))
  (define (cmpxchg-success-ordering v) (LLVMGetCmpXchgSuccessOrdering v))
@@ -1372,11 +1598,23 @@
    ((b ty count) (build-array-alloca b ty count ""))
    ((b ty count nm) (LLVMBuildArrayAlloca (builder-live-ptr b) ty count nm))]]
 
- ;; LLVMTailCallKind ints: 0 none, 1 tail, 2 musttail, 3 notail
+ ;; LLVMTailCallKind ints: 0 none, 1 tail, 2 musttail, 3 notail. Before LLVM 18
+ ;; the C API has only the `tail` boolean; musttail/notail are refused when
+ ;; setting and read back from the printer.
  [define
   (set-tail-call-kind! call-inst kind)
-  (LLVMSetTailCallKind call-inst kind)]
- (define (tail-call-kind call-inst) (LLVMGetTailCallKind call-inst))
+  [cond
+   ((config:capability? 'tail-call-kinds) (LLVMSetTailCallKind call-inst kind))
+   ((memv kind '(0 1)) (LLVMSetTailCall call-inst kind))
+   (else (config:require-capability! 'tail-call-kinds))]]
+ [define
+  (tail-call-kind call-inst)
+  [cond
+   ((config:capability? 'tail-call-kinds) (LLVMGetTailCallKind call-inst))
+   ((text:leading-flag? call-inst 'musttail) 2)
+   ((text:leading-flag? call-inst 'notail) 3)
+   ((not (zero? (LLVMIsTailCall call-inst))) 1)
+   (else 0)]]
  (define (set-function-call-conv! f cc) (LLVMSetFunctionCallConv f cc))
  (define (function-call-conv f) (LLVMGetFunctionCallConv f))
  [define
@@ -1516,18 +1754,24 @@
    [(b elem-ty ptr indices flags)
     (build-gep/flags b elem-ty ptr indices flags "")]
    [(b elem-ty ptr indices flags nm)
+    (require-gep-flags! flags)
     [base:call-with-pointer-array
      indices
      [lambda
       (arr n)
-      [LLVMBuildGEPWithNoWrapFlags
-       (builder-live-ptr b)
-       elem-ty
-       ptr
-       arr
-       n
-       nm
-       flags]]]]]]
+      [cond
+       [(config:capability? 'gep-no-wrap-flags)
+        [LLVMBuildGEPWithNoWrapFlags
+         (builder-live-ptr b)
+         elem-ty
+         ptr
+         arr
+         n
+         nm
+         flags]]
+       ((zero? flags) (LLVMBuildGEP2 (builder-live-ptr b) elem-ty ptr arr n nm))
+       [else
+        (LLVMBuildInBoundsGEP2 (builder-live-ptr b) elem-ty ptr arr n nm)]]]]]]]
 
  [define-syntax
   define-cast

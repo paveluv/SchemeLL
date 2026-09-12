@@ -16,12 +16,13 @@
        [cons
         'major-version
         [cond
+         ((string=? major "16") 16)
          ((string=? major "19") 19)
          ((string=? major "20") 20)
          [else
           [error
            'llvm-environment
-           "unsupported SCHEMELL_LLVM_VERSION; expected 19 or 20"
+           "unsupported SCHEMELL_LLVM_VERSION; expected 16, 19 or 20"
            major]]]]]
       '()]
      [if

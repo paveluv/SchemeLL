@@ -1,5 +1,5 @@
-;;; Two installed releases; compile config/raw once and reuse those Chez objects
-;;; in fresh 20/19/20 processes. Original source caches are untouched.
+;;; The installed releases; compile config/raw once and reuse those Chez objects
+;;; in fresh 20/19/16/20 processes. Original source caches are untouched.
 (load "host/bootstrap.ss")
 (import (chezscheme))
 (define cache "tests/tmp/version-cache")
@@ -76,4 +76,4 @@
       (lambda (p) (put-bytevector p data))]]]
    '("selection.sls" "config.sls" "raw.sls")]
   (run 19 "compile")
-  (for-each (lambda (major) (run major "probe")) '(20 19 20))]]
+  (for-each (lambda (major) (run major "probe")) '(20 19 16 20))]]

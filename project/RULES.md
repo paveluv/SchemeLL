@@ -60,7 +60,8 @@ definition -- the same rule as for exports.
 
 ## Environment pins
 
-- **LLVM 19.1.7 / 20.1.8**, with 19 as the default. Pure installation selection
+- **LLVM 16.0.6 / 19.1.7 / 20.1.8**, with 19 as the default (16 exists for
+  typed-pointer bitcode; see `project/llvm-versions.md`). Pure installation selection
   lives in `llvm/selection.sls`; hosted loading/version facts and named capabilities
   live in `llvm/config.sls`; C signatures in `llvm/raw.sls`;
   compatibility behavior lives in SchemeLL's adapters. Higher layers query

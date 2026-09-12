@@ -191,9 +191,14 @@ compile: everything talks to stock `libLLVM` through Chez's FFI.
 ## Installation instructions
 
 SchemeLL needs Chez Scheme 10 and one qualified LLVM release, 19.1.7 (the
-default) or 20.1.8, installed as a shared library with the C API. Nothing
-else: no C compiler, no Python. The library is located automatically in the
-layouts below; anything else is pointed at explicitly.
+default), 20.1.8, or 16.0.6, installed as a shared library with the C API.
+Nothing else: no C compiler, no Python. The library is located automatically
+in the layouts below; anything else is pointed at explicitly. LLVM 16 is the
+release to pick when the bitcode must be read by a consumer that predates
+opaque pointers (Apple's Metal compiler): it is the last one that can write
+typed pointers. Everything else works alike on all three; the C API that
+arrived after 16 is refused by capability name there
+(see [capabilities](project/llvm-versions.md)).
 
 **Debian / Ubuntu**
 
@@ -204,12 +209,13 @@ apt install chezscheme llvm-19-dev      # or llvm-20-dev, or both
 `llvm-N-dev` installs `/usr/lib/llvm-N/lib/libLLVM-N.so` plus the headers the
 coverage oracle checks, and `/usr/lib/llvm-N` is searched first. Debian's
 Chez binary is `scheme` (`chez-scheme` on some releases; the Makefile tries
-both).
+both). `llvm-16-dev` comes from [apt.llvm.org](https://apt.llvm.org) on
+current releases.
 
 **macOS (Homebrew)**
 
 ```
-brew install chezscheme llvm@19         # or llvm@20, or both
+brew install chezscheme llvm@19         # or llvm@20 / llvm@16, or all three
 ```
 
 Apple's own toolchain (Xcode, Command Line Tools) ships no LLVM C API
@@ -258,9 +264,10 @@ and refuses any other release.
 
 ```
 $ make build       # compile the libraries to .so (later runs start ~5x faster)
-$ make test        # selected-version suite
+$ make test        # selected-version suite (LLVM 19)
 $ SCHEMELL_LLVM_VERSION=20 make test
-$ make test-version-cache  # needs both releases installed
+$ SCHEMELL_LLVM_VERSION=16 make test
+$ make test-version-cache  # needs all three releases installed
 $ make examples    # smoke-runs 38 Scheme scripts and the CLI checks
 $ make reference   # (optional) fetch LLVM's test corpus for `make corpus`
 $ scheme --libdirs . --script examples/sll/01-add.ss
@@ -294,7 +301,7 @@ scope.
 
 | Date | OS | CPU | Chez | LLVM | Result |
 |---|---|---|---|---|---|
-| 2026-09-12 | macOS 15.7.9 (Darwin 24.6), arm64 | Apple M3 Pro | 10.4.1 (Homebrew, `chez`) | 19.1.7, 20.1.8 (Homebrew `llvm@19`, `llvm@20`) | 324/324 checks on 19, 334/334 on 20; 37 examples on both (`--exe` skipped); version cache 20/19/20 |
+| 2026-09-12 | macOS 15.7.9 (Darwin 24.6), arm64 | Apple M3 Pro | 10.4.1 (Homebrew, `chez`) | 16.0.6, 19.1.7, 20.1.8 (Homebrew `llvm@16`, `llvm@19`, `llvm@20`) | 301/301 checks on 16, 332/332 on 19, 342/342 on 20; 37 examples on each (`--exe` skipped; four skip on 16 by capability); version cache 20/19/16/20 |
 | [2026-09-12](project/validation/2026-09-12-linux/README.md) | Debian GNU/Linux 13.6 (trixie), Linux `6.12.101+deb13-amd64`, x86_64 | AMD Ryzen Threadripper PRO 9965WX 24-Cores | 10.0.0 (`scheme`, `ta6le`; Debian `10.0.0+dfsg-5`) | 19.1.7, 20.1.8 (`/usr/lib/llvm-19`, `/usr/lib/llvm-20`) | 324/324 checks on 19, 334/334 on 20, plus 14 selection checks each; repeated with compiled libraries; 38 Scheme examples and both CLI checks on each release, including executing the 194-byte `--exe`; version cache 20/19/20 |
 | inferred | FreeBSD, x86_64 | ? | ? (`chez-scheme`) | 19.1.7 | suite and `--exe` executables (ELFOSABI_FREEBSD branding) |
 

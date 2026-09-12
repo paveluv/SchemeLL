@@ -7,7 +7,16 @@
  (chezscheme)
  (prefix (sll) sll:)
  (prefix (llvm ir) ir:)
- (prefix (llvm target) target:)]
+ (prefix (llvm target) target:)
+ (prefix (llvm config) config:)]
+
+;; the program carries instruction flags, which need the LLVM 18 setters
+[unless
+ (config:capability? 'flag-accessors)
+ [printf
+  "skipped: instruction flags need the LLVM 18 C API (this is LLVM ~a)~%"
+  config:major-version]
+ (exit 0)]
 
 [define
  prog

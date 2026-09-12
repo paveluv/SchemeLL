@@ -76,10 +76,7 @@
    (zero? status)
    [version-contains?
     (call-with-input-file path get-string-all)
-    [format
-     "(~a 1 ~a)"
-     config:major-version
-     (if (= config:major-version 19) 7 8)]]]]]
+    (format "~s" (config:version))]]]]
 [t:check
  "unknown major is refused before library loading"
  [version-child
@@ -128,7 +125,7 @@
        (version-quote config:shared-object)
        (version-quote path)]]]
     (error 'version-test "cannot create installation fixture")]]]
- '(19 20)]
+ '(16 19 20)]
 [t:check
  "a library under the wrong major name is refused by LLVMGetVersion"
  [version-child
@@ -168,18 +165,45 @@
    [unless
     (member x version-entries)
     (set! version-entries (cons x version-entries))]]]]
-(version-walk (call-with-input-file "llvm/raw.sls" read))
+(define version-raw-source (call-with-input-file "llvm/raw.sls" read))
+(version-walk version-raw-source)
+;; the optional-entries table from the raw source: ((c-name . capability) ...)
+[define
+ version-optional
+ [let
+  find
+  ((x version-raw-source))
+  [cond
+   [[and
+     (pair? x)
+     (eq? (car x) 'define)
+     (pair? (cdr x))
+     (eq? (cadr x) 'optional-entries)]
+    (cadr (caddr x))]
+   ((pair? x) (or (find (car x)) (find (cdr x))))
+   (else #f)]]]
 [t:check
- "every bound C entry exists except documented removed MMX"
+ "the optional-entries table was found in the raw source"
+ (and (list? version-optional) (> (length version-optional) 40))]
+[t:check
+ "every bound C entry exists, except optional ones whose capability is off"
  [for-all
   [lambda
    (name)
-   [or
-    (foreign-entry? name)
-    [and
-     (string=? name "LLVMX86MMXTypeInContext")
-     (not (config:capability? 'x86-mmx))]]]
+   [let
+    ((opt (assoc name version-optional)))
+    [if
+     (and opt (not (config:capability? (cdr opt))))
+     #t
+     (foreign-entry? name)]]]
   version-entries]]
+[t:check
+ "optional entries are absent exactly when their capability is off"
+ [for-all
+  [lambda
+   (entry)
+   (eq? (config:capability? (cdr entry)) (foreign-entry? (car entry)))]
+  version-optional]]
 (define version-ctx (ir:make-context))
 [t:check
  "MMX is available on 19 and explicitly refused on 20"
@@ -318,3 +342,58 @@
    (lambda () (raise 'non-condition-restoration))]
   '["restoration failure returns through LLVM's lookup error"
     "a non-condition callback exception also returns through LLVM's lookup error"]]]
+
+(t:section "typed pointers (LLVM 16) and bitcode output")
+[define
+ (version-bitcode-magic? bc)
+ [and
+  (> (bytevector-length bc) 4)
+  (= (bytevector-u8-ref bc 0) #x42)
+  (= (bytevector-u8-ref bc 1) #x43)
+  (= (bytevector-u8-ref bc 2) #xC0)
+  (= (bytevector-u8-ref bc 3) #xDE)]]
+[let
+ ((ctx (ir:make-context)))
+ [if
+  (config:capability? 'typed-pointers)
+  [begin
+   (ir:context-use-typed-pointers! ctx)
+   [let
+    [[m
+      [ir:parse-ir
+       ctx
+       "typed"
+       "define float @f(float addrspace(1)* %p) {\nentry:\n  %v = load float, float addrspace(1)* %p, align 4\n  ret float %v\n}"]]]
+    [t:check
+     "typed-pointer IR parses and prints with element types"
+     (version-contains? (ir:module->string m) "float addrspace(1)*")]
+    [t:check
+     "typed-pointer-type builds an element-typed pointer"
+     [version-contains?
+      (ir:type->string (ir:typed-pointer-type (ir:float-type ctx) 1))
+      "float addrspace(1)*"]]
+    [t:check
+     "a typed module's bitcode starts with the magic"
+     (version-bitcode-magic? (ir:module->bitcode m))]
+    (ir:module-dispose! m)]]
+  [t:check
+   "typed pointers are refused by capability name"
+   [guard
+    [e
+     [(and (who-condition? e) (eq? (condition-who e) 'llvm-config))
+      (and (memq 'typed-pointers (condition-irritants e)) #t)]]
+    (ir:context-use-typed-pointers! ctx)
+    #f]]]
+ (ir:context-dispose! ctx)]
+[let*
+ [(ctx (ir:make-context))
+  (m (ir:parse-ir ctx "bc" "define i32 @answer() {\nentry:\n  ret i32 42\n}"))
+  (bc (ir:module->bitcode m))]
+ (t:check "module->bitcode: BC C0 DE" (version-bitcode-magic? bc))
+ [t:check
+  "module->bitcode returns a fresh bytevector each time"
+  [and
+   (equal? bc (ir:module->bitcode m))
+   (not (eq? bc (ir:module->bitcode m)))]]
+ (ir:module-dispose! m)
+ (ir:context-dispose! ctx)]

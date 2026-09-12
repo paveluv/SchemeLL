@@ -28,13 +28,32 @@
 (define ordering-oracle (o:enum-alist "Core.h" "LLVMAtomicOrdering"))
 (define rmw-oracle (o:enum-alist "Core.h" "LLVMAtomicRMWBinOp"))
 (define linkage-oracle (o:enum-alist "Core.h" "LLVMLinkage"))
-(define tailkind-oracle (o:enum-alist "Core.h" "LLVMTailCallKind"))
+;; enums and bitmasks the selected release may not have yet (tail-call kinds,
+;; fast-math flags and GEP flags arrived in LLVM 18/19): empty axes
+(define tailkind-oracle (o:optional-enum-alist "Core.h" "LLVMTailCallKind"))
 
 (define exclusions (call-with-input-file "project/coverage-exclusions.ss" read))
 
+;; a ledger entry is (axis name reason) or (axis name reason (unless CAP)): the
+;; latter applies only while capability CAP is off
+[define
+ (exclusion-applies? e)
+ [or
+  (null? (cdddr e))
+  [let
+   ((cond (cadddr e)))
+   [unless
+    (and (pair? cond) (eq? (car cond) 'unless) (symbol? (cadr cond)))
+    (error 'coverage "malformed exclusion condition" e)]
+   (not (config:capability? (cadr cond)))]]]
+
 [define
  (exclusions-for axis)
- (map cadr (filter (lambda (e) (eq? (car e) axis)) exclusions))]
+ [map
+  cadr
+  [filter
+   (lambda (e) (and (eq? (car e) axis) (exclusion-applies? e)))
+   exclusions]]]
 
 [define
  (oracle-name alist value)
@@ -155,10 +174,148 @@
 
 (define ctx (ir:make-context))  ; for the strictness probes below
 
+;; ---- per-release requirements -----------------------------------------------
+;; An entry whose golden IR uses a construct the selected release's C API cannot
+;; build or read back is skipped by capability name (printed), so the corpus
+;; stays one text for 16, 19 and 20 while level 1 accounts for the skipped
+;; constructs through the ledger's (unless CAP) exclusions.
+[define
+ requirement-words
+ '[(nsw       . flag-accessors        )
+   (nuw       . flag-accessors        )
+   (exact     . flag-accessors        )
+   (nneg      . flag-accessors        )
+   (disjoint  . flag-accessors        )
+   (fast      . flag-accessors        )
+   (nnan      . flag-accessors        )
+   (ninf      . flag-accessors        )
+   (nsz       . flag-accessors        )
+   (arcp      . flag-accessors        )
+   (contract  . flag-accessors        )
+   (afn       . flag-accessors        )
+   (reassoc   . flag-accessors        )
+   (nusw      . gep-no-wrap-flags     )
+   (musttail  . tail-call-kinds       )
+   (notail    . tail-call-kinds       )
+   (callbr    . callbr                )
+   (asm       . inline-asm-inspection )
+   (prefix    . prefix-data-inspection)
+   (prologue  . prefix-data-inspection)
+   (uinc_wrap . atomic-uinc-wrap      )
+   (udec_wrap . atomic-uinc-wrap      )
+   (usub_cond . atomic-usub           )
+   (usub_sat  . atomic-usub           )
+   (samesign  . icmp-samesign-text    )
+   (x86_mmx   . x86-mmx               )]]
+
+[define
+ requirement-substrings
+ '[(" [ \""         . operand-bundles        )
+   ("blockaddress(" . blockaddress-inspection)
+   ("target(\""     . target-ext-types       )]]
+
+[define
+ (word-char? c)
+ (or (char-alphabetic? c) (char-numeric? c) (char=? c #\_))]
+
+[define
+ (golden-words text)
+ [let
+  loop
+  ((i 0) (start #f) (acc '()))
+  [cond
+   [(= i (string-length text))
+    (if start (cons (substring text start i) acc) acc)]
+   ((word-char? (string-ref text i)) (loop (+ i 1) (or start i) acc))
+   (start (loop (+ i 1) #f (cons (substring text start i) acc)))
+   (else (loop (+ i 1) #f acc))]]]
+
+[define
+ (contains-substring? text sub)
+ [let
+  ((n (string-length text)) (m (string-length sub)))
+  [let
+   loop
+   ((i 0))
+   [and
+    (<= (+ i m) n)
+    (or (string=? sub (substring text i (+ i m))) (loop (+ i 1)))]]]]
+
+[define
+ (entry-requirements golden)
+ [let*
+  [[from-words
+    [map
+     cdr
+     [filter
+      (lambda (e) (member (symbol->string (car e)) (golden-words golden)))
+      requirement-words]]]
+   [from-substrings
+    [map
+     cdr
+     [filter
+      (lambda (e) (contains-substring? golden (car e)))
+      requirement-substrings]]]]
+  [let
+   dedupe
+   ((caps (append from-words from-substrings)) (acc '()))
+   [cond
+    ((null? caps) (reverse acc))
+    ((memq (car caps) acc) (dedupe (cdr caps) acc))
+    (else (dedupe (cdr caps) (cons (car caps) acc)))]]]]
+
+;; capabilities that only limit reading IR back (unbuild): the entry still
+;; builds, prints and is observed; only its unbuild and render round-trips are
+;; skipped
+[define
+ inspection-capabilities
+ '[inline-asm-inspection
+   blockaddress-inspection
+   prefix-data-inspection
+   value-as-metadata-inspection]]
+
+;; -> #f (run everything), 'unbuild (skip the read-back round-trips) or 'all
+;; (skip the entry); prints what is skipped and why
+[define
+ (entry-skip name golden)
+ [let*
+  [[missing
+    [filter
+     (lambda (c) (not (config:capability? c)))
+     (entry-requirements golden)]]
+   [build-missing
+    (filter (lambda (c) (not (memq c inspection-capabilities))) missing)]]
+  [cond
+   [(pair? build-missing)
+    [printf
+     "  skip  ~a: needs ~a on LLVM ~a~%"
+     name
+     missing
+     config:major-version]
+    'all]
+   [(pair? missing)
+    [printf
+     "  skip  ~a (unbuild and render only): needs ~a on LLVM ~a~%"
+     name
+     missing
+     config:major-version]
+    'unbuild]
+   (else #f)]]]
+
+(define (entry-skipped? name golden) (eq? (entry-skip name golden) 'all))
+
 ;; named struct types are registered per context, so each module gets a fresh
 ;; context to keep names collision-free across entries
 [define
  (check-entry! name prog golden)
+ [let
+  ((skip (entry-skip name golden)))
+  [unless
+   (eq? skip 'all)
+   (check-entry-now! name prog golden (eq? skip 'unbuild))]]]
+
+[define
+ (check-entry-now! name prog golden build-only?)
  [let*
   [(bctx (ir:make-context))
    (pctx (ir:make-context))
@@ -181,39 +338,41 @@
    (string=? built-text golden-text)]
   ;; unbuild self-test: parse the golden, unbuild it back to sll data, rebuild,
   ;; and demand the same canonical print
-  [let*
-   [(prog (sll:unbuild parsed))
-    (rebuilt (sll:build rctx (string-append name "-u") prog))
-    (rebuilt-text (ir-body (ir:module->string rebuilt)))]
-   [unless
-    (string=? rebuilt-text golden-text)
-    [printf
-     "~%--- unbuilt+rebuilt (~a) ---~%~a--- golden ---~%~a---~%"
-     name
-     rebuilt-text
-     golden-text]]
-   [t:check
-    (string-append "unbuild round-trip: " name)
-    (string=? rebuilt-text golden-text)]
-   (ir:module-dispose! rebuilt)
-   ;; render self-test: the same sll data rendered to text in pure Scheme and
-   ;; re-parsed by LLVM must print identically
+  [unless
+   build-only?
    [let*
-    [(xctx (ir:make-context))
-     (reparsed (ir:parse-ir xctx name (render:sll->ll prog)))
-     (reparsed-text (ir-body (ir:module->string reparsed)))]
+    [(prog (sll:unbuild parsed))
+     (rebuilt (sll:build rctx (string-append name "-u") prog))
+     (rebuilt-text (ir-body (ir:module->string rebuilt)))]
     [unless
-     (string=? reparsed-text golden-text)
+     (string=? rebuilt-text golden-text)
      [printf
-      "~%--- rendered+reparsed (~a) ---~%~a--- golden ---~%~a---~%"
+      "~%--- unbuilt+rebuilt (~a) ---~%~a--- golden ---~%~a---~%"
       name
-      reparsed-text
+      rebuilt-text
       golden-text]]
     [t:check
-     (string-append "render round-trip: " name)
-     (string=? reparsed-text golden-text)]
-    (ir:module-dispose! reparsed)
-    (ir:context-dispose! xctx)]]
+     (string-append "unbuild round-trip: " name)
+     (string=? rebuilt-text golden-text)]
+    (ir:module-dispose! rebuilt)
+    ;; render self-test: the same sll data rendered to text in pure Scheme and
+    ;; re-parsed by LLVM must print identically
+    [let*
+     [(xctx (ir:make-context))
+      (reparsed (ir:parse-ir xctx name (render:sll->ll prog)))
+      (reparsed-text (ir-body (ir:module->string reparsed)))]
+     [unless
+      (string=? reparsed-text golden-text)
+      [printf
+       "~%--- rendered+reparsed (~a) ---~%~a--- golden ---~%~a---~%"
+       name
+       reparsed-text
+       golden-text]]
+     [t:check
+      (string-append "render round-trip: " name)
+      (string=? reparsed-text golden-text)]
+     (ir:module-dispose! reparsed)
+     (ir:context-dispose! xctx)]]]
   (ir:module-dispose! built)
   (ir:module-dispose! parsed)
   (ir:context-dispose! bctx)
@@ -779,8 +938,6 @@ entry:
      (= %r12 (atomicrmw fsub (ptr %q) (double %d) monotonic))
      (= %r13 (atomicrmw fmax (ptr %q) (double %d) monotonic))
      (= %r14 (atomicrmw fmin (ptr %q) (double %d) monotonic))
-     (= %r15 (atomicrmw uinc_wrap (ptr %p) (i64 %v) monotonic))
-     (= %r16 (atomicrmw udec_wrap (ptr %p) (i64 %v) monotonic))
      (ret void)]]]
  "define void @rmws(ptr %p, i64 %v, ptr %q, double %d) {
 entry:
@@ -799,8 +956,25 @@ entry:
   %r12 = atomicrmw fsub ptr %q, double %d monotonic, align 8
   %r13 = atomicrmw fmax ptr %q, double %d monotonic, align 8
   %r14 = atomicrmw fmin ptr %q, double %d monotonic, align 8
-  %r15 = atomicrmw uinc_wrap ptr %p, i64 %v monotonic, align 8
-  %r16 = atomicrmw udec_wrap ptr %p, i64 %v monotonic, align 8
+  ret void
+}
+"]
+
+;; the LLVM 17 ops, apart so the fourteen older ones stay observed on 16
+[check-entry!
+ "rmw-wrap"
+ '[[define
+    void
+    (@wraps (ptr %p) (i64 %v))
+    [label
+     %entry
+     (= %a (atomicrmw uinc_wrap (ptr %p) (i64 %v) monotonic))
+     (= %b (atomicrmw udec_wrap (ptr %p) (i64 %v) monotonic))
+     (ret void)]]]
+ "define void @wraps(ptr %p, i64 %v) {
+entry:
+  %a = atomicrmw uinc_wrap ptr %p, i64 %v monotonic, align 8
+  %b = atomicrmw udec_wrap ptr %p, i64 %v monotonic, align 8
   ret void
 }
 "]
@@ -1306,6 +1480,12 @@ compute:
 ;; round-trip through the corpus normalizer instead
 [define
  (check-normalized-entry! name golden)
+ [unless
+  (entry-skipped? name golden)
+  (check-normalized-entry-now! name golden)]]
+
+[define
+ (check-normalized-entry-now! name golden)
  [let*
   [(pctx (ir:make-context))
    (rctx (ir:make-context))
@@ -1806,11 +1986,20 @@ entry:
 [t:check
  "oracle extraction sane: LLVMIntEQ = 32"
  (= (cdr (assq 'LLVMIntEQ int-pred-oracle)) 32)]
-[t:check
- "oracle extraction sane: LLVMFastMathNoNaNs = 2"
- (= (cdr (assq 'LLVMFastMathNoNaNs fmf-oracle)) 2)]
-[t:check
- "oracle extraction sane: LLVMGEPFlagNUW = 4"
- (= (cdr (assq 'LLVMGEPFlagNUW gep-flag-oracle)) 4)]
+[when
+ (config:capability? 'flag-accessors)
+ [t:check
+  "oracle extraction sane: LLVMFastMathNoNaNs = 2"
+  (= (cdr (assq 'LLVMFastMathNoNaNs fmf-oracle)) 2)]]
+[when
+ (config:capability? 'gep-no-wrap-flags)
+ [t:check
+  "oracle extraction sane: LLVMGEPFlagNUW = 4"
+  (= (cdr (assq 'LLVMGEPFlagNUW gep-flag-oracle)) 4)]]
+[unless
+ (config:capability? 'flag-accessors)
+ [t:check
+  "no fast-math or tail-call-kind enums before LLVM 18"
+  (and (null? fmf-oracle) (null? tailkind-oracle))]]
 
 (ir:context-dispose! ctx)

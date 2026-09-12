@@ -8,7 +8,16 @@
  (chezscheme)
  (prefix (sll) sll:)
  (prefix (sll render) render:)
- (prefix (llvm ir) ir:)]
+ (prefix (llvm ir) ir:)
+ (prefix (llvm config) config:)]
+
+;; the sample carries instruction flags, which need the LLVM 18 setters
+[unless
+ (config:capability? 'flag-accessors)
+ [printf
+  "skipped: instruction flags need the LLVM 18 C API (this is LLVM ~a)~%"
+  config:major-version]
+ (exit 0)]
 
 [define
  prog

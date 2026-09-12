@@ -55,6 +55,20 @@
   PrintTypeToString
   TypeOf
   GlobalGetValueType
+  ;; predecessors and extras for the LLVM 16 qualification
+  ArrayType
+  ConstArray
+  GetArrayLength
+  ConstStringInContext
+  ConstStringInContext/bytes
+  BuildInBoundsGEP2
+  IsInBounds
+  SetTailCall
+  IsTailCall
+  ContextSetOpaquePointers
+  PointerType
+  PointerTypeIsOpaque
+  WriteBitcodeToMemoryBuffer
   ;; Core: functions and values
   AddFunction
   GetNamedFunction
@@ -490,6 +504,85 @@
  ;; Must run before any foreign-procedure below is evaluated.
  (define llvm-loaded (config:load!))
 
+ ;; C entries that exist only in some qualified releases, each with the
+ ;; capability that names it (see config:capability?). define-getter binds an
+ ;; entry through bind-entry: when its capability is off, the binding refuses
+ ;; with that capability instead of resolving a missing C symbol while the
+ ;; library loads. tests/test-version.ss checks that every entry listed here is
+ ;; present exactly when its capability is on.
+ [define
+  optional-entries
+  '[("LLVMContextSetOpaquePointers"      . typed-pointers              )
+    ("LLVMArrayType2"                    . array-length-64             )
+    ("LLVMConstArray2"                   . array-length-64             )
+    ("LLVMGetArrayLength2"               . array-length-64             )
+    ("LLVMGetTargetExtTypeName"          . target-ext-types            )
+    ("LLVMGetTargetExtTypeNumTypeParams" . target-ext-types            )
+    ("LLVMGetTargetExtTypeTypeParam"     . target-ext-types            )
+    ("LLVMGetTargetExtTypeNumIntParams"  . target-ext-types            )
+    ("LLVMGetTargetExtTypeIntParam"      . target-ext-types            )
+    ("LLVMIsAValueAsMetadata"            . value-as-metadata-inspection)
+    ("LLVMSetNSW"                        . flag-accessors              )
+    ("LLVMGetNSW"                        . flag-accessors              )
+    ("LLVMSetNUW"                        . flag-accessors              )
+    ("LLVMGetNUW"                        . flag-accessors              )
+    ("LLVMSetExact"                      . flag-accessors              )
+    ("LLVMGetExact"                      . flag-accessors              )
+    ("LLVMSetNNeg"                       . flag-accessors              )
+    ("LLVMGetNNeg"                       . flag-accessors              )
+    ("LLVMSetIsDisjoint"                 . flag-accessors              )
+    ("LLVMGetIsDisjoint"                 . flag-accessors              )
+    ("LLVMSetFastMathFlags"              . flag-accessors              )
+    ("LLVMGetFastMathFlags"              . flag-accessors              )
+    ("LLVMCanValueUseFastMathFlags"      . flag-accessors              )
+    ("LLVMSetTailCallKind"               . tail-call-kinds             )
+    ("LLVMGetTailCallKind"               . tail-call-kinds             )
+    ("LLVMCreateOperandBundle"           . operand-bundles             )
+    ("LLVMDisposeOperandBundle"          . operand-bundles             )
+    ("LLVMGetNumOperandBundles"          . operand-bundles             )
+    ("LLVMGetOperandBundleAtIndex"       . operand-bundles             )
+    ("LLVMGetOperandBundleTag"           . operand-bundles             )
+    ("LLVMGetNumOperandBundleArgs"       . operand-bundles             )
+    ("LLVMGetOperandBundleArgAtIndex"    . operand-bundles             )
+    ("LLVMBuildCallWithOperandBundles"   . operand-bundles             )
+    ("LLVMBuildInvokeWithOperandBundles" . operand-bundles             )
+    ("LLVMGetInlineAsmAsmString"         . inline-asm-inspection       )
+    ("LLVMGetInlineAsmConstraintString"  . inline-asm-inspection       )
+    ("LLVMGetInlineAsmDialect"           . inline-asm-inspection       )
+    ("LLVMGetInlineAsmHasSideEffects"    . inline-asm-inspection       )
+    ("LLVMGetInlineAsmNeedsAlignedStack" . inline-asm-inspection       )
+    ("LLVMGetInlineAsmCanUnwind"         . inline-asm-inspection       )
+    ("LLVMHasPrefixData"                 . prefix-data-inspection      )
+    ("LLVMHasPrologueData"               . prefix-data-inspection      )
+    ("LLVMConstStringInContext2"         . sized-string-constants      )
+    ("LLVMBuildCallBr"                   . callbr                      )
+    ("LLVMBuildGEPWithNoWrapFlags"       . gep-no-wrap-flags           )
+    ("LLVMConstGEPWithNoWrapFlags"       . gep-no-wrap-flags           )
+    ("LLVMGEPGetNoWrapFlags"             . gep-no-wrap-flags           )
+    ("LLVMGetBlockAddressBasicBlock"     . blockaddress-inspection     )
+    ("LLVMGetBlockAddressFunction"       . blockaddress-inspection     )
+    ("LLVMX86MMXTypeInContext"           . x86-mmx                     )]]
+
+ [define
+  (bind-entry c-name make)
+  [let
+   ((entry (assoc c-name optional-entries)))
+   [if
+    (and entry (not (config:capability? (cdr entry))))
+    (lambda args (config:require-capability! (cdr entry)))
+    (make)]]]
+
+ ;; (define-getter name "LLVMName" (types) ret): a binding, optional ones
+ ;; through bind-entry
+ [define-syntax
+  define-getter
+  [syntax-rules
+   ()
+   [(_ name c-name (t ...) r)
+    [define
+     name
+     (bind-entry c-name (lambda () (foreign-procedure c-name (t ...) r)))]]]]
+
  [define
   CreateStringError
   (foreign-procedure "LLVMCreateStringError" (string) void*)]
@@ -569,6 +662,16 @@
  [define
   PointerTypeInContext          ; (ctx, address-space)
   (foreign-procedure "LLVMPointerTypeInContext" (void* unsigned-int) void*)]
+ ;; typed pointers: (element-type, address-space); the element type is ignored
+ ;; by opaque-pointer releases. LLVM 16 can still switch a context to typed
+ ;; pointers (optional entry, removed in 17).
+ (define-getter PointerType "LLVMPointerType" (void* unsigned-int) void*)
+ (define-getter PointerTypeIsOpaque "LLVMPointerTypeIsOpaque" (void*) int)
+ [define-getter
+  ContextSetOpaquePointers      ; (ctx, opaque?) -- before any type is created
+  "LLVMContextSetOpaquePointers"
+  (void* int)
+  void]
  [define
   FunctionType                  ; (ret, param-array, count, vararg?)
   (foreign-procedure "LLVMFunctionType" (void* void* unsigned-int int) void*)]
@@ -578,9 +681,9 @@
    "LLVMStructTypeInContext"
    (void* void* unsigned-int int)
    void*]]
- [define
-  ArrayType2                    ; (elem-type, count)
-  (foreign-procedure "LLVMArrayType2" (void* unsigned-64) void*)]
+ (define-getter ArrayType2 "LLVMArrayType2" (void* unsigned-64) void*)
+ ;; the 32-bit-length predecessor, for releases before LLVM 17
+ (define-getter ArrayType "LLVMArrayType" (void* unsigned-int) void*)
  [define
   VectorType                    ; (elem-type, count)
   (foreign-procedure "LLVMVectorType" (void* unsigned-int) void*)]
@@ -669,36 +772,48 @@
 
  ;; instruction flags; each setter is only valid on the instruction kinds that
  ;; carry the flag (add/sub/mul/shl for nsw/nuw, div/shr for exact, or for
- ;; disjoint, zext for nneg, load/store for volatile)
- (define SetNSW (foreign-procedure "LLVMSetNSW" (void* int) void))
- (define GetNSW (foreign-procedure "LLVMGetNSW" (void*) int))
- (define SetNUW (foreign-procedure "LLVMSetNUW" (void* int) void))
- (define GetNUW (foreign-procedure "LLVMGetNUW" (void*) int))
- (define SetExact (foreign-procedure "LLVMSetExact" (void* int) void))
- (define GetExact (foreign-procedure "LLVMGetExact" (void*) int))
- (define SetNNeg (foreign-procedure "LLVMSetNNeg" (void* int) void))
- (define GetNNeg (foreign-procedure "LLVMGetNNeg" (void*) int))
- (define SetIsDisjoint (foreign-procedure "LLVMSetIsDisjoint" (void* int) void))
- (define GetIsDisjoint (foreign-procedure "LLVMGetIsDisjoint" (void*) int))
+ ;; disjoint, zext for nneg, load/store for volatile) (the accessors are LLVM
+ ;; 18; before that only volatile has one, and getelementptr inbounds has
+ ;; LLVMIsInBounds)
+ (define-getter SetNSW "LLVMSetNSW" (void* int) void)
+ (define-getter GetNSW "LLVMGetNSW" (void*) int)
+ (define-getter SetNUW "LLVMSetNUW" (void* int) void)
+ (define-getter GetNUW "LLVMGetNUW" (void*) int)
+ (define-getter SetExact "LLVMSetExact" (void* int) void)
+ (define-getter GetExact "LLVMGetExact" (void*) int)
+ (define-getter SetNNeg "LLVMSetNNeg" (void* int) void)
+ (define-getter GetNNeg "LLVMGetNNeg" (void*) int)
+ (define-getter SetIsDisjoint "LLVMSetIsDisjoint" (void* int) void)
+ (define-getter GetIsDisjoint "LLVMGetIsDisjoint" (void*) int)
  (define SetVolatile (foreign-procedure "LLVMSetVolatile" (void* int) void))
  (define GetVolatile (foreign-procedure "LLVMGetVolatile" (void*) int))
- [define
+ [define-getter
   SetFastMathFlags              ; LLVMFastMathFlags bitmask
-  (foreign-procedure "LLVMSetFastMathFlags" (void* unsigned-int) void)]
- [define
-  GetFastMathFlags
-  (foreign-procedure "LLVMGetFastMathFlags" (void*) unsigned-int)]
- [define
+  "LLVMSetFastMathFlags"
+  (void* unsigned-int)
+  void]
+ (define-getter GetFastMathFlags "LLVMGetFastMathFlags" (void*) unsigned-int)
+ [define-getter
   CanValueUseFastMathFlags      ; is this an FPMathOperator?
-  (foreign-procedure "LLVMCanValueUseFastMathFlags" (void*) int)]
- [define
+  "LLVMCanValueUseFastMathFlags"
+  (void*)
+  int]
+ [define-getter
   GEPGetNoWrapFlags             ; LLVMGEPNoWrapFlags bitmask
-  (foreign-procedure "LLVMGEPGetNoWrapFlags" (void*) unsigned-int)]
- [define
+  "LLVMGEPGetNoWrapFlags"
+  (void*)
+  unsigned-int]
+ (define-getter IsInBounds "LLVMIsInBounds" (void*) int)
+ [define-getter
   SetTailCallKind               ; LLVMTailCallKind: 0 none, 1 tail, 2 musttail,
                                 ; 3 notail
-  (foreign-procedure "LLVMSetTailCallKind" (void* int) void)]
- (define GetTailCallKind (foreign-procedure "LLVMGetTailCallKind" (void*) int))
+  "LLVMSetTailCallKind"
+  (void* int)
+  void]
+ (define-getter GetTailCallKind "LLVMGetTailCallKind" (void*) int)
+ ;; the boolean predecessors: `tail` only
+ (define-getter SetTailCall "LLVMSetTailCall" (void* int) void)
+ (define-getter IsTailCall "LLVMIsTailCall" (void*) int)
  [define
   ReplaceAllUsesWith            ; (old-value, new-value)
   (foreign-procedure "LLVMReplaceAllUsesWith" (void* void*) void)]
@@ -725,24 +840,39 @@
  [define
   BlockAddress                  ; (function, basic-block)
   (foreign-procedure "LLVMBlockAddress" (void* void*) void*)]
- [define
+ [define-getter
   ConstArray2                   ; (elem-type, constant-array, count)
-  (foreign-procedure "LLVMConstArray2" (void* void* unsigned-64) void*)]
+  "LLVMConstArray2"
+  (void* void* unsigned-64)
+  void*]
+ (define-getter ConstArray "LLVMConstArray" (void* void* unsigned-int) void*)
  [define
   ConstStructInContext          ; (ctx, constant-array, count, packed?)
   [foreign-procedure
    "LLVMConstStructInContext"
    (void* void* unsigned-int int)
    void*]]
- [define
+ [define-getter
   ConstStringInContext2         ; (ctx, bytes, length, dont-null-terminate?)
-  [foreign-procedure
-   "LLVMConstStringInContext2"
-   (void* string size_t int)
-   void*]]
- [define
+  "LLVMConstStringInContext2"
+  (void* string size_t int)
+  void*]
+ [define-getter
   ConstStringInContext2/bytes   ; the same over a bytevector's bytes as they are
-  (foreign-procedure "LLVMConstStringInContext2" (void* u8* size_t int) void*)]
+  "LLVMConstStringInContext2"
+  (void* u8* size_t int)
+  void*]
+ ;; the unsigned-length predecessors, for releases before LLVM 18
+ [define-getter
+  ConstStringInContext
+  "LLVMConstStringInContext"
+  (void* string unsigned-int int)
+  void*]
+ [define-getter
+  ConstStringInContext/bytes
+  "LLVMConstStringInContext"
+  (void* u8* unsigned-int int)
+  void*]
 
  ;; --- module-level globals ------------------------------------------------
  [define
@@ -846,24 +976,23 @@
   BuildCleanupRet               ; (builder, cleanuppad, unwind-bb (0 = to
                                 ; caller))
   (foreign-procedure "LLVMBuildCleanupRet" (void* void* void*) void*)]
- [define
+ [define-getter
   BuildCallBr                   ; (builder, fn-type, fn, default-bb, dest-array,
                                 ; ndests, arg-array, nargs, bundles, nbundles,
                                 ; name)
-  [foreign-procedure
-   "LLVMBuildCallBr"
-   [void*
-    void*
-    void*
-    void*
-    void*
-    unsigned-int
-    void*
-    unsigned-int
-    void*
-    unsigned-int
-    string]
-   void*]]
+  "LLVMBuildCallBr"
+  [void*
+   void*
+   void*
+   void*
+   void*
+   unsigned-int
+   void*
+   unsigned-int
+   void*
+   unsigned-int
+   string]
+  void*]
  [define
   GetInlineAsm                  ; (fn-type, asm, len, constraints, len,
                                 ; side-effects?, align-stack?, dialect,
@@ -974,12 +1103,16 @@
    "LLVMBuildGEP2"
    (void* void* void* void* unsigned-int string)
    void*]]
- [define
+ [define-getter
   BuildGEPWithNoWrapFlags       ; ... + LLVMGEPNoWrapFlags bitmask
-  [foreign-procedure
-   "LLVMBuildGEPWithNoWrapFlags"
-   (void* void* void* void* unsigned-int string unsigned-int)
-   void*]]
+  "LLVMBuildGEPWithNoWrapFlags"
+  (void* void* void* void* unsigned-int string unsigned-int)
+  void*]
+ [define-getter
+  BuildInBoundsGEP2             ; the flag-less predecessor of inbounds
+  "LLVMBuildInBoundsGEP2"
+  (void* void* void* void* unsigned-int string)
+  void*]
 
  [define
   BuildTrunc
@@ -1162,6 +1295,10 @@
  [define
   DisposeTargetData
   (foreign-procedure "LLVMDisposeTargetData" (void*) void)]
+ ;; bitcode writer (BitWriter.h): a memory buffer the caller disposes
+ [define
+  WriteBitcodeToMemoryBuffer
+  (foreign-procedure "LLVMWriteBitcodeToMemoryBuffer" (void*) void*)]
  (define GetBufferStart (foreign-procedure "LLVMGetBufferStart" (void*) void*))
  (define GetBufferSize (foreign-procedure "LLVMGetBufferSize" (void*) size_t))
  [define
@@ -1169,12 +1306,6 @@
   (foreign-procedure "LLVMDisposeMemoryBuffer" (void*) void)]
 
  ;; --- generic value/type inspection (read-only; used by sll:unbuild) --------
- [define-syntax
-  define-getter                 ; (name "LLVMName" (types) ret)
-  [syntax-rules
-   ()
-   [(_ name c-name (t ...) r)
-    (define name (foreign-procedure c-name (t ...) r))]]]
 
  (define-getter GetOperand "LLVMGetOperand" (void* unsigned-int) void*)
  (define-getter GetNumOperands "LLVMGetNumOperands" (void*) int)
@@ -1221,14 +1352,8 @@
   GetMDNodeOperands             ; fills a ValueRef array
   (foreign-procedure "LLVMGetMDNodeOperands" (void* void*) void)]
  (define-getter MetadataTypeInContext "LLVMMetadataTypeInContext" (void*) void*)
- ;; LLVM 20 removed MMX. Keep the public binding, but refuse its use without
- ;; trying to resolve a removed C entry while importing the library.
- [define
-  X86MMXTypeInContext
-  [if
-   (config:capability? 'x86-mmx)
-   (foreign-procedure "LLVMX86MMXTypeInContext" (void*) void*)
-   (lambda (ctx) (config:require-capability! 'x86-mmx))]]
+ ;; LLVM 20 removed MMX (optional entry: refused there, never resolved)
+ (define-getter X86MMXTypeInContext "LLVMX86MMXTypeInContext" (void*) void*)
  (define-getter X86AMXTypeInContext "LLVMX86AMXTypeInContext" (void*) void*)
  [define-getter
   TargetExtTypeInContext        ; (ctx, name, ty*, n, uint*, n)
@@ -1305,6 +1430,7 @@
  (define-getter GetConstOpcode "LLVMGetConstOpcode" (void*) int)
  (define-getter GetElementType "LLVMGetElementType" (void*) void*)
  (define-getter GetArrayLength2 "LLVMGetArrayLength2" (void*) unsigned-64)
+ (define-getter GetArrayLength "LLVMGetArrayLength" (void*) unsigned-int)
  (define-getter GetVectorSize "LLVMGetVectorSize" (void*) unsigned-int)
  [define-getter
   CountStructElementTypes
@@ -1689,9 +1815,7 @@
   "LLVMCreateOperandBundle"
   (string size_t void* unsigned-int)
   void*]
- [define
-  DisposeOperandBundle
-  (foreign-procedure "LLVMDisposeOperandBundle" (void*) void)]
+ (define-getter DisposeOperandBundle "LLVMDisposeOperandBundle" (void*) void)
  [define-getter
   GetOperandBundleAtIndex       ; caller disposes the result
   "LLVMGetOperandBundleAtIndex"
@@ -1712,18 +1836,16 @@
   "LLVMGetOperandBundleArgAtIndex"
   (void* unsigned-int)
   void*]
- [define
+ [define-getter
   BuildCallWithOperandBundles   ; (b, fnty, fn, args, n, bundles, nb, name)
-  [foreign-procedure
-   "LLVMBuildCallWithOperandBundles"
-   (void* void* void* void* unsigned-int void* unsigned-int string)
-   void*]]
- [define
+  "LLVMBuildCallWithOperandBundles"
+  (void* void* void* void* unsigned-int void* unsigned-int string)
+  void*]
+ [define-getter
   BuildInvokeWithOperandBundles
-  [foreign-procedure
-   "LLVMBuildInvokeWithOperandBundles"
-   (void* void* void* void* unsigned-int void* void* void* unsigned-int string)
-   void*]]
+  "LLVMBuildInvokeWithOperandBundles"
+  (void* void* void* void* unsigned-int void* void* void* unsigned-int string)
+  void*]
  [define-getter
   GetTypeByName2                ; named struct lookup; NULL if absent
   "LLVMGetTypeByName2"

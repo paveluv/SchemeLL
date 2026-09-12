@@ -6,6 +6,11 @@
  ;; -- permanent --
  (opcode LLVMUserOp1 "internal to LLVM passes; never valid in IR")
  (opcode LLVMUserOp2 "internal to LLVM passes; never valid in IR")
+ ;; -- per release: (unless CAP) applies only while the capability is off --
+ [opcode
+  LLVMCallBr
+  "LLVMBuildCallBr is LLVM 19 C API; sll refuses callbr before that"
+  (unless callbr)]
  [ordering
   LLVMAtomicOrderingNotAtomic
   "the absence of an ordering, not a writable one"]

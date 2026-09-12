@@ -3,7 +3,7 @@
 ;;; against (see project/coverage-plan.md). Import as: (prefix ... o:)
 [library
  (tests oracle)
- (export enum-alist bitmask-alist)
+ (export enum-alist optional-enum-alist bitmask-alist)
  (import (chezscheme) (prefix (llvm config) config:))
 
  (define checked-headers (config:validate-headers!))
@@ -151,6 +151,17 @@
         [cons
          (string->symbol (substring line 0 eq))
          (bitwise-arithmetic-shift-left 1 n)]]]]]]]]
+
+ ;; the same, or '() when the selected release's header has no such enum (e.g.
+ ;; LLVMTailCallKind before LLVM 18)
+ [define
+  (optional-enum-alist header enum-name)
+  [let
+   ((text (read-file (string-append config:header-directory "/" header))))
+   [if
+    (str-index text (string-append "} " enum-name ";") 0)
+    (enum-alist header enum-name)
+    '()]]]
 
  ;; ((entry-name . value) ...) for `typedef enum { ... } <enum-name>;` in the
  ;; given installed llvm-c header.

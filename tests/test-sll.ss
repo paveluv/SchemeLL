@@ -5,6 +5,7 @@
  (prefix (llvm ir) ir:)
  (prefix (llvm jit) jit:)
  (prefix (llvm target) target:)
+ (prefix (llvm config) config:)
  (prefix (sll) sll:)]
 
 [define
@@ -220,19 +221,48 @@
      (= %r (add i64 %v %w))
      (ret i64 %r)]]]]
 
-[t:check
- "flags: jit executes correctly"
- (= ((jit:function (sll:jit flags-prog) "fsum") 3 4) 14)]
-[t:check
- "flags appear in dumped IR"
- [let
-  ((s (sll:dump flags-prog)))
-  [and
-   (contains? s "add nsw")
-   (contains? s "mul nuw nsw")
-   (contains? s "sdiv exact")
-   (contains? s "load volatile")
-   (contains? s "getelementptr inbounds")]]]
+;; nsw/nuw/exact need the LLVM 18 flag setters; before that sll refuses them by
+;; name instead of building an unflagged instruction
+[cond
+ [(config:capability? 'flag-accessors)
+  [t:check
+   "flags: jit executes correctly"
+   (= ((jit:function (sll:jit flags-prog) "fsum") 3 4) 14)]
+  [t:check
+   "flags appear in dumped IR"
+   [let
+    ((s (sll:dump flags-prog)))
+    [and
+     (contains? s "add nsw")
+     (contains? s "mul nuw nsw")
+     (contains? s "sdiv exact")
+     (contains? s "load volatile")
+     (contains? s "getelementptr inbounds")]]]]
+ [else
+  [t:check
+   "flags: refused by capability name before LLVM 18"
+   [guard
+    [e
+     [(and (who-condition? e) (eq? (condition-who e) 'llvm-config))
+      (memq 'flag-accessors (condition-irritants e))]]
+    (sll:jit flags-prog)
+    #f]]
+  [t:check
+   "volatile and inbounds still build without the flag setters"
+   [let
+    [[s
+      [sll:dump
+       '[[define
+          i64
+          (@f (ptr %p))
+          [label
+           %e
+           (= %v (load volatile i64 (ptr %p)))
+           (= %g (getelementptr inbounds i64 (ptr %p) (i64 1)))
+           (ret i64 %v)]]]]]]
+    [and
+     (contains? s "load volatile")
+     (contains? s "getelementptr inbounds")]]]]]
 
 (t:section "sll: step-3 instructions execute")
 
@@ -425,20 +455,34 @@
 
 (t:section "sll: step 5.5 -- varargs, tail, alloca counts, forward refs")
 
+;; LLVM 18 overloaded the va intrinsics on the pointer type (.p0); earlier
+;; releases know only the plain names
+[define
+ va-start
+ [if
+  (config:capability? 'overloaded-va-intrinsics)
+  '@llvm.va_start.p0
+  '@llvm.va_start]]
+[define
+ va-end
+ [if
+  (config:capability? 'overloaded-va-intrinsics)
+  '@llvm.va_end.p0
+  '@llvm.va_end]]
 [define
  va-prog
- '[(declare void (@llvm.va_start.p0 ptr))
-   (declare void (@llvm.va_end.p0 ptr))
+ `[(declare void (,va-start ptr))
+   (declare void (,va-end ptr))
    [define
     i64
     (@sumva (i64 %n) variadic)
     [label
      %entry
      (= %ap (alloca (array 3 ptr) (align 16)))
-     (call void (@llvm.va_start.p0 (ptr %ap)))
+     (call void (,va-start (ptr %ap)))
      (= %a (va_arg (ptr %ap) i64))
      (= %b (va_arg (ptr %ap) i64))
-     (call void (@llvm.va_end.p0 (ptr %ap)))
+     (call void (,va-end (ptr %ap)))
      (= %r (add i64 %a %b))
      (ret i64 %r)]]
    [define

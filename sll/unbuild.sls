@@ -334,7 +334,7 @@
      ((as (LLVMGetPointerAddressSpace ty)))
      (if (zero? as) 'ptr `(ptr (addrspace ,as)))]]
    [(array)
-    `(array ,(LLVMGetArrayLength2 ty) ,(unbuild-type (LLVMGetElementType ty)))]
+    `(array ,(ir:array-length ty) ,(unbuild-type (LLVMGetElementType ty)))]
    [(vector)
     `(vector ,(LLVMGetVectorSize ty) ,(unbuild-type (LLVMGetElementType ty)))]
    [(struct)
@@ -693,7 +693,7 @@
    [[count
      [case
       (ir:type-kind ty)
-      ((array) (LLVMGetArrayLength2 ty))
+      ((array) (ir:array-length ty))
       ((vector) (LLVMGetVectorSize ty))
       ((struct) (LLVMCountStructElementTypes ty))
       (else (not-modeled "aggregate constant type"))]]]
@@ -731,6 +731,9 @@
 
  [define
   (blockaddress-form st c)
+  [unless
+   (config:capability? 'blockaddress-inspection)
+   (not-modeled "blockaddress constants (no accessors before LLVM 19)")]
   [let*
    [(f (LLVMGetBlockAddressFunction c))
     (bb (LLVMGetBlockAddressBasicBlock c))
@@ -760,7 +763,7 @@
   (md-form v seen)
   [cond
    ((isa? (LLVMIsAMDString v)) `(md ,(md-string-text v)))
-   [(isa? (LLVMIsAValueAsMetadata v))
+   [(ir:value-as-metadata? v)
     (not-modeled "value-as-metadata operands (metadata-wrapped SSA values)")]
    [(isa? (LLVMIsAMDNode v))
     [when
@@ -801,7 +804,7 @@
   (metadata-value? v)
   [or
    (isa? (LLVMIsAMDString v))
-   (isa? (LLVMIsAValueAsMetadata v))
+   (ir:value-as-metadata? v)
    (isa? (LLVMIsAMDNode v))]]
 
  [define
@@ -824,6 +827,9 @@
 
  [define
   (asm-form v)
+  [unless
+   (config:capability? 'inline-asm-inspection)
+   (not-modeled "inline asm callees (no accessors before LLVM 18)")]
   `[asm
     ,(out-string LLVMGetInlineAsmAsmString v)
     ,(out-string LLVMGetInlineAsmConstraintString v)
@@ -837,9 +843,7 @@
 
  [define
   (wrap-flags v)
-  [append
-   (if (nz? (LLVMGetNUW v)) '(nuw) '())
-   (if (nz? (LLVMGetNSW v)) '(nsw) '())]]
+  (append (if (ir:nuw-flag? v) '(nuw) '()) (if (ir:nsw-flag? v) '(nsw) '()))]
 
  [define
   (fmf-flags v)
@@ -863,14 +867,14 @@
   (int-flags v op)
   [cond
    ((memq op '(add sub mul shl trunc)) (wrap-flags v))
-   ((memq op '(udiv sdiv lshr ashr)) (if (nz? (LLVMGetExact v)) '(exact) '()))
-   ((eq? op 'or) (if (nz? (LLVMGetIsDisjoint v)) '(disjoint) '()))
+   ((memq op '(udiv sdiv lshr ashr)) (if (ir:exact-flag? v) '(exact) '()))
+   ((eq? op 'or) (if (ir:disjoint-flag? v) '(disjoint) '()))
    (else '())]]
 
  [define
   (gep-flag-syms v)
   [let
-   ((m (LLVMGEPGetNoWrapFlags v)))
+   ((m (ir:gep-no-wrap-flags v)))
    [append
     (if (nz? (bitwise-and m 1)) '(inbounds) '())
     ;; inbounds implies nusw; only emit nusw when it stands alone
@@ -952,11 +956,32 @@
    (unbuild-type (ir:type-return-type fnty))]]
 
  ;; (bundle "tag" (type arg) ...) forms from a call site; each read bundle ref
- ;; is a fresh object the reader must dispose
+ ;; is a fresh object the reader must dispose without the LLVM 18 accessors,
+ ;; bundles can only be detected in the printed call (`... ) [ "tag"(...) ]`),
+ ;; and then refused
+ [define
+  (printed-bundles? ins)
+  [let*
+   ((text (ir:value->string ins)) (n (string-length text)))
+   [let
+    loop
+    ((i 0))
+    [and
+     (<= (+ i 5) n)
+     (or (string=? ") [ \"" (substring text i (+ i 5))) (loop (+ i 1)))]]]]
  [define
   (bundle-forms st ins)
+  [unless
+   (config:capability? 'operand-bundles)
+   [when
+    (printed-bundles? ins)
+    (not-modeled "operand bundles (no accessors before LLVM 18)")]]
   [let
-   ((nb (LLVMGetNumOperandBundles ins)))
+   [[nb
+     [if
+      (config:capability? 'operand-bundles)
+      (LLVMGetNumOperandBundles ins)
+      0]]]
    [let
     loop
     ((i 0))
@@ -1104,7 +1129,7 @@
      `[,op
        ,@(fmf-flags ins)
        ,@(if (eq? op 'trunc) (wrap-flags ins) '())
-       ,@(if (and (memq op '(zext uitofp)) (nz? (LLVMGetNNeg ins))) '(nneg) '())
+       ,@(if (and (memq op '(zext uitofp)) (ir:nneg-flag? ins)) '(nneg) '())
        ,(unbuild-type (LLVMTypeOf (op0)))
        ,(operand st (op0))
        ,(unbuild-type ty)]]
@@ -1441,8 +1466,8 @@
     [dl-program-addrspace
      (base:cstring->string (LLVMGetDataLayoutStr (LLVMGetGlobalParent f)))]]
    (not-modeled "functions outside the datalayout's program address space")]
-  (when (nz? (LLVMHasPrefixData f)) (not-modeled "function prefix data"))
-  (when (nz? (LLVMHasPrologueData f)) (not-modeled "function prologue data"))
+  (when (ir:prefix-data? f) (not-modeled "function prefix data"))
+  (when (ir:prologue-data? f) (not-modeled "function prologue data"))
   [unless
    (zero? (LLVMGetVisibility f))
    (not-modeled "visibility (hidden/protected)")]

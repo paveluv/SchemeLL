@@ -17,7 +17,8 @@
 
  [define
   qualified-versions
-  '[(19 1 7)
+  '[(16 0 6)
+    (19 1 7)
     (20 1 8)]]
  (define major-version (selection:setting 'major-version))
 
@@ -196,14 +197,49 @@
      (error 'llvm-config "missing LLVM C headers" header-directory)]
     actual]]]
 
+ ;; Named C API / IR capabilities of the selected release. Each names the
+ ;; release that introduced (or removed) the feature; the raw bindings, the IR
+ ;; layer and unbuild consult these instead of version numbers, and
+ ;; tests/test-version.ss checks that every optional C entry is present exactly
+ ;; when its capability says so.
  [define
   (capability? name)
   [case
    name
-   ((x86-mmx) (= major-version 19))
-   ((atomic-usub) (= major-version 20))
-   ((jit-layout-bridge) (= major-version 20))
-   ((icmp-samesign-text) (= major-version 20))
+   ;; LLVM 16: typed pointers still exist (LLVMContextSetOpaquePointers); needed
+   ;; to write bitcode for readers that predate opaque pointers
+   ((typed-pointers) (= major-version 16))
+   ;; LLVM 17: 64-bit array lengths (LLVMArrayType2, LLVMConstArray2,
+   ;; LLVMGetArrayLength2), target extension types, atomicrmw
+   ;; uinc_wrap/udec_wrap
+   ((array-length-64) (>= major-version 17))
+   ((target-ext-types) (>= major-version 17))
+   ((atomic-uinc-wrap) (>= major-version 17))
+   ((value-as-metadata-inspection) (>= major-version 17))
+   ;; LLVM 18: flag accessors (nsw/nuw/exact/nneg/disjoint and fast-math
+   ;; get/set), tail-call kinds beyond `tail`, operand bundles, inline-asm and
+   ;; prefix/prologue inspection, size_t string constants
+   ((flag-accessors) (>= major-version 18))
+   ((tail-call-kinds) (>= major-version 18))
+   ((operand-bundles) (>= major-version 18))
+   ((inline-asm-inspection) (>= major-version 18))
+   ((prefix-data-inspection) (>= major-version 18))
+   ((sized-string-constants) (>= major-version 18))
+   ;; LLVM 18 overloaded llvm.va_start/va_end/va_copy on the pointer type
+   ;; (llvm.va_start.p0); earlier releases know only the plain names
+   ((overloaded-va-intrinsics) (>= major-version 18))
+   ;; LLVM 19: callbr, getelementptr nusw/nuw, blockaddress inspection;
+   ;; LLVMGetOrdering reads fences correctly (16 misreads them, probed)
+   ((callbr) (>= major-version 19))
+   ((fence-ordering-accessor) (>= major-version 19))
+   ((gep-no-wrap-flags) (>= major-version 19))
+   ((blockaddress-inspection) (>= major-version 19))
+   ;; LLVM 20 removed MMX and added usub_cond/usub_sat, the JIT layout bridge
+   ;; and the samesign text detection
+   ((x86-mmx) (<= major-version 19))
+   ((atomic-usub) (>= major-version 20))
+   ((jit-layout-bridge) (>= major-version 20))
+   ((icmp-samesign-text) (>= major-version 20))
    (else #f)]]
  [define
   (require-capability! name)

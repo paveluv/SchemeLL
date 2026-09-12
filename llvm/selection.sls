@@ -14,7 +14,7 @@
  [define
   schema
   [list
-   (list 'major-version 19 (lambda (x) (and (memv x '(19 20)) #t)))
+   (list 'major-version 19 (lambda (x) (and (memv x '(16 19 20)) #t)))
    (list 'prefix #f path?)
    (list 'shared-object #f path?)
    (list 'header-directory #f path?)

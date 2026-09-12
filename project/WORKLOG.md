@@ -2,6 +2,60 @@
 
 Newest entries first. Format: date, Done / Decided / Next.
 
+## 2026-09-12 — LLVM 16 qualified (typed pointers for AIR)
+
+### Done
+
+LLVM 16.0.6 is a third qualified release next to 19.1.7 and 20.1.8, selected
+with `(major-version . 16)` or `SCHEMELL_LLVM_VERSION=16`. The reason is
+Metal AIR: a feasibility experiment on the M3 Mac showed that Apple's Metal
+compiler builds and runs a compute pipeline from bitcode written by LLVM 16
+with typed pointers, and rejects the same IR written by LLVM 19 or by 16 in
+opaque mode (the only structural difference in the bitcode is the pointer
+type records). LLVM 16 is the last release that can write typed pointers.
+
+The 18/19 C API that 16 lacks (48 entries: flag setters/getters, fast-math
+flags, tail-call kinds, operand bundles, callbr, GEP no-wrap flags,
+inline-asm/blockaddress/prefix-data/target-ext inspection, 64-bit array
+lengths, size_t string constants) is now a table of *optional entries* in
+`llvm/raw.sls`, each with a capability name; `define-getter` binds an
+optional entry only when its capability is on and otherwise refuses by that
+name. `config:capability?` grew the corresponding capabilities (documented
+in `project/llvm-versions.md`), and `make test` checks that each optional
+entry is present in the loaded library exactly when its capability says so.
+
+`(llvm ir)` falls back to the predecessors where they exist (unsigned array
+lengths and string constants, `LLVMBuildInBoundsGEP2`, the `tail` boolean)
+and reads flags, tail kinds and fence orderings from LLVM's printer through
+`(llvm text-flags)` where 16 has no accessor (or a wrong one: 16's
+`LLVMGetOrdering` misreads fences, probed). New: `ir:context-use-typed-pointers!`,
+`ir:typed-pointer-type` and `ir:module->bitcode`. unbuild refuses what it
+cannot inspect (inline-asm callees, blockaddress, bundles) as not-modeled.
+
+The coverage corpus stays one text: entries whose golden IR needs a missing
+capability skip by name (build-only when only read-back is missing), the
+exclusions ledger takes `(unless CAP)` entries, missing enums yield empty
+axes, and the atomicrmw entry is split so the fourteen older ops stay
+observed. Four examples that use instruction flags skip on 16.
+
+Validation on the M3 Mac: 16: 301/301; 19: 332/332; 20: 342/342 checks;
+examples on all three (four skip on 16 by capability); version cache
+20/19/16/20.
+
+### Decided
+
+Capabilities name features, never versions; every new optional C entry
+goes into `optional-entries` with a capability and the tests enforce the
+table. Instruction flags on 16 are refused rather than built through the
+per-opcode builder variants (`LLVMBuildNSWAdd` and friends cover only a
+subset); AIR does not need them.
+
+### Next
+
+The AIR target itself (SchemeGPU): typed-pointer IR text for the kernel,
+`ir:module->bitcode` under LLVM 16, the metallib container, and the Metal
+runtime through the Objective-C bridge that the experiment already drove.
+
 ## 2026-09-12 — Record exact Debian x86-64 platform results
 
 ### Done
