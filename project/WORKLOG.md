@@ -2,6 +2,13 @@
 
 Newest entries first. Format: date, Done / Decided / Next.
 
+## 2026-09-11 — Update the Schematter pin
+
+Updated Schematter from `d220dcf` to upstream `317895e`, including the
+precomputed layout widths, recursive renderer and optional comment stripping.
+Default formatting still preserves comments. `make check-format` passes
+without source changes. LLVM bindings and compiler behavior are unchanged.
+
 ## 2026-09-11 — S6: select LLVM with Scheme values
 
 ### Done
