@@ -548,6 +548,9 @@
  ;; 64-bit array lengths are LLVM 17; before that the C API takes unsigned
  [define
   (array-type elem-type count)
+  [when
+   (and (not (config:capability? 'array-length-64)) (> count #xffffffff))
+   (config:require-capability! 'array-length-64)]
   [if
    (config:capability? 'array-length-64)
    (LLVMArrayType2 elem-type count)
@@ -557,7 +560,7 @@
   [if
    (config:capability? 'array-length-64)
    (LLVMGetArrayLength2 ty)
-   (LLVMGetArrayLength ty)]]
+   (text:array-length ty)]]
 
  (define (vector-type elem-type count) (LLVMVectorType elem-type count))
 
@@ -722,16 +725,32 @@
       (if e (bitwise-ior mask (cdr e)) mask)]]
     0
     (text:leading-flags v)]]]
- ;; the FPMathOperators, for releases without LLVMCanValueUseFastMathFlags
- (define fp-math-opcodes '(fneg fadd fsub fmul fdiv frem fcmp select phi call))
+ ;; LLVM 16's FPMathOperator::classof (IR/Operator.h): select, phi and call
+ ;; require a floating result, possibly inside arrays and vectors. Other values,
+ ;; integer selects and void calls must not claim fast-math support.
+ [define
+  (fp-result-type? ty)
+  [case
+   (type-kind ty)
+   ((array vector scalable-vector) (fp-result-type? (LLVMGetElementType ty)))
+   ((half bfloat float double x86-fp80 fp128 ppc-fp128) #t)
+   (else #f)]]
  [define
   (can-use-fast-math-flags? v)
   [if
    flag-accessors?
    (not (zero? (LLVMCanValueUseFastMathFlags v)))
-   [let-values
-    (((op flags) (text:instruction-head v)))
-    (and (memq op fp-math-opcodes) #t)]]]
+   [and
+    [or
+     (not (zero? (LLVMIsAInstruction v)))
+     (not (zero? (LLVMIsAConstantExpr v)))]
+    [let-values
+     (((op flags) (text:instruction-head v)))
+     [case
+      op
+      ((fneg fadd fsub fmul fdiv frem fcmp) #t)
+      ((select phi call) (fp-result-type? (LLVMTypeOf v)))
+      (else #f)]]]]]
  ;; LLVMGEPNoWrapFlags: inbounds 1 (implies nusw 2), nuw 4. Before LLVM 19 only
  ;; inbounds exists, read through LLVMIsInBounds.
  [define
@@ -746,50 +765,30 @@
  ;; prefix/prologue data: LLVM 18 accessors; before that, the printed function
  ;; header carries the keywords
  [define
-  (function-header-has? f word)
-  [let*
-   [(text (base:cstring->string/dispose (LLVMPrintValueToString f)))
-    (n (string-length text))
-    [end
-     [let
-      loop
-      ((i 0))
-      [cond
-       ((= i n) n)
-       ((memv (string-ref text i) '(#\{ #\newline)) i)
-       (else (loop (+ i 1)))]]]
-    (header (substring text 0 end))
-    (m (string-length word))]
-   [let
-    loop
-    ((i 0))
-    [and
-     (<= (+ i m) (string-length header))
-     (or (string=? word (substring header i (+ i m))) (loop (+ i 1)))]]]]
- [define
   (prefix-data? f)
   [if
    (config:capability? 'prefix-data-inspection)
    (not (zero? (LLVMHasPrefixData f)))
-   (function-header-has? f " prefix ")]]
+   (text:function-header-has? f 'prefix)]]
  [define
   (prologue-data? f)
   [if
    (config:capability? 'prefix-data-inspection)
    (not (zero? (LLVMHasPrologueData f)))
-   (function-header-has? f " prologue ")]]
+   (text:function-header-has? f 'prologue)]]
 
- ;; a metadata-typed value that wraps an SSA value (LLVMIsAValueAsMetadata is
- ;; LLVM 17; before that: metadata-typed, neither string nor node)
+ ;; LLVMIsAMDNode also accepts ValueAsMetadata in LLVM 16. Inspect the wrapped
+ ;; metadata's kind instead: ConstantAsMetadata = 1, LocalAsMetadata = 2.
  [define
   (value-as-metadata? v)
-  [if
-   (config:capability? 'value-as-metadata-inspection)
-   (not (zero? (LLVMIsAValueAsMetadata v)))
-   [and
-    (eq? (type-kind (LLVMTypeOf v)) 'metadata)
-    (zero? (LLVMIsAMDString v))
-    (zero? (LLVMIsAMDNode v))]]]
+  [and
+   (not (zero? v))
+   [if
+    (config:capability? 'value-as-metadata-inspection)
+    (not (zero? (LLVMIsAValueAsMetadata v)))
+    [and
+     (eq? (type-kind (LLVMTypeOf v)) 'metadata)
+     (and (memv (LLVMGetMetadataKind (LLVMValueAsMetadata v)) '(1 2)) #t)]]]]
 
  ;; ---- typed pointers (LLVM 16) and bitcode ----------------------------------
 
@@ -1445,24 +1444,29 @@
     (config:capability? 'fence-ordering-accessor)
     (not (= (LLVMGetInstructionOpcode v) fence-opcode))]
    (LLVMGetOrdering v)
-   [let*
-    [(text (base:cstring->string/dispose (LLVMPrintValueToString v)))
-     (p (open-string-input-port text))]
-    [let
-     loop
-     ((last #f))
-     [let
-      ((tok (read p)))
-      [if
-       (eof-object? tok)
-       [or
-        [and
-         (symbol? last)
-         (cond ((assq last ordering-words) => cdr) (else #f))]
-        (base:error 'ir:instruction-ordering "unreadable fence ordering" text)]
-       (loop tok)]]]]]]
+   [let
+    ((entry (assq (text:fence-ordering v) ordering-words)))
+    [if
+     entry
+     (cdr entry)
+     [base:error
+      'ir:instruction-ordering
+      "unreadable fence ordering"
+      (value->string v)]]]]]
  (define (set-weak! v) (LLVMSetWeak v 1))
- (define (atomicrmw-binop v) (LLVMGetAtomicRMWBinOp v))
+ ;; LLVM 16 parses wrap operations, but its C getter's enum conversion reaches
+ ;; llvm_unreachable for them. Return the later C enum numbers without calling
+ ;; that getter; construction still refuses the missing atomic-uinc-wrap API.
+ [define
+  (atomicrmw-binop v)
+  [if
+   (config:capability? 'atomic-uinc-wrap)
+   (LLVMGetAtomicRMWBinOp v)
+   [case
+    (text:atomicrmw-operation v)
+    ((uinc_wrap) 15)
+    ((udec_wrap) 16)
+    (else (LLVMGetAtomicRMWBinOp v))]]]
  (define (cmpxchg-success-ordering v) (LLVMGetCmpXchgSuccessOrdering v))
  (define (cmpxchg-failure-ordering v) (LLVMGetCmpXchgFailureOrdering v))
 

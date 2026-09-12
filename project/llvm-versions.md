@@ -76,10 +76,10 @@ never version numbers. `config:require-capability!` raises
 | Capability | 16 | 19 | 20 | Meaning |
 | --- | --- | --- | --- | --- |
 | `typed-pointers` | yes | – | – | `ir:context-use-typed-pointers!` switches a fresh context to typed pointers (`LLVMContextSetOpaquePointers`); its bitcode is readable by consumers that predate opaque pointers |
-| `array-length-64` | – | yes | yes | `LLVMArrayType2` and friends; 16 uses the unsigned predecessors |
-| `target-ext-types` | – | yes | yes | target extension type accessors |
-| `atomic-uinc-wrap` | – | yes | yes | atomicrmw `uinc_wrap`/`udec_wrap` |
-| `value-as-metadata-inspection` | – | yes | yes | `LLVMIsAValueAsMetadata`; 16 infers it from the type |
+| `array-length-64` | – | yes | yes | `LLVMArrayType2` and friends; 16 reads full lengths from the printer and refuses native construction above 2^32−1 |
+| `target-ext-types` | – | yes | yes | target extension type inspection; construction exists on 16 |
+| `atomic-uinc-wrap` | – | yes | yes | C API for atomicrmw `uinc_wrap`/`udec_wrap`; 16 can parse and print them, and SchemeLL reads their opcodes safely |
+| `value-as-metadata-inspection` | – | yes | yes | `LLVMIsAValueAsMetadata`; 16 uses `LLVMGetMetadataKind` on the wrapped metadata |
 | `flag-accessors` | – | yes | yes | nsw/nuw/exact/nneg/disjoint and fast-math setters and getters; before 18 sll refuses these flags when building and reads them back from the printer |
 | `tail-call-kinds` | – | yes | yes | `musttail`/`notail`; 16 has only the `tail` boolean and reads the others from the printer |
 | `operand-bundles` | – | yes | yes | building and reading operand bundles; 16 refuses calls that carry them |
@@ -88,6 +88,7 @@ never version numbers. `config:require-capability!` raises
 | `sized-string-constants` | – | yes | yes | `LLVMConstStringInContext2`; 16 uses the unsigned predecessor |
 | `overloaded-va-intrinsics` | – | yes | yes | `llvm.va_start.p0` spelling; 16 knows `llvm.va_start` |
 | `callbr` | – | yes | yes | `LLVMBuildCallBr` |
+| `fence-ordering-accessor` | – | yes | yes | correct `LLVMGetOrdering` for fences; 16 reads the ordering before metadata in the printed instruction |
 | `gep-no-wrap-flags` | – | yes | yes | `getelementptr nusw`/`nuw`; `inbounds` builds everywhere |
 | `blockaddress-inspection` | – | yes | yes | reading `blockaddress` constants back |
 | `x86-mmx` | yes | yes | – | the MMX type |
@@ -119,6 +120,17 @@ library exactly when its capability is on.
 - The coverage corpus is one text for all releases: entries whose golden IR
   needs a missing capability are skipped by name, and the exclusions ledger
   carries `(unless CAP)` entries (callbr) so level 1 still balances.
+- Fallback text inspection tokenizes LLVM syntax, including quoted names,
+  attribute comments and metadata. It detects prefix/prologue data and
+  attributed operand bundles without silently dropping them. Both old and new
+  `inrange` GEP annotations are explicitly refused as not modeled.
+- LLVM 16's array-length getter truncates lengths above 2^32−1. SchemeLL reads
+  the complete length from the type's printed form and refuses oversized
+  native array construction by capability name. The text renderer preserves
+  such arrays and can be used with `ir:parse-ir`.
+- Scalable splats render as equivalent `insertelement`/`shufflevector`
+  constant expressions, accepted by all three releases. LLVM 16 predates the
+  short `splat (type value)` spelling.
 - `llvm.va_start`/`llvm.va_end` are not overloaded (`overloaded-va-intrinsics`).
 - The `memory(...)` function attribute exists in 16 but its bitcode encoding
   differs from later releases; producers targeting older bitcode readers
@@ -174,7 +186,16 @@ a validation boundary. See Woof's [runtime qualification](../../project/llvm-ver
 cases, checks header identity, and verifies layout restoration and its error
 path. `make test` also checks the pure selection API without loading LLVM.
 `make test-version-cache` compiles selection/config/raw once under 19 in an
-isolated test directory, then runs them under 20/19/20 without rebuilding.
+isolated test directory, then runs them under 20/19/16/20 without rebuilding.
+
+The [Debian LLVM 16 qualification](validation/2026-09-12-linux-llvm16/README.md)
+includes 25 compatibility regression checks and all 31,622 files in the
+unmodified LLVM 16.0.6 corpus. Its gate passes with zero unexplained failures:
+21,538 strict C API round trips, 7,324 strict text-renderer round trips and
+2 builder-folding fixed points; 596 parser rejections and 2,162 documented
+not-modeled cases remain explicit. For missing construction APIs, the harness
+uses the text-renderer tier only when the original canonical IR matches
+exactly; a renderer failure is still a failed gate.
 
 Run `make corpus CORPUS_DIR=...` against each release's unmodified `llvm/test`
 directory in a separate process with that release selected. Corpus comparisons

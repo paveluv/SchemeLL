@@ -293,14 +293,16 @@ standing (`coverage-plan.md`), and the exclusions ledger
 ## Tested platforms
 
 Dated rows record SchemeLL test runs; add a row when you verify another
-environment. The Linux row was rerun at `c7ed835` and links to its exact
-commands, environment records and logs. The *inferred* FreeBSD row retains
+environment. The Linux rows link to exact commands, environment records and
+logs; the latest includes the LLVM 16 compatibility repairs and matching
+regression corpus. The *inferred* FreeBSD row retains
 earlier status notes and is not a newly recorded run; replace it when the
 suite is run there again. Counts in historical rows retain their reported
 scope.
 
 | Date | OS | CPU | Chez | LLVM | Result |
 |---|---|---|---|---|---|
+| [2026-09-12](project/validation/2026-09-12-linux-llvm16/README.md) | Debian GNU/Linux 13.6 (trixie), Linux `6.12.101+deb13-amd64`, x86_64 | AMD Ryzen Threadripper PRO 9965WX 24-Cores | 10.0.0 (`scheme`, `ta6le`; Debian `10.0.0+dfsg-5`) | 16.0.6, 19.1.7, 20.1.8 (`/usr/lib/llvm-16`, `/usr/lib/llvm-19`, `/usr/lib/llvm-20`) | Rechecked after rebasing onto `9c7049f`: 332/332 checks on 16, 362/362 on 19, 372/372 on 20, plus 15 selection checks each; source and compiled libraries; 38 example scripts each (four skip on 16), both CLI checks including the 194-byte `--exe`; version cache 20/19/16/20; all 31,622 LLVM 16 corpus files examined, zero unexplained failures |
 | 2026-09-12 | macOS 15.7.9 (Darwin 24.6), arm64 | Apple M3 Pro | 10.4.1 (Homebrew, `chez`) | 16.0.6, 19.1.7, 20.1.8 (Homebrew `llvm@16`, `llvm@19`, `llvm@20`) | 301/301 checks on 16, 332/332 on 19, 342/342 on 20; 37 examples on each (`--exe` skipped; four skip on 16 by capability); version cache 20/19/16/20 |
 | [2026-09-12](project/validation/2026-09-12-linux/README.md) | Debian GNU/Linux 13.6 (trixie), Linux `6.12.101+deb13-amd64`, x86_64 | AMD Ryzen Threadripper PRO 9965WX 24-Cores | 10.0.0 (`scheme`, `ta6le`; Debian `10.0.0+dfsg-5`) | 19.1.7, 20.1.8 (`/usr/lib/llvm-19`, `/usr/lib/llvm-20`) | 324/324 checks on 19, 334/334 on 20, plus 14 selection checks each; repeated with compiled libraries; 38 Scheme examples and both CLI checks on each release, including executing the 194-byte `--exe`; version cache 20/19/20 |
 | inferred | FreeBSD, x86_64 | ? | ? (`chez-scheme`) | 19.1.7 | suite and `--exe` executables (ELFOSABI_FREEBSD branding) |
@@ -311,11 +313,14 @@ Notes:
   ABIs only; `make examples` skips that step on other hosts. Objects,
   assembly and the JIT are exercised by the recorded Linux and macOS runs;
   this table does not qualify untested hosts.
-- The Linux run used GNU Make 4.4.1, native target `X86`, object format
-  `elf`, and LLVM triple `x86_64-pc-linux-gnu`. Both selected libraries and
+- The Linux runs used GNU Make 4.4.1, native target `X86`, object format
+  `elf`, and LLVM triple `x86_64-pc-linux-gnu`. The selected libraries and
   their C headers reported the exact releases above. Full Debian package
-  versions, library paths and raw results are in the linked validation record.
-  This run did not repeat the LLVM regression-corpus campaign.
+  versions, library paths and raw results are in the linked validation records.
+  The latest run verifies 28,864 LLVM 16 corpus cases through native building,
+  text rendering or documented builder-folding checks; 596 parser rejections
+  and 2,162 explicitly unsupported cases remain accounted for. It does not
+  repeat the earlier LLVM 19/20 corpus campaigns.
 - On Apple Silicon `LLVMGetHostCPUFeatures` returns an empty string (the CPU
   name carries the features), Mach-O section names are spelled
   `segment,section`, the stack-map section is

@@ -1,7 +1,7 @@
 # What sll does not model
 
 The complete ledger of LLVM IR constructs outside (sll)'s grammar,
-initially recorded 2026-08-22, updated for LLVM 19/20 in S5. Companion to `project/sll-design.md` (what IS
+initially recorded 2026-08-22, updated for LLVM 16/19/20. Companion to `project/sll-design.md` (what IS
 modeled) and `project/coverage-plan.md` (how coverage is verified).
 
 **Detection column**: `sll:unbuild` is strict — *detected* means it raises a
@@ -13,6 +13,19 @@ Nothing on this list fails silently through both nets.
 When a construct gets modeled, its row moves out of this file and (for
 corpus purposes) out of the harness normalizer — same ledger discipline as
 `coverage-exclusions.ss`: implemented ∪ documented-here = LLVM IR.
+
+## Release-specific limits
+
+On LLVM 16, unbuild explicitly refuses inline-asm callees, blockaddress
+constants, operand bundles and target extension type inspection because their
+C accessors are absent. These are capability restrictions on that release;
+the grammar can represent them on newer releases.
+
+Instruction flags, tail kinds beyond `tail`, wrapping atomic operations and
+arrays larger than 2^32−1 can be read and rendered on 16, but their native
+construction APIs are unavailable and raise a named capability error. The
+corpus's strict text-renderer tier verifies their canonical round trips.
+See [the capability table](llvm-versions.md) for exact per-release behavior.
 
 ## Module level
 
@@ -95,7 +108,7 @@ entry `function-attributes` is the pin.
 | `dso_local_equivalent` / `no_cfi` constants (no C-API constructors) | detected (as "constant kind"; the irritant carries the printed constant) |
 | non-splat extractelement/insertelement/shufflevector constexprs (splats ARE modeled; the C API cannot read a constexpr shuffle mask) | detected (reports the constexpr opcode) |
 | constexpr binops carrying BOTH nuw and nsw (the C API constructors set one flag each) | detected |
-| `inrange(lo, hi)` annotations on gep constexprs (vtable splitting; no C API accessor exists) | detected (textually, from the printed constant) |
+| old `inrange` index markers and newer `inrange(lo, hi)` annotations on gep constexprs (vtable splitting; no C API accessor exists) | detected by LLVM tokens in the printed constant; quoted names are ignored |
 | ppc_fp128 constants not exactly representable as a double (every other float type travels bit-exactly as a folded bitcast constexpr) | detected |
 | blockaddress referencing another function | detected |
 | `; preds = ...` block comments reflect LLVM use-list order, which is not modeled | n/a (comments; stripped from the comparison) |

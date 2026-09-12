@@ -1,0 +1,497 @@
+$(for c in scheme chez; do command -v $c >/dev/null 2>&1 && echo $c && exit 0; done; echo chez-scheme) --libdirs . --script tests/selection.ss
+15 pure LLVM selection checks passed
+CHEZ=$(for c in scheme chez; do command -v $c >/dev/null 2>&1 && echo $c && exit 0; done; echo chez-scheme) $(for c in scheme chez; do command -v $c >/dev/null 2>&1 && echo $c && exit 0; done; echo chez-scheme) --libdirs . --script tests/run.ss
+
+== datalayout: parse/unparse round-trips (real-world strings) ==
+  ok    round-trip e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128
+  ok    round-trip E-m:o-i64:64-n32:64-S128
+  ok    round-trip e-m:w-p:32:32-i64:64-n8:16:32-S32
+  ok    round-trip e-m:e-p200:128:128:128:64-A200-P200-G200
+  ok    round-trip e-i64:64-v16:16-v32:32-n16:32:64-p:64:64:64-p1:32:32:32-p2:128:128:128:32
+  ok    round-trip e-p0:32:32-i64:64
+  ok    round-trip e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128-ni:1-p2:32:8:8:32-ni:2
+  ok    round-trip e-m:m-a:0:64-f80:128-v64:64-Fi64-n8
+  ok    round-trip E-m:a-Fn32-i64:64
+  ok    round-trip E-p:32:32:32-a0:0:64-s0:64:64-n32
+  ok    round-trip
+
+== datalayout: forms ==
+  ok    parse produces the documented forms
+  ok    explicit p0 stays distinct from bare p
+  ok    explicit p0 keeps its addrspace marker
+  ok    bare p has none
+  ok    construction from forms
+  ok    malformed inputs parse as raw, never crash
+
+== datalayout: unparse strictness ==
+  ok    unknown component form
+  ok    ni:0 rejected
+  ok    endian must be little or big
+  ok    raw takes one string
+  ok    adding non-integral spaces preserves target policy and removes duplicates
+  ok    adding non-integral AS0 is refused
+
+== datalayout: configure-module! integration ==
+  ok    host layout round-trips byte-identically
+  ok    target layout can be read without a temporary module
+  ok    repeated configure-module! yields exactly one ni
+
+== ir: building and verifying a module ==
+  ok    verify-module passes on valid IR
+  ok    module->string prints the function
+
+== ir: type introspection ==
+  ok    type-kind of i32 is integer
+  ok    type-int-width of i32 is 32
+  ok    type-kind of function type
+  ok    return type round-trips
+  ok    param types round-trip
+  ok    function-type-of recovers the fn type (opaque ptrs)
+  ok    value-name
+  ok    named-function finds it
+  ok    named-function returns #f for missing
+  ok    type->string
+
+== ir: verify catches invalid IR ==
+  ok    verify-module raises on invalid IR
+
+== ir: lifetime discipline ==
+  ok    using a disposed builder raises
+  ok    using a disposed module raises
+  ok    double dispose is a no-op
+  ok    using a disposed context raises
+
+== jit: add(i32,i32) end to end ==
+  ok    JIT exposes its actual host triple and layout before any module
+  ok    module is consumed after jit:add-module!
+  ok    add: (add 3 4) = 7
+  ok    add: negative operands
+  ok    add: i32 wraparound
+  ok    fact: recursion, (fact 20)
+  ok    fact: base case
+  ok    hypot2: doubles
+
+== jit: lookups and errors ==
+  ok    jit:lookup-address returns a nonzero address
+  ok    jit:function raises for unknown name
+  ok    predicates
+
+== jit: two modules, one jit ==
+  ok    cross-module call: (add3 39) = 42
+  ok    declarations don't shadow signatures
+
+== jit: disposal ==
+  ok    explicit jit:dispose!
+  ok    calling a procedure from a disposed jit raises
+  ok    lookup on a disposed jit raises
+
+== jit: host-platform guard ==
+  ok    jit refuses a foreign-triple module
+
+== jit: diagnostics ==
+  ok    bad asm mnemonic raises at materialization
+
+== jit: stack-map access (GC statepoints) ==
+  ok    stackmap-address finds the section via the keeper
+  ok    stackmap version byte is 3
+  ok    stackmap-address without the keeper raises
+  ok    two modules, two named keepers, two maps
+
+== target: host queries ==
+  ok    default-triple
+  ok    host-cpu-name
+  ok    host-cpu-features is a string
+
+== target: emitting objects ==
+  ok    optimization passes run
+  ok    in-memory object is in the host's object format
+  ok    object is non-trivial
+  ok    object file written in the host's object format
+  ok    assembly file mentions the function
+  ok    emit to an unwritable path raises, not aborts
+  ok    using a disposed target machine raises
+
+== target: non-integral datalayout + one-call pipelines ==
+  ok    configure-module! appends ni:1
+  ok    ni rejects address space 0
+  ok    sll:object emits the host's object format
+  ok    sll:object with statepoint passes carries a llvm_stackmaps section
+  ok    sll:assembly emits text containing the function
+
+== sll: @fact -- recursion, branches ==
+  ok    fact 20
+  ok    fact 0
+  ok    fact 1
+
+== sll: dump ==
+  ok    failed building releases partial native state
+  ok    the same context accepts a valid build after a failed one
+  ok    dump produces text
+  ok    dump defines @fact
+  ok    dump keeps our value names
+
+== sll: @sum -- phi with forward references, loop ==
+  ok    sum 10 = 55
+  ok    sum 1 = 1
+
+== sll: memory -- alloca/store/load/gep, align attributes ==
+  ok    alloca/store/load with align
+  ok    getelementptr
+  ok    align attribute lands in the IR
+
+== sll: the define's section deco ==
+  ok    section deco lands in the IR, before the alignment
+  ok    unbuild reads the section back, between the attributes and the alignment
+  ok    and the JIT runs the packed function
+
+== sll: casts, select, floats ==
+  ok    trunc/zext
+  ok    icmp/select min
+  ok    float arithmetic
+  ok    sitofp + intra-module call
+
+== sll: instruction flags ==
+  ok    flags: jit executes correctly
+  ok    flags appear in dumped IR
+
+== sll: step-3 instructions execute ==
+  ok    switch: case 0
+  ok    switch: case 1
+  ok    switch: default
+  ok    atomicrmw + atomic load
+  ok    vector splat/extract
+  ok    aggregate insert/extract
+  ok    unknown atomic ordering
+  ok    unknown atomicrmw op
+  ok    weak on non-cmpxchg
+  ok    ordering without atomic flag
+  ok    atomic flag without ordering
+  ok    blockaddress of another function
+
+== sll: exception handling ==
+  ok    invoke: normal path through the jit
+  ok    personality lands in the IR
+  ok    unbound personality
+  ok    invoke without unwind
+  ok    callbr with a non-asm callee
+  ok    malformed catchret
+
+== sll: step 5.5 -- varargs, tail, alloca counts, forward refs ==
+  ok    varargs end to end: va_start/va_arg through the jit
+  ok    vararg declare and call-site fn type print correctly
+  ok    tail call executes
+  ok    tail marker prints
+  ok    alloca with element count
+  ok    alloca count prints
+  ok    forward reference across rotated blocks
+  ok    no scratch block leaks into the output
+  ok    genuinely unbound local still raises
+
+== sll: globals ==
+  ok    global keeps state: first tick
+  ok    global keeps state: second tick
+  ok    string constant readable
+  ok    global definition needs an initializer
+  ok    aggregate initializer on scalar global
+  ok    unbound global in initializer
+  ok    duplicate global name
+
+== sll: declare -- cross-module calls in one jit ==
+  ok    declare + cross-module call
+
+== sll: errors ==
+  ok    instruction outside a block
+  ok    block without terminator
+  ok    empty block
+  ok    nested block
+  ok    unbound local
+  ok    unknown opcode
+  ok    duplicate local name
+  ok    unknown label
+  ok    binding a result-less instruction
+  ok    flag invalid for opcode: udiv nsw
+  ok    fast-math flag on integer op
+  ok    gep flag on non-gep
+  ok    tail flag on a non-call
+  ok    unknown type
+  ok    untyped literal
+
+== sll: load-sll (the inverted format) ==
+  ok    escapes evaluated inside items
+  ok    top-level splices produce items
+
+== sll: asm arity guard ==
+  ok    constraint operand count must match the call-site type
+
+== sll: bug-hunt regressions ==
+  ok    empty constraint string vs non-void call
+  ok    trailing comma in constraints
+  ok    escapes evaluate top to bottom
+
+== sll: name construction ==
+  ok    name concatenates symbol pieces
+  ok    name takes strings and integers
+  ok    name keeps the sigil only from the head
+  ok    name requires a sigil on the first piece
+  ok    name rejects an empty result
+  ok    name rejects inexact and other piece types
+  ok    constructed all-digit names raise (anonymity rule)
+  ok    generated names build and run
+
+== sll: typed pointer type form (ptr T (addrspace N)) ==
+  ok    typed pointer form builds as an opaque pointer
+  ok    unbuild returns the opaque form
+  ok    render prints the opaque spelling by default
+
+== ir: named metadata ==
+  ok    named metadata lands in the module
+  ok    module flags with the Max behavior go through named metadata
+
+== asm: constraint generation ==
+  ok    outputs, tied input, clobber
+  ok    explicit registers reproduce the hand-written hello string
+  ok    inout lowers to output + hidden tied input
+  ok    early clobber, alternatives, modifiers, $ escaping
+  ok    item order does not matter (numbering is canonical)
+  ok    tied must reference an output
+  ok    duplicate names rejected
+  ok    unknown template operand rejected
+  ok    unknown flag rejected
+
+== asm: end to end ==
+  ok    generated asm JITs and runs
+
+== asm: generator ergonomics ==
+  ok    anonymous operands and spliced sublists
+  ok    anonymous inout still ties correctly
+  ok    anonymous operands cannot be referenced in templates
+
+== asm: bug-hunt regressions ==
+  ok    operand refs are braced (digit fragments cannot merge)
+  ok    anonymous inout with explicit #f name
+  ok    tied to an anonymous operand is an error
+  ok    malformed (reg ...) does not concatenate
+  ok    malformed (tied ...) does not concatenate
+
+== LLVM installation and capabilities ==
+  LLVM (20 1 8); /usr/lib/llvm-20/lib/libLLVM-20.so; headers /usr/lib/llvm-20/include/llvm-c
+  ok    loaded release and C headers agree
+  ok    selection is frozen after import
+  ok    explicit Scheme selection takes precedence over invalid environment input
+  ok    unknown major is refused before library loading
+  ok    preloaded LLVM is refused before loading another library
+  ok    a library under the wrong major name is refused by LLVMGetVersion
+  ok    headers from another release are refused
+  ok    the optional-entries table was found in the raw source
+  ok    every bound C entry exists, except optional ones whose capability is off
+  ok    optional entries are absent exactly when their capability is off
+  ok    MMX is available on 19 and explicitly refused on 20
+  ok    unbuild refuses samesign instead of dropping its poison contract
+  ok    a quoted SSA name cannot impersonate an instruction flag
+
+== JIT non-integral layout admission ==
+  ok    JIT runs a module with additional non-integral spaces
+  ok    20 restores the exact GC layout immediately before code generation
+  ok    the bridge refuses physical layout differences without consuming the module
+JIT session error: Exception in test: restoration refused
+  ok    restoration failure returns through LLVM's lookup error
+JIT session error: Scheme JIT callback raised a non-condition value
+  ok    a non-condition callback exception also returns through LLVM's lookup error
+
+== typed pointers (LLVM 16) and bitcode output ==
+  ok    typed pointers are refused by capability name
+  ok    module->bitcode: BC C0 DE
+  ok    module->bitcode returns a fresh bytevector each time
+
+== compatibility: operand bundle detection ==
+  ok    bundle preserved or refused, call attributes:
+  ok    bundle preserved or refused, call attributes: nounwind
+  ok    quoted callee and array arguments cannot impersonate bundles
+  ok    invoke bundles with call-site attributes are preserved or refused
+
+== compatibility: prefix and prologue detection ==
+  ok    prefix after function attribute comment
+  ok    prefix after literal struct return type
+  ok    prologue after function attribute comment
+  ok    quoted function, type and attribute names do not imply prefix data
+  ok    prologue's string content is not a prefix keyword
+
+== compatibility: fence ordering with metadata ==
+  ok    fence acquire with named scope and metadata
+  ok    fence release with named scope and metadata
+  ok    fence acq_rel with named scope and metadata
+  ok    fence seq_cst with named scope and metadata
+
+== compatibility: instruction flags and type predicates ==
+  ok    quoted result name cannot forge flags; exact and fast-math survive
+  ok    fast-math applies only to eligible result types and operators
+
+== compatibility: wrap atomics and scalable splats ==
+  ok    wrap atomics can be inspected without unsupported C enum conversion
+  ok    the renderer preserves wrap atomics and instruction flags on LLVM 16
+  ok    scalable splats render with syntax accepted by every qualified release
+
+== compatibility: large arrays and inrange GEPs ==
+  ok    array lengths retain all 64 bits when reading parsed IR
+  ok    large-array construction succeeds or refuses by capability
+  ok    both old and new inrange annotations are explicitly refused
+  ok    inrange in a quoted symbol is not an annotation
+  ok    target extension types build everywhere, inspection is capability checked
+
+== compatibility: metadata value wrappers ==
+  ok    a null metadata operand is refused without a native crash
+  ok    local and constant value wrappers differ from nodes and strings
+
+== coverage: golden round-trips (level 2) ==
+  ok    golden round-trip: intops
+  ok    unbuild round-trip: intops
+  ok    render round-trip: intops
+  ok    golden round-trip: fltops
+  ok    unbuild round-trip: fltops
+  ok    render round-trip: fltops
+  ok    golden round-trip: casts
+  ok    unbuild round-trip: casts
+  ok    render round-trip: casts
+  ok    golden round-trip: memory
+  ok    unbuild round-trip: memory
+  ok    render round-trip: memory
+  ok    golden round-trip: icmps
+  ok    unbuild round-trip: icmps
+  ok    render round-trip: icmps
+  ok    golden round-trip: fcmps
+  ok    unbuild round-trip: fcmps
+  ok    render round-trip: fcmps
+  ok    golden round-trip: calls
+  ok    unbuild round-trip: calls
+  ok    render round-trip: calls
+  ok    golden round-trip: call-site-attributes
+  ok    unbuild round-trip: call-site-attributes
+  ok    render round-trip: call-site-attributes
+  ok    golden round-trip: flags
+  ok    unbuild round-trip: flags
+  ok    render round-trip: flags
+  ok    golden round-trip: fmf
+  ok    unbuild round-trip: fmf
+  ok    render round-trip: fmf
+  ok    golden round-trip: control2
+  ok    unbuild round-trip: control2
+  ok    render round-trip: control2
+  ok    golden round-trip: vaarg
+  ok    unbuild round-trip: vaarg
+  ok    render round-trip: vaarg
+  ok    golden round-trip: addrspace
+  ok    unbuild round-trip: addrspace
+  ok    render round-trip: addrspace
+  ok    golden round-trip: vectors
+  ok    unbuild round-trip: vectors
+  ok    render round-trip: vectors
+  ok    golden round-trip: aggregates
+  ok    unbuild round-trip: aggregates
+  ok    render round-trip: aggregates
+  ok    golden round-trip: atomics
+  ok    unbuild round-trip: atomics
+  ok    render round-trip: atomics
+  ok    golden round-trip: rmw-ops
+  ok    unbuild round-trip: rmw-ops
+  ok    render round-trip: rmw-ops
+  ok    golden round-trip: rmw-wrap
+  ok    unbuild round-trip: rmw-wrap
+  ok    render round-trip: rmw-wrap
+  ok    golden round-trip: fp-cast-fast-math
+  ok    unbuild round-trip: fp-cast-fast-math
+  ok    render round-trip: fp-cast-fast-math
+  ok    golden round-trip: rmw-usub
+  ok    unbuild round-trip: rmw-usub
+  ok    render round-trip: rmw-usub
+  ok    golden round-trip: alias-address-space
+  ok    unbuild round-trip: alias-address-space
+  ok    render round-trip: alias-address-space
+  ok    golden round-trip: globals
+  ok    unbuild round-trip: globals
+  ok    render round-trip: globals
+  ok    golden round-trip: eh-itanium
+  ok    unbuild round-trip: eh-itanium
+  ok    render round-trip: eh-itanium
+  ok    golden round-trip: eh-windows
+  ok    unbuild round-trip: eh-windows
+  ok    render round-trip: eh-windows
+  ok    golden round-trip: callbr
+  ok    unbuild round-trip: callbr
+  ok    render round-trip: callbr
+  ok    golden round-trip: tailcalls
+  ok    unbuild round-trip: tailcalls
+  ok    render round-trip: tailcalls
+  ok    golden round-trip: calling-conventions
+  ok    unbuild round-trip: calling-conventions
+  ok    render round-trip: calling-conventions
+  ok    golden round-trip: function-attributes
+  ok    unbuild round-trip: function-attributes
+  ok    render round-trip: function-attributes
+  ok    golden round-trip: varargs
+  ok    unbuild round-trip: varargs
+  ok    render round-trip: varargs
+  ok    golden round-trip: rotated
+  ok    unbuild round-trip: rotated
+  ok    render round-trip: rotated
+
+== coverage: unbuild strictness (not-modeled detection) ==
+  ok    unbuild accepts modeled function attributes
+  ok    unbuild rejects valued function attributes
+  ok    unbuild rejects parameter attributes
+  ok    unbuild rejects instruction metadata
+  ok    unbuild names unnamed identified struct types by print slot
+  ok    render raises (not loops) on unknown items
+  ok    unbuild rejects function prefix data
+  ok    unbuild spells calling conventions
+  ok    unbuild rejects nuw+nsw constexpr binops (no C constructor)
+  ok    golden round-trip: round14
+  ok    unbuild round-trip: round14
+  ok    render round-trip: round14
+  ok    golden round-trip: gc-bundles
+  ok    unbuild round-trip: gc-bundles
+  ok    render round-trip: gc-bundles
+  ok    normalized round-trip: statepoints
+  ok    normalized render round-trip: statepoints
+  ok    normalized round-trip: metadata-operands
+  ok    normalized render round-trip: metadata-operands
+  ok    golden round-trip: aliases
+  ok    unbuild round-trip: aliases
+  ok    render round-trip: aliases
+  ok    golden round-trip: constexprs
+  ok    unbuild round-trip: constexprs
+  ok    render round-trip: constexprs
+  ok    golden round-trip: edge-shapes
+  ok    unbuild round-trip: edge-shapes
+  ok    render round-trip: edge-shapes
+  ok    golden round-trip: wide-floats
+  ok    unbuild round-trip: wide-floats
+  ok    render round-trip: wide-floats
+  ok    golden round-trip: named-types
+  ok    unbuild round-trip: named-types
+  ok    render round-trip: named-types
+
+== coverage: observed + excluded = oracle (level 1) ==
+  opcodes: 65 implemented + 2 excluded = 67/67
+  ok    opcodes: observed + excluded = oracle
+  icmp predicates: 10 implemented + 0 excluded = 10/10
+  ok    icmp predicates: observed + excluded = oracle
+  fcmp predicates: 16 implemented + 0 excluded = 16/16
+  ok    fcmp predicates: observed + excluded = oracle
+  fast-math flags: 7 implemented + 0 excluded = 7/7
+  ok    fast-math flags: observed + excluded = oracle
+  gep flags: 3 implemented + 0 excluded = 3/3
+  ok    gep flags: observed + excluded = oracle
+  atomic orderings: 6 implemented + 1 excluded = 7/7
+  ok    atomic orderings: observed + excluded = oracle
+  atomicrmw ops: 19 implemented + 0 excluded = 19/19
+  ok    atomicrmw ops: observed + excluded = oracle
+  linkages: 11 implemented + 6 excluded = 17/17
+  ok    linkages: observed + excluded = oracle
+  tail-call kinds: 4 implemented + 0 excluded = 4/4
+  ok    tail-call kinds: observed + excluded = oracle
+  ok    oracle extraction sane: LLVMRet = 1
+  ok    oracle extraction sane: LLVMIntEQ = 32
+  ok    oracle extraction sane: LLVMFastMathNoNaNs = 2
+  ok    oracle extraction sane: LLVMGEPFlagNUW = 4
+
+372 passed, 0 failed

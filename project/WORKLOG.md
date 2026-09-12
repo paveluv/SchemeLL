@@ -1,5 +1,76 @@
 # Work log
 
+## 2026-09-12 — Rebase LLVM 16 qualification and repeat every local gate
+
+### Done
+
+Fetched `origin/main` at `9c7049f` (typed-pointer forms and named metadata),
+then rebased the local compatibility qualification commit. Resolved the
+`llvm/raw.sls` conflict by keeping both metadata APIs and one
+`ValueAsMetadata` binding/export; the range comparison showed no other changes
+to the compatibility patch.
+
+Fresh source and compiled-library suites pass 332/362/372 checks on LLVM
+16.0.6/19.1.7/20.1.8, plus 15 selection checks each. All examples and CLI checks,
+version-cache switching, focused review probes and formatting pass. Five
+additional integration checks per release exercise typed-pointer round trips
+and named metadata/Max/Min flags through emitted bitcode and matching
+`llvm-dis`. No additional implementation fixes were needed.
+
+Repeated all 31,622 matching LLVM 16 corpus files: 21,538 strict native passes,
+7,324 strict renderer passes and 2 fixed points; 596 parser rejections and
+2,162 explicit not-modeled cases. Zero unexplained failures; classifications
+match the earlier run. Refreshed README's counts and the
+[validation record](validation/2026-09-12-linux-llvm16/README.md).
+
+### Decided / Next
+
+Fold the refreshed validation into the rebased local qualification commit.
+The LLVM 19/20 full corpora and other operating systems were not rerun.
+No push requested.
+
+## 2026-09-12 — Complete the LLVM 16 compatibility review and qualification
+
+### Done
+
+Reviewed `07cfbb0` on Debian 13.6, Chez 10.0.0 (`ta6le`), with LLVM
+16.0.6/19.1.7/20.1.8. The original normal suites passed, but focused probes
+found dropped operand bundles, missed prefix/prologue data and fence-ordering
+errors. Fixed the readers with LLVM tokenization that respects quoted names,
+comments, attributes and metadata. Added metadata-kind inspection, null
+handling and accurate fast-math eligibility. Invoke attributes now survive
+unbuilding, building and rendering.
+
+Ran all 31,622 files from the matching LLVM 16.0.6 corpus. Fixed truncated
+array lengths, missed old `inrange` annotations, unsafe wrapping-atomic enum
+inspection and incompatible scalable-splat rendering. Oversized native array
+construction is explicitly refused. Missing construction APIs use the corpus
+harness's strict text-renderer tier only when canonical IR is identical;
+render failures still fail the gate. No lossy normalization was added.
+
+Final corpus: 21,538 strict C API round trips, 7,324 strict renderer round
+trips, 2 folding fixed points, 596 parser rejections and 2,162 explicit
+not-modeled cases. Zero unexplained failures, rendering failures or native
+access errors remain. Added 25 normal regression checks: the final source and
+compiled suites pass 326/357/367 checks on 16/19/20, plus 15 selection checks
+each. All example targets pass (38 scripts each, four capability skips on
+16), including both CLI checks and the 194-byte executable. Version-cache
+20/19/16/20 and formatting pass. LLVM 16 disassembles the emitted typed-pointer
+bitcode with element types preserved.
+
+Updated README's Tested platforms table and the version/limitations notes.
+Exact commands, environment facts, initial reproductions and final logs are
+in [the validation record](validation/2026-09-12-linux-llvm16/README.md).
+
+### Decided / Next
+
+LLVM 16 qualification covers the documented C API capabilities, with explicit
+refusals for unavailable native operations; it does not claim parity with
+later C APIs. The new corpus checkout and its exact reproduction command are
+recorded in RULES. No new macOS/FreeBSD/Metal runtime run or LLVM 19/20 corpus
+campaign is claimed. Commit the compatibility fixes and qualification record;
+no push requested.
+
 Newest entries first. Format: date, Done / Decided / Next.
 
 ## 2026-09-12 — LLVM 16 qualified (typed pointers for AIR)

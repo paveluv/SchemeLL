@@ -70,7 +70,6 @@
   PointerTypeIsOpaque
   WriteBitcodeToMemoryBuffer
   AddNamedMetadataOperand
-  ValueAsMetadata
   ;; Core: functions and values
   AddFunction
   GetNamedFunction
@@ -276,6 +275,8 @@
   MDStringInContext2
   MDNodeInContext2
   MetadataAsValue2
+  ValueAsMetadata
+  GetMetadataKind
   GetMDString
   GetMDNodeNumOperands
   GetMDNodeOperands
@@ -1346,6 +1347,9 @@
   "LLVMAddNamedMetadataOperand"
   (void* string void*)
   void]
+ ;; LLVMMetadataKind from DebugInfo.h, including ConstantAsMetadata and
+ ;; LocalAsMetadata. Unlike LLVMIsAMDNode this distinguishes value wrappers.
+ (define-getter GetMetadataKind "LLVMGetMetadataKind" (void*) unsigned-int)
  [define-getter
   GetMDString                   ; (value, unsigned* len-out)
   "LLVMGetMDString"

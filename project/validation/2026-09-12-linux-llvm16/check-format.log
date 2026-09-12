@@ -1,0 +1,2 @@
+git ls-files -z -- '*.sls' '*.ss' '*.scm' '*.sps' '*.sll' | \
+  xargs -0 $(for c in scheme chez; do command -v $c >/dev/null 2>&1 && echo $c && exit 0; done; echo chez-scheme) --script schematter/schematter.sps --check --

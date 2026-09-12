@@ -209,9 +209,9 @@
    ;; LLVM 16: typed pointers still exist (LLVMContextSetOpaquePointers); needed
    ;; to write bitcode for readers that predate opaque pointers
    ((typed-pointers) (= major-version 16))
-   ;; LLVM 17: 64-bit array lengths (LLVMArrayType2, LLVMConstArray2,
-   ;; LLVMGetArrayLength2), target extension types, atomicrmw
-   ;; uinc_wrap/udec_wrap
+   ;; LLVM 17 C API: 64-bit array lengths (LLVMArrayType2, LLVMConstArray2,
+   ;; LLVMGetArrayLength2), target extension inspection and atomicrmw
+   ;; uinc_wrap/udec_wrap (the IR operations already exist in 16).
    ((array-length-64) (>= major-version 17))
    ((target-ext-types) (>= major-version 17))
    ((atomic-uinc-wrap) (>= major-version 17))

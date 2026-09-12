@@ -1223,7 +1223,12 @@
            (args (if ccv (cdr args) args))
            (app (cadr args))
            (bundles (filter bundle-form? (cddr args)))
-           (labels (filter (lambda (x) (not (bundle-form? x))) (cddr args)))]
+           (attr-group? (lambda (x) (and (pair? x) (eq? (car x) 'attributes))))
+           (attr-groups (filter attr-group? (cddr args)))
+           [labels
+            [filter
+             (lambda (x) (not (or (bundle-form? x) (attr-group? x))))
+             (cddr args)]]]
           [unless
            (pair? app)
            (error "invoke expects an application group (callee args...)" form)]
@@ -1264,6 +1269,17 @@
                  (for-each ir:dispose-operand-bundle! brefs)
                  v]]]]]
             (when ccv (ir:set-instruction-call-conv! v ccv))
+            [for-each
+             [lambda
+              (grp)
+              [for-each
+               [lambda
+                (spec)
+                [ir:add-callsite-attribute!
+                 v
+                 (resolve-attribute ctx spec grp 'call-site)]]
+               (cdr grp)]]
+             attr-groups]
             v]]]]
         [(callbr)
          ;; (callbr cconv? type ((asm ...) args...) bundles...

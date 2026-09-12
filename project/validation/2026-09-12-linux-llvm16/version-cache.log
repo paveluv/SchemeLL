@@ -1,0 +1,8 @@
+CHEZ=$(for c in scheme chez; do command -v $c >/dev/null 2>&1 && echo $c && exit 0; done; echo chez-scheme) $(for c in scheme chez; do command -v $c >/dev/null 2>&1 && echo $c && exit 0; done; echo chez-scheme) --script tests/version-cache.ss
+compiling tests/tmp/version-cache/llvm/selection.sls with output to tests/tmp/version-cache/llvm/selection.so
+compiling tests/tmp/version-cache/llvm/config.sls with output to tests/tmp/version-cache/llvm/config.so
+compiling tests/tmp/version-cache/llvm/raw.sls with output to tests/tmp/version-cache/llvm/raw.so
+compiled bindings: LLVM (20 1 8), answer 42
+compiled bindings: LLVM (19 1 7), answer 42
+compiled bindings: LLVM (16 0 6), answer 42
+compiled bindings: LLVM (20 1 8), answer 42

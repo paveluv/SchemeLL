@@ -1,0 +1,108 @@
+Reviewing LLVM (16 0 6) on ta6le
+
+== operand bundle detection ==
+  ok    bundles preserved or explicitly refused; attributes=
+Unexpected successful round trip. Before:
+; ModuleID = 'bundle'
+source_filename = "bundle"
+
+declare void @g()
+
+define void @f() {
+entry:
+  call void @g() #0 [ "deopt"(i32 7) ]
+  ret void
+}
+
+attributes #0 = { nounwind }
+After:
+; ModuleID = 'rebuilt'
+source_filename = "rebuilt"
+
+declare void @g()
+
+define void @f() {
+entry:
+  call void @g() #0
+  ret void
+}
+
+attributes #0 = { nounwind }
+  FAIL  bundles preserved or explicitly refused; attributes=nounwind : check returned #f
+
+== function prefix and prologue detection ==
+Unexpected successful round trip. Before:
+; ModuleID = 'prefix after function attribute comment'
+source_filename = "prefix after function attribute comment"
+
+; Function Attrs: nounwind
+define i32 @f() #0 prefix i32 123 {
+entry:
+  ret i32 42
+}
+
+attributes #0 = { nounwind }
+After:
+; ModuleID = 'rebuilt'
+source_filename = "rebuilt"
+
+; Function Attrs: nounwind
+define i32 @f() #0 {
+entry:
+  ret i32 42
+}
+
+attributes #0 = { nounwind }
+  FAIL  prefix after function attribute comment: check returned #f
+Unexpected successful round trip. Before:
+; ModuleID = 'prefix after literal struct return type'
+source_filename = "prefix after literal struct return type"
+
+define { i32, i32 } @f() prefix i32 123 {
+entry:
+  ret { i32, i32 } zeroinitializer
+}
+After:
+; ModuleID = 'rebuilt'
+source_filename = "rebuilt"
+
+define { i32, i32 } @f() {
+entry:
+  ret { i32, i32 } zeroinitializer
+}
+  FAIL  prefix after literal struct return type: check returned #f
+Unexpected successful round trip. Before:
+; ModuleID = 'prologue after function attribute comment'
+source_filename = "prologue after function attribute comment"
+
+; Function Attrs: nounwind
+define i32 @f() #0 prologue i32 123 {
+entry:
+  ret i32 42
+}
+
+attributes #0 = { nounwind }
+After:
+; ModuleID = 'rebuilt'
+source_filename = "rebuilt"
+
+; Function Attrs: nounwind
+define i32 @f() #0 {
+entry:
+  ret i32 42
+}
+
+attributes #0 = { nounwind }
+  FAIL  prologue after function attribute comment: check returned #f
+  FAIL  quoted function name is not prefix data: Exception in sll:unbuild: not modeled (see project/not-modeled.md): function prefix data
+
+== fence ordering with metadata ==
+  FAIL  metadata does not hide acquire ordering: Exception in ir:instruction-ordering: unreadable fence ordering with irritant "  fence acquire, !annotation !0"
+
+== instruction flag readers ==
+  ok    quoted result name cannot forge flags; exact and fast-math survive
+
+== typed-pointer bitcode read by llvm-dis ==
+  ok    LLVM 16 disassembles element-typed pointer bitcode
+
+3 passed, 6 failed

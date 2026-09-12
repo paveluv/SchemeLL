@@ -1,0 +1,494 @@
+LLVM (16 0 6); collecting .ll files under reference/llvm16/llvm/test ...
+31622 files
+DICompileUnit not listed in llvm.dbg.cu
+!6 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus_14, file: !3, isOptimized: false, runtimeVersion: 0, emissionKind: NoDebug)
+DICompileUnit not listed in llvm.dbg.cu
+!6 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus_14, file: !3, isOptimized: false, runtimeVersion: 0, emissionKind: NoDebug)
+invalid base type
+!3 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !"2.bad", size: 32, align: 32)
+!"2.bad"
+invalid base type
+!6 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !"4.bad", size: 32, align: 32)
+!"4.bad"
+invalid type
+!20 = !DILocalVariable(name: "f", scope: !21, file: !13, line: 970, type: !14)
+!14 = !DISubroutineType(types: !15)
+invalid retained type
+!1 = distinct !DICompileUnit(language: DW_LANG_C99, file: !2, isOptimized: false, runtimeVersion: 0, emissionKind: NoDebug, retainedTypes: !3)
+invalid retained type list
+!0 = distinct !DICompileUnit(language: DW_LANG_C99, file: !1, producer: "clang version 3.0 (trunk 131941)", isOptimized: true, runtimeVersion: 0, emissionKind: FullDebug, retainedTypes: !2)
+!2 = distinct !DISubprogram(name: "main", scope: !1, line: 1, scopeLine: 1, virtualIndex: 6, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0)
+line specified with no file
+!2 = distinct !DISubprogram(name: "main", scope: !1, line: 1, scopeLine: 1, virtualIndex: 6, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0)
+1
+invalid thrown type
+!3 = distinct !DISubprogram(name: "f", scope: !4, file: !2, line: 1, type: !5, scopeLine: 2, spFlags: DISPFlagLocalToUnit | DISPFlagDefinition, unit: !1, thrownTypes: !7)
+!7 = !{!3}
+!3 = distinct !DISubprogram(name: "f", scope: !4, file: !2, line: 1, type: !5, scopeLine: 2, spFlags: DISPFlagLocalToUnit | DISPFlagDefinition, unit: !1, thrownTypes: !7)
+!dbg attachment points at wrong subprogram for function
+!5 = distinct !DISubprogram(name: "f", scope: !1, file: !1, line: 7, type: !6, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0)
+ptr @f
+  br label %1, !dbg !8, !llvm.loop !9
+!10 = !DILocation(line: 18, column: 2, scope: !11)
+!11 = distinct !DISubprogram(name: "f", scope: !1, file: !1, line: 7, type: !6, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !12)
+!11 = distinct !DISubprogram(name: "f", scope: !1, file: !1, line: 7, type: !6, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !12)
+DICompileUnit not listed in llvm.dbg.cu
+!12 = distinct !DICompileUnit(language: DW_LANG_C99, file: !1, isOptimized: false, runtimeVersion: 0, emissionKind: NoDebug)
+unrecognized named metadata node in the llvm.dbg namespace
+!llvm.dbg.the_dbg_namespace_is_reserved = !{}
+
+function declaration may only have a unique !dbg attachment
+ptr @f1
+subprogram declarations must not have a compile unit
+!4 = !DISubprogram(name: "f5", scope: !1, file: !2, flags: DIFlagPrototyped, spFlags: DISPFlagOptimized, unit: !1)
+function must have a single !dbg attachment
+ptr @f2
+!5 = distinct !DISubprogram(name: "foo", scope: !1, file: !2, spFlags: DISPFlagDefinition, unit: !1)
+DISubprogram attached to more than one function
+!5 = distinct !DISubprogram(name: "foo", scope: !1, file: !2, spFlags: DISPFlagDefinition, unit: !1)
+ptr @f3
+DISubprogram attached to more than one function
+!5 = distinct !DISubprogram(name: "foo", scope: !1, file: !2, spFlags: DISPFlagDefinition, unit: !1)
+ptr @f4
+function !dbg attachment must be a subprogram
+ptr @bar
+!6 = !{}
+subprogram definitions must have a compile unit
+!2 = distinct !DISubprogram(scope: null, spFlags: DISPFlagDefinition)
+invalid llvm.dbg.declare intrinsic address/value
+  call void @llvm.dbg.declare(metadata !"", metadata !1, metadata !DIExpression()), !dbg !3
+!""
+invalid compile unit
+!llvm.dbg.cu = !{!1}
+
+!1 = !DIFile(filename: "davide.f", directory: "")
+inlinable function call in a function with debug info must have a !dbg location
+  call void @h()
+inlinable function call in a function with debug info must have a !dbg location
+  call void @k()
+invalid vector, expected one element of type subrange
+!9 = !DICompositeType(tag: DW_TAG_array_type, baseType: !10, size: 256, flags: DIFlagVector, elements: !11)
+Entry values are only allowed in MIR
+  call void @llvm.dbg.value(metadata i32 %param, metadata !8, metadata !DIExpression(DW_OP_LLVM_entry_value, 1)), !dbg !9
+subprogram definitions must have a compile unit
+!2 = distinct !DISubprogram(scope: null, spFlags: DISPFlagDefinition)
+DIBlockByRefStruct on DICompositeType is no longer supported
+!3 = !DICompositeType(tag: DW_TAG_structure_type, flags: DIFlagReservedBit4)
+!dbg attachment points at wrong subprogram for function
+!7 = distinct !DISubprogram(name: "bar", scope: !0, spFlags: DISPFlagDefinition, unit: !0)
+ptr @bar
+  ret i32 0, !dbg !6
+!6 = !DILocation(line: 7, scope: !5)
+!5 = distinct !DISubprogram(name: "foo", scope: !0, spFlags: DISPFlagDefinition, unit: !0)
+!5 = distinct !DISubprogram(name: "foo", scope: !0, spFlags: DISPFlagDefinition, unit: !0)
+function definition may only have a distinct !dbg attachment
+ptr @_Z3foov
+subprogram definitions must have a compile unit
+!2 = distinct !DISubprogram(scope: null, spFlags: DISPFlagDefinition)
+invalid llvm.dbg.value intrinsic expression
+  call void @llvm.dbg.value(metadata ptr %s, metadata !1, metadata !""), !dbg !3
+!""
+subprogram definitions must have a compile unit
+!2 = distinct !DISubprogram(scope: null, spFlags: DISPFlagDefinition)
+invalid llvm.dbg.value intrinsic address/value
+  call void @llvm.dbg.value(metadata !"", metadata !1, metadata !DIExpression()), !dbg !3
+!""
+DILocation not allowed within this metadata node
+!11 = distinct !{!11, !10}
+!10 = !DILocation(line: 1, column: 1, scope: !5)
+invalid set base type
+!27 = !DIDerivedType(tag: DW_TAG_set_type, name: "ST", scope: !2, file: !2, line: 11, baseType: !23, size: 64, align: 64)
+!23 = !DIDerivedType(tag: DW_TAG_set_type, name: "SS", scope: !2, file: !2, line: 11, baseType: !24, size: 64, align: 64)
+!dbg attachment points at wrong subprogram for function
+!3 = distinct !DISubprogram(name: "f", scope: !4, file: !2, line: 1, type: !5, scopeLine: 2, spFlags: DISPFlagLocalToUnit | DISPFlagDefinition, unit: !1)
+ptr @f
+  ret void, !dbg !7
+!7 = !DILocation(line: 1, scope: !8)
+!8 = distinct !DISubprogram(name: "f", scope: !4, file: !2, line: 1, type: !5, scopeLine: 2, spFlags: DISPFlagLocalToUnit | DISPFlagDefinition, unit: !1)
+!8 = distinct !DISubprogram(name: "f", scope: !4, file: !2, line: 1, type: !5, scopeLine: 2, spFlags: DISPFlagLocalToUnit | DISPFlagDefinition, unit: !1)
+subprogram definitions must have a compile unit
+!2 = distinct !DISubprogram(name: "foo", scope: null, spFlags: DISPFlagDefinition)
+llvm.dbg.value intrinsic requires a !dbg attachment
+  call void @llvm.dbg.value(metadata ptr undef, metadata !1, metadata !DIExpression())
+label %entry
+ptr @foo
+llvm.dbg.declare intrinsic requires a !dbg attachment
+  call void @llvm.dbg.declare(metadata ptr undef, metadata !1, metadata !DIExpression())
+label %entry
+ptr @foo
+mismatched subprogram between llvm.dbg.value variable and !dbg attachment
+  call void @llvm.dbg.value(metadata ptr undef, metadata !1, metadata !DIExpression()), !dbg !3
+label %entry
+ptr @foo
+!1 = !DILocalVariable(scope: !2)
+!2 = distinct !DISubprogram(name: "foo", scope: null, spFlags: DISPFlagDefinition)
+!3 = !DILocation(line: 0, scope: !4)
+!4 = distinct !DISubprogram(name: "bar", scope: null, spFlags: DISPFlagDefinition)
+subprogram definitions must have a compile unit
+!4 = distinct !DISubprogram(name: "bar", scope: null, spFlags: DISPFlagDefinition)
+mismatched subprogram between llvm.dbg.declare variable and !dbg attachment
+  call void @llvm.dbg.declare(metadata ptr undef, metadata !1, metadata !DIExpression()), !dbg !3
+label %entry
+ptr @foo
+!1 = !DILocalVariable(scope: !2)
+!2 = distinct !DISubprogram(name: "foo", scope: null, spFlags: DISPFlagDefinition)
+!3 = !DILocation(line: 0, scope: !4)
+!4 = distinct !DISubprogram(name: "bar", scope: null, spFlags: DISPFlagDefinition)
+invalid type ref
+!1 = !DIGlobalVariable(name: "c", scope: null, type: !2, isLocal: false, isDefinition: true)
+!2 = distinct !DISubprogram(name: "b", scope: null, spFlags: DISPFlagDefinition, unit: !3)
+invalid type ref
+!1 = !DIGlobalVariable(name: "c", scope: null, type: !2, isLocal: false, isDefinition: true)
+!2 = distinct !DISubprogram(name: "b", scope: null, spFlags: DISPFlagDefinition, unit: !3)
+invalid type ref
+!1 = !DIGlobalVariable(name: "c", scope: null, type: !2, isLocal: false, isDefinition: true)
+!2 = distinct !DISubprogram(name: "b", scope: null, spFlags: DISPFlagDefinition, unit: !3)
+invalid checksum
+!10 = !DIFile(filename: "./t1.h", directory: "/scratch", checksumkind: CSK_SHA1, checksum: "123456789012345678901234567890123456789.")
+invalid checksum length
+!8 = !DIFile(filename: "./t2.h", directory: "/scratch", checksumkind: CSK_MD5, checksum: "2222")
+Count must be signed constant or DIVariable or DIExpression
+!17 = !DISubrange(count: !14)
+invalid file
+!3 = distinct !DISubprogram(name: "blah", scope: null, file: !1, spFlags: DISPFlagDefinition, unit: !1)
+!1 = distinct !DICompileUnit(language: DW_LANG_C99, file: !2, isOptimized: false, runtimeVersion: 0, emissionKind: NoDebug)
+conflicting debug info for argument
+  call void @llvm.dbg.declare(metadata ptr %a, metadata !8, metadata !DIExpression()), !dbg !7
+!5 = !DILocalVariable(name: "a", arg: 1, scope: !4, file: !1, line: 1, type: !6)
+!8 = !DILocalVariable(name: "b", arg: 1, scope: !4, file: !1, line: 1, type: !6)
+fragment is larger than or outside of variable
+!0 = !DIGlobalVariableExpression(var: !1, expr: !DIExpression(DW_OP_LLVM_fragment, 0, 64))
+!1 = !DIGlobalVariable(name: "g", scope: !2, file: !3, line: 1, type: !4, isLocal: false, isDefinition: true)
+inlined-at should be a location
+!1 = !DILocation(line: 0, scope: !2, inlinedAt: !3)
+!3 = !{}
+subprogram definitions must have a compile unit
+!2 = distinct !DISubprogram(scope: null, spFlags: DISPFlagDefinition)
+invalid !dbg metadata attachment
+  ret void, !dbg !3
+!3 = !{}
+!dbg attachment points at wrong subprogram for function
+!7 = distinct !DISubprogram(name: "bar", scope: !0, spFlags: DISPFlagDefinition, unit: !0)
+ptr @bar
+  ret i32 0, !dbg !8, !llvm.loop !9
+!10 = !DILocation(line: 1, scope: !5)
+!5 = distinct !DISubprogram(name: "foo", scope: !0, spFlags: DISPFlagDefinition, unit: !0)
+!5 = distinct !DISubprogram(name: "foo", scope: !0, spFlags: DISPFlagDefinition, unit: !0)
+line specified with no file
+!3 = distinct !DISubprogram(name: "foo", scope: !1, line: 1, spFlags: DISPFlagDefinition, unit: !1)
+1
+subprogram definitions must have a compile unit
+!2 = distinct !DISubprogram(scope: null, spFlags: DISPFlagDefinition)
+invalid llvm.dbg.declare intrinsic expression
+  call void @llvm.dbg.declare(metadata ptr %s, metadata !1, metadata !"")
+!""
+DILocation's scope must be a DILocalScope
+!4 = distinct !DISubprogram(name: "f", scope: !1, file: !1, line: 2, type: !5, scopeLine: 2, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0)
+ptr @f
+  ret void, !dbg !7
+!7 = !DILocation(line: 2, scope: !1)
+!1 = !DIFile(filename: "t.c", directory: "/tmp")
+location requires a valid scope
+!7 = !DILocation(line: 2, scope: !1)
+!1 = !DIFile(filename: "t.c", directory: "/tmp")
+DICompileUnit not listed in llvm.dbg.cu
+!8 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus, file: !5, isOptimized: false, runtimeVersion: 0, emissionKind: NoDebug)
+DICompileUnit not listed in llvm.dbg.cu
+!0 = distinct !DICompileUnit(language: DW_LANG_Fortran77, file: !1, isOptimized: false, runtimeVersion: 0, emissionKind: NoDebug)
+invalid llvm.dbg.declare intrinsic variable
+  call void @llvm.dbg.declare(metadata ptr %s, metadata !"", metadata !DIExpression()), !dbg !1
+!""
+subprogram definitions must have a compile unit
+!2 = distinct !DISubprogram(scope: null, spFlags: DISPFlagDefinition)
+!dbg attachment of global variable must be a DIGlobalVariableExpression
+!dbg attachment points at wrong subprogram for function
+!4 = distinct !DISubprogram(name: "f", scope: !1, file: !1, line: 2, type: !5, scopeLine: 2, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition, unit: !0)
+ptr @f
+  ret void, !dbg !7
+!7 = !DILocation(line: 2, scope: !8)
+!8 = distinct !DISubprogram(name: "f", scope: !1, file: !1, line: 2, type: !5, scopeLine: 2, spFlags: 0)
+!8 = distinct !DISubprogram(name: "f", scope: !1, file: !1, line: 2, type: !5, scopeLine: 2, spFlags: 0)
+scope points into the type hierarchy
+!7 = !DILocation(line: 2, scope: !8)
+scope points into the type hierarchy
+!11 = !DILexicalBlockFile(scope: !8, file: !2, discriminator: 0)
+invalid llvm.dbg.value intrinsic variable
+  call void @llvm.dbg.value(metadata ptr %s, metadata !"", metadata !DIExpression()), !dbg !1
+!""
+subprogram definitions must have a compile unit
+!2 = distinct !DISubprogram(scope: null, spFlags: DISPFlagDefinition)
+DICompileUnit not listed in llvm.dbg.cu
+!12 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus, file: !8, isOptimized: false, runtimeVersion: 0, emissionKind: NoDebug)
+invalid expression
+!DIExpression(28, 42)
+invalid expression
+!DIExpression(28, 42)
+!dbg attachment of global variable must be a DIGlobalVariableExpression
+invalid global variable ref
+!4 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus, file: !2, producer: "clang version 4.0.0 (trunk 283228) (llvm/trunk 283225)", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug, enums: !5, globals: !6)
+!0 = distinct !DIGlobalVariable(name: "i", linkageName: "_ZN1N1iE", scope: !1, file: !2, line: 2, type: !3, isLocal: false, isDefinition: true)
+invalid expression
+!DIExpression(6, 34, 0, 4096, 8, 8)
+invalid expression
+!DIExpression(6, 34, 0, 4096, 8, 8)
+invalid expression
+!DIExpression(6, 34, 0)
+invalid expression
+!DIExpression(6, 34, 0)
+invalid expression
+!DIExpression(34, 1, 6)
+invalid expression
+!DIExpression(34, 1, 6)
+subprogram definitions must have a compile unit
+!2 = distinct !DISubprogram(name: "foo", scope: null, spFlags: DISPFlagDefinition)
+llvm.dbg.value intrinsic requires a !dbg attachment
+  call void @llvm.dbg.value(metadata ptr undef, metadata !1, metadata !DIExpression())
+label %entry
+ptr @foo
+inconsistent use of embedded source
+  ... 2000 files processed
+DICompileUnit not listed in llvm.dbg.cu
+!8 = distinct !DICompileUnit(language: DW_LANG_C99, file: !3, producer: "clang version 15.0.0.prerel", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug, retainedTypes: !9, globals: !9, splitDebugInlining: false, nameTableKind: None)
+line specified with no file
+!3 = distinct !DISubprogram(scope: null, line: 1000, spFlags: DISPFlagDefinition)
+1000
+inlinable function call in a function with debug info must have a !dbg location
+  call void @h()
+invalid compile unit
+!llvm.dbg.cu = !{!1}
+
+!1 = !DIFile(filename: "broken", directory: "")
+  ... 4000 files processed
+DICompileUnit not listed in llvm.dbg.cu
+!8 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus_14, file: !4, isOptimized: true, runtimeVersion: 0, emissionKind: FullDebug, enums: !7, retainedTypes: !7, globals: !7, imports: !7, splitDebugInlining: false, nameTableKind: None)
+invalid llvm.dbg.declare intrinsic variable
+  call void @llvm.dbg.declare(metadata ptr %i.addr, metadata !2, metadata !DIExpression()), !dbg !3
+!2 = !{}
+DICompileUnit not listed in llvm.dbg.cu
+!9 = distinct !DICompileUnit(language: DW_LANG_ObjC, file: !5, isOptimized: false, runtimeVersion: 2, emissionKind: FullDebug, enums: !2, nameTableKind: None)
+DICompileUnit not listed in llvm.dbg.cu
+!11 = distinct !DICompileUnit(language: DW_LANG_C99, file: !5, producer: "clang version 9.0.0 (git@github.ibm.com:compiler/llvm-project.git c019c32c5a2b0ed4487a738337d35fd3f630ac0a)", isOptimized: true, runtimeVersion: 0, emissionKind: FullDebug, enums: !12, globals: !13, nameTableKind: GNU)
+DICompileUnit not listed in llvm.dbg.cu
+!5 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus, file: !2, producer: "ver", isOptimized: true, runtimeVersion: 0, emissionKind: LineTablesOnly, splitDebugInlining: false, nameTableKind: None, sysroot: "sysroot", sdk: "sdk")
+  ... 6000 files processed
+DICompileUnit not listed in llvm.dbg.cu
+!9 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus, file: !5, producer: "clang version 9.0.0 (https://github.com/llvm/llvm-project.git eb1a156d7f7ba56ea8f9a26da36e6a93d1e98bda)", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug, enums: !10, nameTableKind: None)
+DICompileUnit not listed in llvm.dbg.cu
+!7 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus, file: !3, producer: "clang", isOptimized: true, runtimeVersion: 0, emissionKind: FullDebug)
+  ... 8000 files processed
+  ... 10000 files processed
+DICompileUnit not listed in llvm.dbg.cu
+!7 = distinct !DICompileUnit(language: DW_LANG_C99, file: !3, isOptimized: false, runtimeVersion: 0, emissionKind: NoDebug)
+DICompileUnit not listed in llvm.dbg.cu
+!8 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus_14, file: !4, isOptimized: false, runtimeVersion: 0, emissionKind: NoDebug)
+DICompileUnit not listed in llvm.dbg.cu
+!7 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus_14, file: !3, isOptimized: false, runtimeVersion: 0, emissionKind: NoDebug)
+DICompileUnit not listed in llvm.dbg.cu
+!9 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus_14, file: !5, isOptimized: false, runtimeVersion: 0, emissionKind: NoDebug)
+DICompileUnit not listed in llvm.dbg.cu
+!6 = distinct !DICompileUnit(language: DW_LANG_C99, file: !3, producer: "clang version 3.7.0 (trunk 237249) (llvm/trunk 237261)", isOptimized: false, runtimeVersion: 0, emissionKind: LineTablesOnly, enums: !5, retainedTypes: !5, globals: !5, imports: !5)
+DICompileUnit not listed in llvm.dbg.cu
+!4 = distinct !DICompileUnit(language: DW_LANG_C99, file: !3, isOptimized: false, runtimeVersion: 0, emissionKind: NoDebug)
+DICompileUnit not listed in llvm.dbg.cu
+!4 = distinct !DICompileUnit(language: DW_LANG_C99, file: !3, isOptimized: false, runtimeVersion: 0, emissionKind: NoDebug)
+DICompileUnit not listed in llvm.dbg.cu
+!4 = distinct !DICompileUnit(language: DW_LANG_C99, file: !3, isOptimized: false, runtimeVersion: 0, emissionKind: NoDebug)
+  ... 12000 files processed
+  ... 14000 files processed
+  ... 16000 files processed
+DICompileUnit not listed in llvm.dbg.cu
+!3 = distinct !DICompileUnit(language: DW_LANG_C, file: !4, isOptimized: false, runtimeVersion: 0, emissionKind: NoDebug)
+  ... 18000 files processed
+  ... 20000 files processed
+invalid subroutine type
+!62 = distinct !DISubprogram(name: "IgnoreIntrinsicTest", linkageName: "IgnoreIntrinsicTest", scope: !1, file: !1, line: 1, type: !13, scopeLine: 1, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagOptimized, unit: !0, retainedNodes: !5)
+!13 = !DIBasicType(name: "int", size: 32, align: 32, encoding: DW_ATE_signed)
+invalid !dbg metadata attachment
+  call void @llvm.dbg.declare(metadata ptr %1, metadata !61, metadata !DIExpression()), !dbg !62
+!62 = distinct !DISubprogram(name: "IgnoreIntrinsicTest", linkageName: "IgnoreIntrinsicTest", scope: !1, file: !1, line: 1, type: !13, scopeLine: 1, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagOptimized, unit: !0, retainedNodes: !5)
+  ... 22000 files processed
+DICompileUnit not listed in llvm.dbg.cu
+!25 = distinct !DICompileUnit(language: DW_LANG_C99, file: !24, producer: "clang version 15.0.0", isOptimized: true, runtimeVersion: 0, emissionKind: FullDebug, globals: !19, splitDebugInlining: false, nameTableKind: None)
+  ... 24000 files processed
+  ... 26000 files processed
+  ... 28000 files processed
+  ... 30000 files processed
+DICompileUnit not listed in llvm.dbg.cu
+!7 = distinct !DICompileUnit(language: DW_LANG_C_plus_plus, file: !4, producer: "clang version 6.0.0 (trunk 321056)", isOptimized: true, runtimeVersion: 0, emissionKind: FullDebug, enums: !8)
+!DIAssignID attached to unexpected instruction kind
+  ret void, !DIAssignID !11
+!11 = distinct !DIAssignID()
+dbg.assign not in same function as inst
+  call void @llvm.dbg.assign(metadata !11, metadata !13, metadata !DIExpression(), metadata !11, metadata ptr undef, metadata !2), !dbg !15
+  %x = alloca i32, align 4, !DIAssignID !11
+!DIAssignID should only be used by llvm.dbg.assign intrinsics
+!11 = distinct !DIAssignID()
+  call void @llvm.dbg.value(metadata !11, metadata !13, metadata !DIExpression()), !dbg !15
+invalid llvm.dbg.assign intrinsic address/value
+  call void @llvm.dbg.assign(metadata !3, metadata !13, metadata !DIExpression(), metadata !11, metadata ptr undef, metadata !DIExpression()), !dbg !15
+!3 = !{i32 7, !"Dwarf Version", i32 4}
+invalid llvm.dbg.assign intrinsic variable
+  call void @llvm.dbg.assign(metadata i32 0, metadata !2, metadata !DIExpression(), metadata !11, metadata ptr undef, metadata !DIExpression()), !dbg !15
+!2 = !{}
+invalid llvm.dbg.assign intrinsic expression
+  call void @llvm.dbg.assign(metadata !11, metadata !13, metadata !2, metadata !11, metadata ptr undef, metadata !DIExpression()), !dbg !15
+!2 = !{}
+invalid llvm.dbg.assign intrinsic DIAssignID
+  call void @llvm.dbg.assign(metadata !11, metadata !13, metadata !DIExpression(), metadata !2, metadata ptr undef, metadata !DIExpression()), !dbg !15
+!2 = !{}
+invalid llvm.dbg.assign intrinsic address
+  call void @llvm.dbg.assign(metadata !11, metadata !13, metadata !DIExpression(), metadata !11, metadata !3, metadata !DIExpression()), !dbg !15
+!3 = !{i32 7, !"Dwarf Version", i32 4}
+inst not in same function as dbg.assign
+  %x = alloca i32, align 4, !DIAssignID !11
+  call void @llvm.dbg.assign(metadata !11, metadata !13, metadata !DIExpression(), metadata !11, metadata !2, metadata !DIExpression()), !dbg !15
+invalid llvm.dbg.assign intrinsic address expression
+  call void @llvm.dbg.assign(metadata !11, metadata !13, metadata !DIExpression(), metadata !11, metadata ptr undef, metadata !2), !dbg !15
+!2 = !{}
+DIFlagAllCallsDescribed must be attached to a definition
+invalid file
+!3 = distinct !DISubprogram(scope: null, file: !1, spFlags: DISPFlagDefinition)
+!1 = distinct !DICompileUnit(file: !2, isOptimized: false, runtimeVersion: 0, emissionKind: NoDebug)
+line specified with no file
+!4 = distinct !DISubprogram(scope: null, line: 1, spFlags: DISPFlagDefinition)
+1
+invalid subroutine type
+!5 = distinct !DISubprogram(scope: null, type: !1, spFlags: DISPFlagDefinition)
+!1 = distinct !DICompileUnit(file: !2, isOptimized: false, runtimeVersion: 0, emissionKind: NoDebug)
+invalid containing type
+!6 = distinct !DISubprogram(scope: null, containingType: !1, spFlags: DISPFlagDefinition)
+!1 = distinct !DICompileUnit(file: !2, isOptimized: false, runtimeVersion: 0, emissionKind: NoDebug)
+invalid template params
+!7 = distinct !DISubprogram(scope: null, spFlags: DISPFlagDefinition, templateParams: !1)
+!1 = distinct !DICompileUnit(file: !2, isOptimized: false, runtimeVersion: 0, emissionKind: NoDebug)
+subprogram definitions must have a compile unit
+!7 = distinct !DISubprogram(scope: null, spFlags: DISPFlagDefinition, templateParams: !1)
+invalid template parameter
+!8 = distinct !DISubprogram(scope: null, spFlags: DISPFlagDefinition, templateParams: !9)
+!9 = !{!1}
+!1 = distinct !DICompileUnit(file: !2, isOptimized: false, runtimeVersion: 0, emissionKind: NoDebug)
+subprogram definitions must have a compile unit
+!8 = distinct !DISubprogram(scope: null, spFlags: DISPFlagDefinition, templateParams: !9)
+invalid subprogram declaration
+!10 = distinct !DISubprogram(scope: null, spFlags: DISPFlagDefinition, declaration: !1)
+!1 = distinct !DICompileUnit(file: !2, isOptimized: false, runtimeVersion: 0, emissionKind: NoDebug)
+invalid retained nodes list
+!11 = distinct !DISubprogram(scope: null, spFlags: DISPFlagDefinition, retainedNodes: !1)
+!1 = distinct !DICompileUnit(file: !2, isOptimized: false, runtimeVersion: 0, emissionKind: NoDebug)
+invalid retained nodes, expected DILocalVariable or DILabel
+!12 = distinct !DISubprogram(scope: null, spFlags: DISPFlagDefinition, retainedNodes: !9)
+!9 = !{!1}
+!1 = distinct !DICompileUnit(file: !2, isOptimized: false, runtimeVersion: 0, emissionKind: NoDebug)
+invalid reference flags
+!13 = distinct !DISubprogram(scope: null, flags: DIFlagLValueReference | DIFlagRValueReference, spFlags: DISPFlagDefinition)
+invalid reference flags
+!14 = distinct !DISubprogram(scope: null, flags: DIFlagTypePassByValue | DIFlagTypePassByReference, spFlags: DISPFlagDefinition)
+subprogram definitions must have a compile unit
+!15 = distinct !DISubprogram(scope: null, spFlags: DISPFlagDefinition)
+invalid unit type
+!16 = distinct !DISubprogram(scope: null, spFlags: DISPFlagDefinition, unit: !17)
+!17 = !{}
+subprogram declarations must not have a compile unit
+!18 = distinct !DISubprogram(scope: null, spFlags: 0, unit: !1)
+invalid thrown types list
+!19 = distinct !DISubprogram(scope: null, spFlags: 0, thrownTypes: !1)
+!1 = distinct !DICompileUnit(file: !2, isOptimized: false, runtimeVersion: 0, emissionKind: NoDebug)
+invalid thrown type
+!20 = distinct !DISubprogram(scope: null, spFlags: 0, thrownTypes: !9)
+!9 = !{!1}
+!1 = distinct !DICompileUnit(file: !2, isOptimized: false, runtimeVersion: 0, emissionKind: NoDebug)
+DIFlagAllCallsDescribed must be attached to a definition
+subprogram definitions must have a compile unit
+!3 = distinct !DISubprogram(name: "patatino", scope: null, spFlags: DISPFlagDefinition)
+invalid expression
+!DIExpression(4096, 64, 32, 6)
+invalid !dbg metadata attachment
+  ret i32 42, !dbg !11
+!11 = !{i32 2, i32 2, !7, null}
+invalid compile unit
+!llvm.dbg.cu = !{!1}
+
+!1 = !DIFile(filename: "broken", directory: "")
+invalid expression
+!DIExpression(17, 18446744073709551615, 159, 17, 18446744073709551615, 159)
+invalid expression
+!DIExpression(17, 18446744073709551615, 159, 17, 18446744073709551615, 159)
+DICompileUnit not listed in llvm.dbg.cu
+!11 = distinct !DICompileUnit(language: DW_LANG_C99, file: !2, producer: "clang version 7.0.0 () ()", isOptimized: true, runtimeVersion: 0, emissionKind: FullDebug, enums: !12)
+invalid type ref
+!1 = !DIGlobalVariable(name: "g", scope: !2, file: !3, line: 1, type: !3, isLocal: false, isDefinition: true)
+!3 = !DIFile(filename: "broken.c", directory: "/")
+DICompileUnit not listed in llvm.dbg.cu
+!7 = distinct !DICompileUnit(language: DW_LANG_C99, file: !3, producer: "clang", isOptimized: true, runtimeVersion: 0, emissionKind: FullDebug, splitDebugInlining: false, nameTableKind: None, sysroot: "/")
+missing global variable type
+!4 = distinct !DIGlobalVariable(name: "pat", scope: !0, file: !1, line: 27, isLocal: true, isDefinition: true)
+missing global variable type
+!4 = distinct !DIGlobalVariable(name: "pat", scope: !0, file: !1, line: 27, isLocal: true, isDefinition: true)
+
+==== corpus report: reference/llvm16/llvm/test ====
+   21538  PASS
+    7324  PASS (via text renderer)
+    1134  not modeled: inline asm callees (no accessors before LLVM 18)
+     596  parse-fail (LLVM rejects the file)
+     369  not modeled: operand bundles (no accessors before LLVM 18)
+     141  not modeled: constant expressions
+     115  not modeled: blockaddress constants (no accessors before LLVM 19)
+     115  not modeled: alloca outside the datalayout's alloca address space (the C-API builder always uses A)
+      77  not modeled: instructions with all-constant operands (the C-API builder folds them)
+      32  not modeled: values explicitly named with digit strings
+      28  not modeled: inrange annotations on gep constant expressions (no C API)
+      23  not modeled: constant kind
+      18  not modeled: functions outside the datalayout's program address space
+      16  not modeled: cyclic metadata node operands (distinct self-references)
+      13  not modeled: no-op casts (the C-API builder folds them away)
+       7  not modeled: fp constants not exactly representable as double
+       6  not modeled: value-as-metadata operands (metadata-wrapped SSA values)
+       6  not modeled: function prefix data
+       6  not modeled: function prologue data
+       5  not modeled: thread_local aliases (no C API accessor)
+       5  not modeled: metadata operand kind
+       5  not modeled: target extension type inspection (no accessors before LLVM 17)
+       4  not modeled: alignment of 2^32 (LLVMGetAlignment truncates it to 0)
+       2  PASS (modulo builder folding)
+       2  not modeled: distinct metadata operand nodes (same content, different identity; no C API for distinct nodes)
+       1  not modeled: inline asm callees (no accessors before LLVM 18) [llvm: warning: ignoring invalid debug info in reference/llvm16/llvm/test/DebugInfo/X86/strip-broken-debuginfo.ll warning: ignoring invalid debug info in reference/llvm16/llvm/test/DebugInfo/X86/invalid-global-constants.ll]
+       1  not modeled: operand bundles (no accessors before LLVM 18) [llvm: warning: ignoring invalid debug info in reference/llvm16/llvm/test/DebugInfo/salvage-overflow.ll warning: ignoring debug info with an invalid version (0) in reference/llvm16/llvm/test/DebugInfo/strip-DIGlobalVariable.ll]
+       1  not modeled: inline asm callees (no accessors before LLVM 18) [llvm: warning: ignoring debug info with an invalid version (1) in reference/llvm16/llvm/test/DebugInfo/ARM/big-endian-dump.ll warning: ignoring debug info with an invalid version (1) in reference/llvm16/llvm/test/DebugInfo/ARM/processes-relocations.ll]
+       1  not modeled: inrange annotations on gep constant expressions (no C API) [llvm: warning: ignoring debug info with an invalid version (0) in reference/llvm16/llvm/test/ThinLTO/X86/Inputs/drop-debug-info.ll]
+       1  not modeled: functions outside the datalayout's program address space [llvm: warning: ignoring debug info with an invalid version (0) in reference/llvm16/llvm/test/tools/llvm-reduce/remove-metadata.ll]
+       1  not modeled: operand bundles (no accessors before LLVM 18) [llvm: warning: ignoring debug info with an invalid version (0) in reference/llvm16/llvm/test/CodeGen/X86/2010-07-06-DbgCrash.ll]
+       1  not modeled: metadata operand kind [llvm: warning: ignoring debug info with an invalid version (0) in reference/llvm16/llvm/test/Linker/2009-09-03-mdnode2.ll]
+       1  not modeled: inline asm callees (no accessors before LLVM 18) [llvm: warning: ignoring invalid debug info in reference/llvm16/llvm/test/Verifier/dbg-difile-crash.ll]
+       1  not modeled: operand bundles (no accessors before LLVM 18) [llvm: warning: ignoring invalid debug info in reference/llvm16/llvm/test/CodeGen/X86/stack-protector-dbginfo.ll]
+       1  not modeled: operand bundles (no accessors before LLVM 18) [llvm: warning: ignoring invalid debug info in reference/llvm16/llvm/test/Verifier/unique-disubprogram.ll warning: ignoring invalid debug info in reference/llvm16/llvm/test/Verifier/llvm.dbg.value-expression.ll warning: ignoring invalid debug info in reference/llvm16/llvm/test/Verifier/llvm.dbg.value-value.ll]
+       1  not modeled: operand bundles (no accessors before LLVM 18) [llvm: warning: ignoring invalid debug info in reference/llvm16/llvm/test/Verifier/func-dbg.ll]
+       1  not modeled: cyclic metadata node operands (distinct self-references) [llvm: warning: ignoring invalid debug info in reference/llvm16/llvm/test/Verifier/dbg-null-retained-type.ll]
+       1  not modeled: inline asm callees (no accessors before LLVM 18) [llvm: warning: ignoring invalid debug info in reference/llvm16/llvm/test/Verifier/DISubprogram.ll]
+       1  not modeled: metadata operand kind [llvm: warning: ignoring debug info with an invalid version (0) in reference/llvm16/llvm/test/Linker/2009-09-03-mdnode.ll]
+       1  not modeled: inline asm callees (no accessors before LLVM 18) [llvm: warning: ignoring debug info with an invalid version (0) in reference/llvm16/llvm/test/CodeGen/ARM/2009-10-16-Scope.ll]
+       1  not modeled: multi-index extractvalue/insertvalue
+       1  not modeled: blockaddress constants (no accessors before LLVM 19) [llvm: warning: ignoring invalid debug info in reference/llvm16/llvm/test/Bitcode/DINamespace.ll]
+       1  not modeled: cyclic metadata node operands (distinct self-references) [llvm: warning: ignoring debug info with an invalid version (0) in reference/llvm16/llvm/test/Analysis/CostModel/free-intrinsics-no_info.ll]
+       1  not modeled: inline asm callees (no accessors before LLVM 18) [llvm: warning: ignoring debug info with an invalid version (0) in reference/llvm16/llvm/test/Transforms/IROutliner/outlining-debug-statements.ll]
+       1  not modeled: functions outside the datalayout's program address space [llvm: warning: ignoring invalid debug info in reference/llvm16/llvm/test/Transforms/SimplifyCFG/bbi-23595.ll]
+       1  not modeled: inline asm callees (no accessors before LLVM 18) [llvm: warning: ignoring debug info with an invalid version (1) in reference/llvm16/llvm/test/DebugInfo/Mips/processes-relocations.ll]
+       1  not modeled: constant expressions [llvm: warning: ignoring invalid debug info in reference/llvm16/llvm/test/Verifier/callsite-dbgloc.ll]
+       1  not modeled: inline asm callees (no accessors before LLVM 18) [llvm: warning: ignoring invalid debug info in reference/llvm16/llvm/test/Verifier/llvm.dbg.declare-address.ll warning: ignoring invalid debug info in reference/llvm16/llvm/test/Verifier/dbg-invalid-compileunit.ll]
+       1  not modeled: inline asm callees (no accessors before LLVM 18) [llvm: warning: ignoring debug info with an invalid version (1) in reference/llvm16/llvm/test/DebugInfo/Lanai/processes-relocations.ll]
+       1  not modeled: inline asm callees (no accessors before LLVM 18) [llvm: warning: ignoring invalid debug info in reference/llvm16/llvm/test/CodeGen/AMDGPU/simplify-libcalls2.ll]
+       1  not modeled: operand bundles (no accessors before LLVM 18) [llvm: warning: ignoring invalid debug info in reference/llvm16/llvm/test/Verifier/llvm.loop.cu.ll]
+       1  not modeled: cyclic metadata node operands (distinct self-references) [llvm: warning: ignoring debug info with an invalid version (0) in reference/llvm16/llvm/test/Analysis/CostModel/X86/free-intrinsics.ll]
+       1  not modeled: inline asm callees (no accessors before LLVM 18) [llvm: warning: ignoring debug info with an invalid version (1) in reference/llvm16/llvm/test/DebugInfo/PowerPC/processes-relocations.ll warning: ignoring debug info with an invalid version (1) in reference/llvm16/llvm/test/DebugInfo/SystemZ/processes-relocations.ll warning: ignoring invalid debug info in reference/llvm16/llvm/test/DebugInfo/pr34672.ll]
+       1  not modeled: blockaddress constants (no accessors before LLVM 19) [llvm: warning: ignoring debug info with an invalid version (0) in reference/llvm16/llvm/test/Transforms/LoopStrengthReduce/pr12018.ll]
+       1  not modeled: operand bundles (no accessors before LLVM 18) [llvm: warning: ignoring invalid debug info in reference/llvm16/llvm/test/Transforms/DeadStoreElimination/memset-missing-debugloc.ll]
+       1  not modeled: operand bundles (no accessors before LLVM 18) [llvm: warning: ignoring invalid debug info in reference/llvm16/llvm/test/Transforms/Inline/delete-function-with-metadata-use.ll]
+       1  not modeled: alloca outside the datalayout's alloca address space (the C-API builder always uses A) [llvm: warning: ignoring invalid debug info in reference/llvm16/llvm/test/Assembler/drop-debug-info-nonzero-alloca.ll]
+       1  not modeled: cyclic metadata node operands (distinct self-references) [llvm: warning: ignoring debug info with an invalid version (0) in reference/llvm16/llvm/test/Analysis/CostModel/free-intrinsics-datalayout.ll]
+       1  not modeled: operand bundles (no accessors before LLVM 18) [llvm: warning: ignoring invalid debug info in reference/llvm16/llvm/test/Transforms/Util/trivial-auto-var-init-unknown.ll]
+       1  not modeled: inline asm callees (no accessors before LLVM 18) [llvm: warning: ignoring debug info with an invalid version (0) in reference/llvm16/llvm/test/CodeGen/Generic/dbg_value.ll]
+
+total 31622; PASS 21538 (68.1% of all, 69.4% of parseable)
+0 failure paths written to tests/tmp/corpus-failures.txt
+
+construction bench over 21538 PASS files (one shot each):
+  build 1.0s   render 1.1s   parse 2.4s   (render+parse)/build = 3.46x

@@ -381,6 +381,10 @@
    ((x86-mmx) 'x86_mmx)
    ((x86-amx) 'x86_amx)
    [(target-ext)
+    [unless
+     (config:capability? 'target-ext-types)
+     [not-modeled
+      "target extension type inspection (no accessors before LLVM 17)"]]
     `[target-ext
       ,(base:cstring->string (LLVMGetTargetExtTypeName ty))
       ,@[let
@@ -653,10 +657,9 @@
         ,(constant-form st (opn 0) #t)
         ,(constant-form st (opn 1) #t)]]]
     [(eq? op 'getelementptr)
-     ;; inrange(lo, hi) has no C API accessor at all; the printed form is the
-     ;; only witness
+     ;; Both the old inrange index marker and inrange(lo,hi) lack C accessors.
      [when
-      (text-contains? (ir:value->string c) "inrange(")
+      (text:gep-inrange? c)
       [not-modeled
        "inrange annotations on gep constant expressions (no C API)"]]
      `[getelementptr
@@ -966,21 +969,11 @@
  ;; bundles can only be detected in the printed call (`... ) [ "tag"(...) ]`),
  ;; and then refused
  [define
-  (printed-bundles? ins)
-  [let*
-   ((text (ir:value->string ins)) (n (string-length text)))
-   [let
-    loop
-    ((i 0))
-    [and
-     (<= (+ i 5) n)
-     (or (string=? ") [ \"" (substring text i (+ i 5))) (loop (+ i 1)))]]]]
- [define
   (bundle-forms st ins)
   [unless
    (config:capability? 'operand-bundles)
    [when
-    (printed-bundles? ins)
+    (text:operand-bundles? ins)
     (not-modeled "operand bundles (no accessors before LLVM 18)")]]
   [let
    [[nb
@@ -1244,6 +1237,7 @@
          ,(call-type-slot (LLVMGetCalledFunctionType ins))
          ,(application st ins)
          ,@(bundle-forms st ins)
+         ,@(callsite-attr-part ins)
          ,(block-label st (LLVMGetNormalDest ins))
          ,(block-label st (LLVMGetUnwindDest ins))]]
       [(callbr)

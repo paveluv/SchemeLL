@@ -294,7 +294,22 @@
         (string? x)
         (string-append "!" (quoted x))
         (format "!{~a}" (join ", " (map (lambda (e) (md->text (cadr e))) x)))]]]
-     ((splat) (format "splat (~a)" (group->text env (cadr v))))
+     [(splat)
+      ;; This equivalent constexpr spelling parses on every supported LLVM,
+      ;; including 16 which predates the short `splat (ty value)` syntax.
+      [unless
+       (and (pair? tyf) (memq (car tyf) '(vector scalable-vector)))
+       (error "splat in a non-vector position" tyf)]
+      [let
+       [(vt (type->text tyf))
+        (mask (type->text (list (car tyf) (cadr tyf) 'i32)))]
+       [format
+        "shufflevector (~a insertelement (~a poison, ~a, i64 0), ~a poison, ~a zeroinitializer)"
+        vt
+        vt
+        (group->text env (cadr v))
+        vt
+        mask]]]
      [(extractelement insertelement)
       ;; element-access constexpr: op (G, G[, G])
       [format
@@ -668,11 +683,20 @@
          [(cc (cc-spec (car args)))
           (args (if cc (cdr args) args))
           (bs (filter bundle-form? (cddr args)))
-          (labels (filter (lambda (x) (not (bundle-form? x))) (cddr args)))]
+          (attr-group? (lambda (x) (and (pair? x) (eq? (car x) 'attributes))))
+          (agroups (filter attr-group? (cddr args)))
+          [labels
+           [filter
+            (lambda (x) (not (or (bundle-form? x) (attr-group? x))))
+            (cddr args)]]]
          [format
-          "invoke ~a~a~a to ~a unwind ~a"
+          "invoke ~a~a~a~a to ~a unwind ~a"
           (if cc (string-append (cc-text cc) " ") "")
           (app->text env (car args) (cadr args) #f)
+          [if
+           (null? agroups)
+           ""
+           (string-append " " (attrs-words (apply append (map cdr agroups))))]
           (bundles->text env bs)
           (label-ref (car labels))
           (label-ref (cadr labels))]]]

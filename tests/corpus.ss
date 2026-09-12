@@ -197,6 +197,33 @@
   (after-marker b "no-op casts")
   (after-marker b "multi-index extractvalue")]]
 
+;; These named construction APIs are absent on older releases. Unbuild can still
+;; preserve their IR, so qualify it through the same strict text-renderer tier.
+;; A rendering failure or changed IR remains a BUG, never an exclusion.
+[define
+ (construction-limit? e)
+ [and
+  (who-condition? e)
+  (eq? (condition-who e) 'llvm-config)
+  (message-condition? e)
+  [starts-with?
+   (condition-message e)
+   "feature unavailable in selected LLVM version"]
+  (irritants-condition? e)
+  (pair? (condition-irritants e))
+  [let
+   ((cap (car (condition-irritants e))))
+   [and
+    [memq
+     cap
+     '[flag-accessors
+       tail-call-kinds
+       array-length-64
+       gep-no-wrap-flags
+       callbr
+       atomic-uinc-wrap]]
+    (not (config:capability? cap))]]]]
+
 [define
  (process path)
  [let
@@ -218,7 +245,7 @@
           ;; m is already normalized when unbuild's folding detection fires, so
           ;; the strict A text is recomputable here
           [[and
-            (folding-bucket? b)
+            (or (folding-bucket? b) (construction-limit? e))
             m
             [render-strict?
              m

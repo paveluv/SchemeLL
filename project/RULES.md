@@ -155,6 +155,7 @@ exact command/URL to recreate it.
 | Path | How to (re)create | Purpose |
 |------|-------------------|---------|
 | `reference/llvm-project/` | `make reference` (a pinned sparse clone: `--branch llvmorg-19.1.7 --filter=blob:none --sparse`, checkout `llvm/test`) | LLVM's regression corpus for `make corpus` (36k .ll files); widen the sparse checkout for sources/docs when needed (`git sparse-checkout add llvm/docs` for LangRef). |
+| `reference/llvm16/` | `git clone --depth 1 --branch llvmorg-16.0.6 --filter=blob:none --sparse https://github.com/llvm/llvm-project.git reference/llvm16`, then `git -C reference/llvm16 sparse-checkout add llvm/test llvm/lib/IR llvm/docs` | Matching LLVM 16 regression corpus and primary adapter references; commit `7cbf1a2591520c2491aa35339f227775f4d3adf6`. |
 | `reference/ChezScheme/` | `git clone --depth 1 --branch v10.0.0 https://github.com/cisco/ChezScheme.git reference/ChezScheme` | Chez sources, incl. FFI implementation. |
 | `reference/csug/` | `wget -r -np -k -P reference/csug https://cisco.github.io/ChezScheme/csug10.0/csug.html` | Chez Scheme User's Guide (FFI chapter: `foreign.html`). |
 | `reference/nanopass/` | `git clone https://github.com/nanopass/nanopass-framework-scheme.git reference/nanopass` | Nanopass framework, for layer 3. |
