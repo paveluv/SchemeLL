@@ -102,7 +102,14 @@ library exactly when its capability is on.
 ## LLVM 16 differences
 
 - Typed pointers are available (see `typed-pointers`); contexts default to
-  opaque pointers as on 19 and 20.
+  opaque pointers as on 19 and 20. sll spells a typed pointer as
+  `(ptr T (addrspace N))`: it builds everywhere (opaque contexts ignore
+  `T`), unbuild returns it from typed contexts, and `(sll render)` prints
+  `T addrspace(N)*` only under `render:typed-pointers?`.
+- Module-level metadata is built through `ir:add-named-metadata!` with
+  `ir:md-node`, `ir:md-string` and `ir:value-as-metadata`; module flags are
+  the named metadata `llvm.module.flags` (the C API's own flag adder cannot
+  express the Max/Min behaviors that Metal AIR uses).
 - The 18/19 C API listed above is absent. sll builds `inbounds`, `tail`
   and `volatile` as before; other instruction flags, `musttail`/`notail`,
   operand bundles and `callbr` are refused by capability name rather than

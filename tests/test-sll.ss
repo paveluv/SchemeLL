@@ -6,6 +6,7 @@
  (prefix (llvm jit) jit:)
  (prefix (llvm target) target:)
  (prefix (llvm config) config:)
+ (prefix (sll render) render:)
  (prefix (sll) sll:)]
 
 [define
@@ -853,3 +854,94 @@
              ((next (sll:name '%s i)))
              (loop (+ i 1) next (cons `(= ,next (add i64 ,prev ,i)) acc))]]]]]]
     "sum10"]]]]
+
+(t:section "sll: typed pointer type form (ptr T (addrspace N))")
+
+;; the form builds everywhere; only an LLVM 16 context switched to typed
+;; pointers keeps the element type, and only then does the typed spelling render
+[define
+ typed-prog
+ '[[define
+    float
+    (@ld ((ptr float (addrspace 1)) %p))
+    [label
+     %e
+     (= %v (load float ((ptr float (addrspace 1)) %p) (align 4)))
+     (ret float %v)]]]]
+[let
+ ((ctx (ir:make-context)))
+ [when
+  (config:capability? 'typed-pointers)
+  (ir:context-use-typed-pointers! ctx)]
+ [let*
+  [(m (sll:build ctx "typed" typed-prog))
+   (text (ir:module->string m))
+   (param-type (car (cadr (caddr (car (sll:unbuild m))))))]
+  [if
+   (config:capability? 'typed-pointers)
+   [begin
+    [t:check
+     "typed pointer builds with its element type"
+     (contains? text "float addrspace(1)* %p")]
+    [t:check
+     "unbuild returns the typed form"
+     (equal? param-type '(ptr float (addrspace 1)))]
+    [t:check
+     "render prints typed syntax under the parameter, and it parses"
+     [let
+      [[rendered
+        [parameterize
+         ((render:typed-pointers? #t))
+         (render:sll->ll typed-prog)]]]
+      [and
+       (contains? rendered "float addrspace(1)*")
+       [let
+        ((r (ir:parse-ir ctx "rendered" rendered)))
+        (ir:module-dispose! r)
+        #t]]]]]
+   [begin
+    [t:check
+     "typed pointer form builds as an opaque pointer"
+     (contains? text "ptr addrspace(1) %p")]
+    [t:check
+     "unbuild returns the opaque form"
+     (equal? param-type '(ptr (addrspace 1)))]]]
+  [t:check
+   "render prints the opaque spelling by default"
+   (contains? (render:sll->ll typed-prog) "ptr addrspace(1)")]
+  (ir:module-dispose! m)]
+ (ir:context-dispose! ctx)]
+
+(t:section "ir: named metadata")
+
+[let*
+ [(ctx (ir:make-context))
+  (m (sll:build ctx "md" '((define void (@f) (label %e (ret void))))))
+  [node
+   [ir:md-node
+    ctx
+    [list
+     (ir:md-string ctx "bar")
+     (ir:value-as-metadata (ir:const-int (ir:int32-type ctx) 7))
+     (ir:value-as-metadata (ir:named-function m "f"))]]]]
+ (ir:add-named-metadata! m "foo" node)
+ [ir:add-named-metadata!
+  m
+  "llvm.module.flags"
+  [ir:md-node
+   ctx
+   [list
+    (ir:value-as-metadata (ir:const-int (ir:int32-type ctx) 7))
+    (ir:md-string ctx "frame-pointer")
+    (ir:value-as-metadata (ir:const-int (ir:int32-type ctx) 2))]]]
+ (ir:verify-module m)
+ [let
+  ((s (ir:module->string m)))
+  [t:check
+   "named metadata lands in the module"
+   (and (contains? s "!foo = !{!") (contains? s "!\"bar\", i32 7, ptr @f}"))]
+  [t:check
+   "module flags with the Max behavior go through named metadata"
+   (contains? s "!{i32 7, !\"frame-pointer\", i32 2}")]]
+ (ir:module-dispose! m)
+ (ir:context-dispose! ctx)]

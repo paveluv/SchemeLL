@@ -135,6 +135,8 @@
   md-string
   md-node
   metadata-value
+  value-as-metadata
+  add-named-metadata!
   md-kind-id
   set-instruction-metadata!
   instruction-metadata
@@ -1023,6 +1025,17 @@
  [define
   (metadata-value ctx md)       ; MetadataRef -> ValueRef
   (LLVMMetadataAsValue2 (context-live-ptr ctx) md)]
+ ;; a value (function, constant, ...) as a metadata operand
+ (define (value-as-metadata v) (LLVMValueAsMetadata v))
+ ;; append an MDNode to a module's named metadata (!name = !{...}); module flags
+ ;; are the named metadata "llvm.module.flags", whose nodes are !{i32 behavior,
+ ;; !"key", value}
+ [define
+  (add-named-metadata! m name node)
+  [LLVMAddNamedMetadataOperand
+   (module-live-ptr m)
+   name
+   (metadata-value (module-context m) node)]]
 
  ;; ---- global aliases ---------------------------------------------------
 

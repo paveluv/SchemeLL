@@ -69,6 +69,8 @@
   PointerType
   PointerTypeIsOpaque
   WriteBitcodeToMemoryBuffer
+  AddNamedMetadataOperand
+  ValueAsMetadata
   ;; Core: functions and values
   AddFunction
   GetNamedFunction
@@ -1338,6 +1340,12 @@
   "LLVMMetadataAsValue"
   (void* void*)
   void*]
+ (define-getter ValueAsMetadata "LLVMValueAsMetadata" (void*) void*)
+ [define-getter
+  AddNamedMetadataOperand       ; (module, name, MDNode-as-value)
+  "LLVMAddNamedMetadataOperand"
+  (void* string void*)
+  void]
  [define-getter
   GetMDString                   ; (value, unsigned* len-out)
   "LLVMGetMDString"

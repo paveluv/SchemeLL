@@ -12,8 +12,14 @@
 ;;; construction for sll:unbuild output, the intended input.
 [library
  (sll render)
- (export sll->ll)
+ (export sll->ll typed-pointers?)
  (import (except (chezscheme) error) (prefix (llvm base) base:))
+
+ ;; (ptr T (addrspace N)) prints as "T addrspace(N)*" only for a consumer with
+ ;; typed pointers on (an LLVM 16 context after ir:context-use-typed-pointers!);
+ ;; by default it prints the opaque "ptr addrspace(N)", which every release
+ ;; parses
+ (define typed-pointers? (make-parameter #f))
 
  [define
   (error msg . irritants)
@@ -124,7 +130,17 @@
    [(pair? t)
     [case
      (car t)
-     ((ptr) (format "ptr addrspace(~a)" (cadr (cadr t))))
+     [(ptr)
+      [cond
+       ((= (length t) 2) (format "ptr addrspace(~a)" (cadr (cadr t))))
+       [(typed-pointers?)
+        [let
+         ((as (cadr (caddr t))))
+         [if
+          (zero? as)
+          (format "~a*" (type->text (cadr t)))
+          (format "~a addrspace(~a)*" (type->text (cadr t)) as)]]]
+       (else (format "ptr addrspace(~a)" (cadr (caddr t))))]]
      ((array) (format "[~a x ~a]" (cadr t) (type->text (caddr t))))
      ((vector) (format "<~a x ~a>" (cadr t) (type->text (caddr t))))
      [(scalable-vector)

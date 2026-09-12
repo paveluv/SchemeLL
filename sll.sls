@@ -195,6 +195,19 @@
        (fixnum? (cadr (cadr t)))
        (fx>= (cadr (cadr t)) 0)]
       (ir:pointer-type ctx (cadr (cadr t)))]
+     ;; (ptr T (addrspace N)): a typed pointer, for LLVM 16 contexts switched to
+     ;; typed pointers (ir:context-use-typed-pointers!); opaque-pointer contexts
+     ;; ignore T. Always three elements, so it never collides with a (ptr
+     ;; %value) operand group.
+     [[and
+       (eq? (car t) 'ptr)
+       (= (length t) 3)
+       (pair? (caddr t))
+       (eq? (car (caddr t)) 'addrspace)
+       (= (length (caddr t)) 2)
+       (fixnum? (cadr (caddr t)))
+       (fx>= (cadr (caddr t)) 0)]
+      (ir:typed-pointer-type (resolve-type ctx (cadr t)) (cadr (caddr t)))]
      [(and (eq? (car t) 'ptr) (= (length t) 2) (fixnum? (cadr t)))
       ;; reserved: (ptr N) in operand position will mean an inttoptr'd address
       ;; constant some day
@@ -281,7 +294,13 @@
     (car h)
     ((struct packed-struct array vector scalable-vector fn target-ext) #t)
     [(ptr)
-     (and (pair? (cdr h)) (pair? (cadr h)) (eq? (car (cadr h)) 'addrspace))]
+     [or
+      (and (pair? (cdr h)) (pair? (cadr h)) (eq? (car (cadr h)) 'addrspace))
+      ;; (ptr T (addrspace N)), the typed pointer form
+      [and
+       (= (length h) 3)
+       (pair? (caddr h))
+       (eq? (car (caddr h)) 'addrspace)]]]
     (else #f)]]]
  [define
   (aggregate-literal? form)

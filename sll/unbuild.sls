@@ -332,7 +332,13 @@
    [(pointer)
     [let
      ((as (LLVMGetPointerAddressSpace ty)))
-     (if (zero? as) 'ptr `(ptr (addrspace ,as)))]]
+     [cond
+      ;; a typed pointer (LLVM 16 contexts with typed pointers on) keeps its
+      ;; element type: (ptr T (addrspace N))
+      [(zero? (LLVMPointerTypeIsOpaque ty))
+       `(ptr ,(unbuild-type (LLVMGetElementType ty)) (addrspace ,as))]
+      ((zero? as) 'ptr)
+      (else `(ptr (addrspace ,as)))]]]
    [(array)
     `(array ,(ir:array-length ty) ,(unbuild-type (LLVMGetElementType ty)))]
    [(vector)
