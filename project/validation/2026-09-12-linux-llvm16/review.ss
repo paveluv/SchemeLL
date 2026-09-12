@@ -12,6 +12,15 @@
  (prefix (tests harness) t:)]
 
 [define
+ (shell-quote s)
+ [string-append
+  "'"
+  [apply
+   string-append
+   (map (lambda (c) (if (char=? c #\') "'\\''" (string c))) (string->list s))]
+  "'"]]
+
+[define
  (contains? text part)
  [let
   loop
@@ -189,7 +198,10 @@
      [and
       [zero?
        [system
-        "/usr/lib/llvm-16/bin/llvm-dis -opaque-pointers=0 tests/tmp/llvm16-review/typed.bc -o tests/tmp/llvm16-review/typed.ll"]]
+        [format
+         "~a -opaque-pointers=0 tests/tmp/llvm16-review/typed.bc -o tests/tmp/llvm16-review/typed.ll"
+         [shell-quote
+          (string-append config:installation-directory "/bin/llvm-dis")]]]]
       [contains?
        (call-with-input-file (string-append root "/typed.ll") get-string-all)
        "float addrspace(1)* %p"]]]

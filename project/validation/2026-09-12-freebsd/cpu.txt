@@ -1,0 +1,3 @@
+hw.model: AMD EPYC 9374F 32-Core Processor
+hw.ncpu: 4
+hw.physmem: 8540770304

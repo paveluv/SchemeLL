@@ -1,5 +1,37 @@
 # Work log
 
+## 2026-09-12 — Qualify FreeBSD 15.0 amd64 on LLVM 16/19/20
+
+### Done
+
+Tested `4107173` in `freebsd01:~/git/SchemeLL`, initially clean. The host has
+FreeBSD 15.0-RELEASE, Chez 10.4.0 (`ta6fb`), system BSD make, and the exact
+LLVM 16.0.6/19.1.7/20.1.8 releases with matching headers.
+
+Fixed two Makefile portability gaps: capture the factorial program's expected
+exit 120 before BSD make can stop the recipe, and accept FreeBSD's `amd64`
+architecture spelling so the standalone ELF check runs. The final example
+logs show a real 194-byte executable printing `Hello, SchemeLL!` on all three
+releases. The retained review probes now locate `llvm-dis` through the selected
+LLVM installation instead of a Debian path. No binding changes were needed.
+
+Source and compiled suites pass 332/362/372 checks, plus 15 selection checks
+per release. All examples, version-cache switching, focused compatibility and
+bitcode integration probes, and formatting pass. The full 31,622-file LLVM 16
+corpus passes with exactly the Debian classifications and zero unexplained
+failures. Checked the Makefile/probe changes on Debian as well.
+
+Replaced README's inferred FreeBSD row with the measured results. Exact facts,
+commands, original example failures, final logs and a Scheme runner are in
+[the FreeBSD validation record](validation/2026-09-12-freebsd/README.md).
+
+### Decided / Next
+
+LLVM 19/20 full corpora and Metal were not tested on FreeBSD. The portability
+fixes are present in both working trees and their SHA-256 checksums match.
+Commit those fixes with the local documentation and retained logs; no push
+requested in this step.
+
 ## 2026-09-12 — Rebase LLVM 16 qualification and repeat every local gate
 
 ### Done

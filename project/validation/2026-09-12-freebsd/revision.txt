@@ -1,0 +1,18 @@
+commit 410717302dfb9bc4fc9e3cbe9eaa3ba13953d0af
+Author: Pavel Uvarov <paveluv@fivenines.one>
+Commit: Pavel Uvarov <paveluv@fivenines.one>
+
+    Complete LLVM 16 compatibility qualification
+
+    Fix LLVM 16 fallback readers so bundles, function decorations, metadata,
+    fence ordering, large array lengths, and wrapping atomic operations are
+    handled without silently losing semantics or calling unsupported APIs.
+    Preserve invoke attributes, render portable splats, and explicitly refuse
+    unavailable native operations and unmodeled IR constructs.
+
+    Add 25 compatibility regressions and qualify all 31,622 LLVM 16.0.6 corpus
+    files with no unexplained failures. Record successful source and compiled
+    suites on LLVM 16/19/20, examples, typed-pointer bitcode, and version-cache
+    checks. Update Tested platforms and document remaining C API limits.
+
+    Co-Authored-By: gpt-6-astra <noreply@openai.com>

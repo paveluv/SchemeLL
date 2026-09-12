@@ -10,6 +10,15 @@
  (prefix (tests harness) t:)]
 
 [define
+ (shell-quote s)
+ [string-append
+  "'"
+  [apply
+   string-append
+   (map (lambda (c) (if (char=? c #\') "'\\''" (string c))) (string->list s))]
+  "'"]]
+
+[define
  (contains? text part)
  [let
   loop
@@ -119,8 +128,9 @@ entry:
    [zero?
     [system
      [format
-      "/usr/lib/llvm-~a/bin/llvm-dis ~a ~a -o ~a"
-      config:major-version
+      "~a ~a ~a -o ~a"
+      [shell-quote
+       (string-append config:installation-directory "/bin/llvm-dis")]
       (if (config:capability? 'typed-pointers) "-opaque-pointers=0" "")
       bc
       ll]]]]

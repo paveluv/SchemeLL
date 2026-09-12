@@ -1,0 +1,8 @@
+Rebase integration on LLVM (20 1 8)
+  ok    typed loads, stores, GEPs, indirect calls and recursive structs rebuild exactly
+  ok    typed-pointer renderer preserves canonical IR exactly
+  ok    the matching llvm-dis reads rebuilt bitcode
+  ok    named function metadata survives bitcode with the selected pointer model
+  ok    Max and Min module flags survive bitcode
+
+5 passed, 0 failed

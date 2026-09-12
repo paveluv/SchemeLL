@@ -1,0 +1,21 @@
+Reviewing LLVM (20 1 8) on ta6fb
+
+== operand bundle detection ==
+  ok    bundles preserved or explicitly refused; attributes=
+  ok    bundles preserved or explicitly refused; attributes=nounwind
+
+== function prefix and prologue detection ==
+  ok    prefix after function attribute comment
+  ok    prefix after literal struct return type
+  ok    prologue after function attribute comment
+  ok    quoted function name is not prefix data
+
+== fence ordering with metadata ==
+  ok    metadata does not hide acquire ordering
+
+== instruction flag readers ==
+  ok    quoted result name cannot forge flags; exact and fast-math survive
+
+== typed-pointer bitcode read by llvm-dis ==
+
+8 passed, 0 failed

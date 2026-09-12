@@ -52,9 +52,11 @@ examples: build
 	@for f in examples/sll/*.ss examples/llvm/*.ss examples/aot/*.ss; do \
 	  echo "== $$f"; $(CHEZ) --libdirs $(LIBDIRS) --script $$f >/dev/null || exit 1; \
 	done
-	@$(CHEZ) --libdirs $(LIBDIRS) --script tools/sllc.ss --run examples/aot/fact.sll; \
-	  test $$? -eq 120 || exit 1
-	@if [ "$$(uname -m)" = x86_64 ] && { [ "$$(uname -s)" = Linux ] || [ "$$(uname -s)" = FreeBSD ]; }; then \
+	@sll_exit=0; \
+	  $(CHEZ) --libdirs $(LIBDIRS) --script tools/sllc.ss --run examples/aot/fact.sll || sll_exit=$$?; \
+	  test $$sll_exit -eq 120 || exit 1
+	@if { [ "$$(uname -m)" = x86_64 ] || [ "$$(uname -m)" = amd64 ]; } && \
+	  { [ "$$(uname -s)" = Linux ] || [ "$$(uname -s)" = FreeBSD ]; }; then \
 	  $(CHEZ) --libdirs $(LIBDIRS) --script tools/sllc.ss --opt O2 --exe examples/aot/hello-metaprog.sll && \
 	  ./examples/aot/hello-metaprog && rm -f examples/aot/hello-metaprog; \
 	else \
