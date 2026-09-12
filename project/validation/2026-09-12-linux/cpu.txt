@@ -1,0 +1,1 @@
+model name	: AMD Ryzen Threadripper PRO 9965WX 24-Cores

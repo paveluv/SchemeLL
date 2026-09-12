@@ -2,6 +2,33 @@
 
 Newest entries first. Format: date, Done / Decided / Next.
 
+## 2026-09-12 — Record exact Debian x86-64 platform results
+
+### Done
+
+Pulled `origin/main` from `3e4ed49` to `c7ed835` by fast-forward. Replaced
+the README's inferred Linux row with a recorded run on Debian 13.6,
+kernel `6.12.101+deb13-amd64`, AMD Ryzen Threadripper PRO 9965WX 24-Cores,
+Chez 10.0.0 (`ta6le`, Debian `10.0.0+dfsg-5`), GNU Make 4.4.1 and LLVM
+19.1.7/20.1.8. Exact library/header paths, package versions and logs live
+in [the validation record](validation/2026-09-12-linux/README.md).
+
+Both source and compiled-library suites pass: 324 checks on 19 and 334 on
+20, plus 14 pure selection checks per invocation. Both releases pass all
+38 standalone Scheme examples and the two CLI checks, including executing
+the 194-byte ELF program. The 20/19/20 version-cache check returns 42 on
+each release. Corrected the standalone-example count and the claim that
+GNU Make 3.81 lacks `$(shell ...)`; it lacks `!=`, while `$(shell ...)`
+is GNU-specific. Formatting passes. No local compiler or test behavior change.
+
+### Decided / Next
+
+Keep the inferred FreeBSD row explicitly historical and retain the existing
+macOS report. Do not substitute SchemeGPU results for SchemeLL test evidence.
+No full LLVM-corpus rerun or new Meik/Woof qualification is claimed here.
+Commit this platform record in SchemeLL; parent gitlinks await their own
+integration gate. Nothing was pushed.
+
 ## 2026-09-12 — macOS (Apple Silicon) out of the box
 
 ### Done

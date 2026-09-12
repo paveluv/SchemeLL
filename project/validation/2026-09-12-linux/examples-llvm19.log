@@ -1,0 +1,58 @@
+echo '(compile-imported-libraries #t)(import (prefix (sll) sll:) (prefix (sll render) render:) (prefix (sll asm) asm:) (prefix (llvm target) target:) (prefix (tests normalize) n:))' | $(for c in scheme chez; do command -v $c >/dev/null 2>&1 && echo $c && exit 0; done; echo chez-scheme) -q --libdirs .
+compiling sll.sls with output to sll.so
+compiling llvm/base.sls with output to llvm/base.so
+compiling llvm/raw.sls with output to llvm/raw.so
+compiling llvm/config.sls with output to llvm/config.so
+compiling llvm/selection.sls with output to llvm/selection.so
+compiling llvm/ir.sls with output to llvm/ir.so
+compiling llvm/jit.sls with output to llvm/jit.so
+compiling llvm/target.sls with output to llvm/target.so
+compiling llvm/datalayout.sls with output to llvm/datalayout.so
+compiling llvm/jit-layout.sls with output to llvm/jit-layout.so
+compiling sll/attributes.sls with output to sll/attributes.so
+compiling sll/unbuild.sls with output to sll/unbuild.so
+compiling llvm/text-flags.sls with output to llvm/text-flags.so
+compiling sll/render.sls with output to sll/render.so
+compiling sll/asm.sls with output to sll/asm.so
+compiling tests/normalize.sls with output to tests/normalize.so
+== examples/sll/01-add.ss
+== examples/sll/02-fact.ss
+== examples/sll/03-fib.ss
+== examples/sll/04-switch.ss
+== examples/sll/05-loop-phi.ss
+== examples/sll/06-memory.ss
+== examples/sll/07-structs.ss
+== examples/sll/08-strings.ss
+== examples/sll/09-floats.ss
+== examples/sll/10-vectors.ss
+== examples/sll/11-casts.ss
+== examples/sll/12-globals.ss
+== examples/sll/13-constexpr.ss
+== examples/sll/14-libc.ss
+== examples/sll/15-quasiquote.ss
+== examples/sll/16-bitops.ss
+== examples/sll/17-i128.ss
+== examples/sll/18-atomics.ss
+== examples/sll/19-aggregates.ss
+== examples/sll/20-unbuild.ss
+== examples/sll/21-asm-dsl.ss
+== examples/llvm/01-jit-add.ss
+== examples/llvm/02-builder-tour.ss
+== examples/llvm/03-parse-and-walk.ss
+== examples/llvm/04-verify-errors.ss
+== examples/llvm/05-optimize.ss
+== examples/llvm/06-emit-object.ss
+== examples/llvm/07-emit-asm.ss
+== examples/llvm/08-raw-ffi.ss
+== examples/llvm/09-ownership.ss
+== examples/llvm/10-target-info.ss
+== examples/aot/01-emit-object.ss
+== examples/aot/02-optimized.ss
+== examples/aot/03-assembly.ss
+== examples/aot/04-data-and-target.ss
+== examples/aot/05-main-for-cc.ss
+== examples/aot/hello-portable-asm-dsl.ss
+== examples/aot/hello-portable.ss
+wrote executable examples/aot/hello-metaprog (194 bytes, entry #x400080)
+Hello, SchemeLL!
+examples ok

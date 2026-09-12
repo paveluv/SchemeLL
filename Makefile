@@ -2,7 +2,7 @@
 # macOS, `chez-scheme` on FreeBSD (and some Linux distros); override
 # with `make CHEZ=...`. Detection runs in the recipe shell: neither
 # `!=` (GNU make >= 4.0, BSD make) nor `$(shell)` (GNU make only) exists
-# in every make, and macOS ships GNU make 3.81, which has neither.
+# in every make. macOS's GNU make 3.81 supports `$(shell)`, but not `!=`.
 CHEZ ?= $$(for c in scheme chez; do command -v $$c >/dev/null 2>&1 && echo $$c && exit 0; done; echo chez-scheme)
 LIBDIRS = .
 SCHEME_SOURCES = '*.sls' '*.ss' '*.scm' '*.sps' '*.sll'
@@ -46,7 +46,7 @@ reference:
 	  -name '*.ll' | wc -l) .ll files"
 
 # depends on build: each example is its own Chez process, and without
-# compiled library objects every one of the 37 re-compiles the whole
+# compiled library objects every one of the 38 re-compiles the whole
 # stack in memory (~35s total); with them the run takes ~5s.
 examples: build
 	@for f in examples/sll/*.ss examples/llvm/*.ss examples/aot/*.ss; do \

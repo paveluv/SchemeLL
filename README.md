@@ -236,7 +236,10 @@ importing the bindings, through the pure
 
 ```scheme
 (import (prefix (llvm selection) llvm:))
-(llvm:select! (llvm:make-selection '((major-version . 20) (prefix . "/opt/llvm-20"))))
+[llvm:select!
+ [llvm:make-selection
+  '[(major-version . 20            )
+    (prefix        . "/opt/llvm-20")]]]
 ```
 
 or, for the hosted commands (`make test`, the tools and the examples), through
@@ -258,7 +261,7 @@ $ make build       # compile the libraries to .so (later runs start ~5x faster)
 $ make test        # selected-version suite
 $ SCHEMELL_LLVM_VERSION=20 make test
 $ make test-version-cache  # needs both releases installed
-$ make examples    # smoke-runs all 37 examples end to end
+$ make examples    # smoke-runs 38 Scheme scripts and the CLI checks
 $ make reference   # (optional) fetch LLVM's test corpus for `make corpus`
 $ scheme --libdirs . --script examples/sll/01-add.ss
 2 + 40 = 42
@@ -270,9 +273,9 @@ hook with
 `git config core.hooksPath project/hooks`. The hook also formats Scheme
 code blocks in staged Markdown files.
 
-Then read **`examples/README.md`** — 37 examples in three buckets:
-sll scripting (21), the binding layers (10), and AOT objects &
-executables (10, including the `.sll` files).
+Then read **`examples/README.md`** — 38 standalone Scheme scripts in three
+buckets: sll scripting (21), the binding layers (10), and AOT objects &
+executables (7), plus the AOT `.sll` input files.
 
 Design documents live in `project/`: the sll grammar and its
 rationale (`sll-design.md`, built nanopass-friendly: prefix-only
@@ -282,29 +285,36 @@ standing (`coverage-plan.md`), and the exclusions ledger
 
 ## Tested platforms
 
-`make test`, `SCHEMELL_LLVM_VERSION=20 make test`, `make examples` and
-`make test-version-cache` were run end to end on the machines below. Add a
-row when you verify another one. Rows dated *inferred* are reconstructed from
-earlier status notes and from SchemeGPU's runs on the same stack, not from a
-recorded SchemeLL run; replace them when the suite is run there again.
+Dated rows record SchemeLL test runs; add a row when you verify another
+environment. The Linux row was rerun at `c7ed835` and links to its exact
+commands, environment records and logs. The *inferred* FreeBSD row retains
+earlier status notes and is not a newly recorded run; replace it when the
+suite is run there again. Counts in historical rows retain their reported
+scope.
 
 | Date | OS | CPU | Chez | LLVM | Result |
 |---|---|---|---|---|---|
 | 2026-09-12 | macOS 15.7.9 (Darwin 24.6), arm64 | Apple M3 Pro | 10.4.1 (Homebrew, `chez`) | 19.1.7, 20.1.8 (Homebrew `llvm@19`, `llvm@20`) | 324/324 checks on 19, 334/334 on 20; 37 examples on both (`--exe` skipped); version cache 20/19/20 |
-| inferred | Debian 13 (trixie), Linux 6.12, x86_64 | AMD Ryzen Threadripper PRO 9965WX | 10.0.0 (`scheme`) | 19.1.7, 20.1.8 (`llvm-19-dev`, `llvm-20-dev`) | LLVM 19 suite, examples and `--exe` executables; LLVM 20 qualification; SchemeGPU's 140/140 on both |
+| [2026-09-12](project/validation/2026-09-12-linux/README.md) | Debian GNU/Linux 13.6 (trixie), Linux `6.12.101+deb13-amd64`, x86_64 | AMD Ryzen Threadripper PRO 9965WX 24-Cores | 10.0.0 (`scheme`, `ta6le`; Debian `10.0.0+dfsg-5`) | 19.1.7, 20.1.8 (`/usr/lib/llvm-19`, `/usr/lib/llvm-20`) | 324/324 checks on 19, 334/334 on 20, plus 14 selection checks each; repeated with compiled libraries; 38 Scheme examples and both CLI checks on each release, including executing the 194-byte `--exe`; version cache 20/19/20 |
 | inferred | FreeBSD, x86_64 | ? | ? (`chez-scheme`) | 19.1.7 | suite and `--exe` executables (ELFOSABI_FREEBSD branding) |
 
 Notes:
 
 - `--exe` writes x86-64 ELF executables for the Linux and FreeBSD process
   ABIs only; `make examples` skips that step on other hosts. Objects,
-  assembly and the JIT work on every host.
+  assembly and the JIT are exercised by the recorded Linux and macOS runs;
+  this table does not qualify untested hosts.
+- The Linux run used GNU Make 4.4.1, native target `X86`, object format
+  `elf`, and LLVM triple `x86_64-pc-linux-gnu`. Both selected libraries and
+  their C headers reported the exact releases above. Full Debian package
+  versions, library paths and raw results are in the linked validation record.
+  This run did not repeat the LLVM regression-corpus campaign.
 - On Apple Silicon `LLVMGetHostCPUFeatures` returns an empty string (the CPU
   name carries the features), Mach-O section names are spelled
   `segment,section`, the stack-map section is
   `__LLVM_STACKMAPS,__llvm_stackmaps`, and the JIT's stack-map keeper needs
   LLVM's `\01` no-mangle spelling of `__LLVM_StackMaps`. The library and its
   tests handle all of these; see `project/HANDOFF.md`.
-- macOS's `/usr/bin/make` is GNU make 3.81, which has neither `!=` nor
-  `$(shell)`; the Makefile detects Chez in the recipe shell instead, so it
-  runs there, on GNU make 4.x and on BSD make.
+- The recorded macOS environment uses GNU Make 3.81, which lacks `!=`
+  assignment but supports `$(shell ...)`. The latter is GNU-specific, so
+  the Makefile detects Chez in the recipe shell to also accommodate BSD make.
