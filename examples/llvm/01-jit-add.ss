@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; Minimal end-to-end demo: build IR, JIT it in memory, call it. Run with:
 ;;; scheme --libdirs . --script examples/jit-add.ss
 ;;;

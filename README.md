@@ -192,8 +192,10 @@ compile: everything talks to stock `libLLVM` through Chez's FFI.
 
 Requirements: Chez Scheme 10 and LLVM 19.1.7 (default) or 20.1.8. On Debian,
 `llvm-19-dev` / `llvm-20-dev` provide the library, tools, and coverage headers.
-Use `SCHEMELL_LLVM_VERSION=20` before starting the process to select 20;
-`SCHEMELL_LLVM_PREFIX` optionally selects its installation directory.
+Select LLVM through the pure Scheme [selection API](project/llvm-versions.md)
+before importing its bindings. Hosted test/tool commands retain
+`SCHEMELL_LLVM_VERSION=20` and optional `SCHEMELL_LLVM_PREFIX` inputs;
+an explicit Scheme selection takes precedence.
 
 **Status: work in progress.** SchemeLL has so far been tested only on
 x86-64 Linux and x86-64 FreeBSD with LLVM 19 (including the freestanding

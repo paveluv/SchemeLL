@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; The round trip: build a module, read it BACK into sll data with sll:unbuild,
 ;;; and print it as textual LLVM IR with the pure-Scheme renderer -- no LLVM
 ;;; involved in that last step.

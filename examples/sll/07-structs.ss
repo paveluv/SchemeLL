@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; Named struct types, getelementptr field access, insert/extractvalue.
 (import (chezscheme) (prefix (sll) sll:))
 

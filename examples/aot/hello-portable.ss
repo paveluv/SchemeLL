@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; hello-portable.ss -- the SchemeLL answer to "how do I write a freestanding
 ;;; hello for MORE than one platform?": sll programs are plain data, so the
 ;;; portable 99% is written once and the per-ABI 1% (raw syscalls: instruction,

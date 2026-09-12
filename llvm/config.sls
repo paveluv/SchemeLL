@@ -12,59 +12,54 @@
   validate-headers!
   capability?
   require-capability!]
- (import (chezscheme))
+ (import (chezscheme) (prefix (llvm selection) selection:))
 
  [define
   qualified-versions
   '[(19 1 7)
     (20 1 8)]]
- [define
-  major-version
-  [let
-   ((choice (or (getenv "SCHEMELL_LLVM_VERSION") "19")))
-   [cond
-    ((string=? choice "19") 19)
-    ((string=? choice "20") 20)
-    [else
-     [error
-      'llvm-config
-      "unsupported SCHEMELL_LLVM_VERSION; expected 19 or 20"
-      choice]]]]]
+ (define major-version (selection:setting 'major-version))
 
  [define
   installation-directory
   [or
-   (getenv "SCHEMELL_LLVM_PREFIX")
-   [let
-    loop
-    [[paths
-      [list
-       (format "/usr/lib/llvm-~a" major-version)
-       (format "/usr/local/llvm~a" major-version)]]]
-    [cond
-     ((null? paths) #f)
-     ((file-directory? (car paths)) (car paths))
-     (else (loop (cdr paths)))]]]]
+   (selection:setting 'prefix)
+   [and
+    (not (selection:setting 'shared-object))
+    [let
+     loop
+     [[paths
+       [list
+        (format "/usr/lib/llvm-~a" major-version)
+        (format "/usr/local/llvm~a" major-version)]]]
+     [cond
+      ((null? paths) #f)
+      ((file-directory? (car paths)) (car paths))
+      (else (loop (cdr paths)))]]]]]
  [define
   shared-object
-  [let
-   ((name (format "libLLVM-~a.so" major-version)))
-   [if
-    installation-directory
-    [let*
-     [(versioned (string-append installation-directory "/lib/" name))
-      (generic (string-append installation-directory "/lib/libLLVM.so"))]
-     [if
-      (or (file-exists? versioned) (not (file-exists? generic)))
-      versioned
-      generic]]
-    name]]]
+  [or
+   (selection:setting 'shared-object)
+   [let
+    ((name (format "libLLVM-~a.so" major-version)))
+    [if
+     installation-directory
+     [let*
+      [(versioned (string-append installation-directory "/lib/" name))
+       (generic (string-append installation-directory "/lib/libLLVM.so"))]
+      [if
+       (or (file-exists? versioned) (not (file-exists? generic)))
+       versioned
+       generic]]
+     name]]]]
  [define
   header-directory
-  [if
-   installation-directory
-   (string-append installation-directory "/include/llvm-c")
-   (format "/usr/include/llvm-c-~a/llvm-c" major-version)]]
+  [or
+   (selection:setting 'header-directory)
+   [if
+    installation-directory
+    (string-append installation-directory "/include/llvm-c")
+    (format "/usr/include/llvm-c-~a/llvm-c" major-version)]]]
 
  (define loaded-version #f)
  (define load-failed? #f)
@@ -119,12 +114,16 @@
   (validate-headers!)
   [let*
    [[path
-     [if
-      installation-directory
-      [string-append
+     [or
+      (selection:setting 'version-header)
+      [if
        installation-directory
-       "/include/llvm/Config/llvm-config.h"]
-      (format "/usr/include/llvm-~a/llvm/Config/llvm-config.h" major-version)]]
+       [string-append
+        installation-directory
+        "/include/llvm/Config/llvm-config.h"]
+       [format
+        "/usr/include/llvm-~a/llvm/Config/llvm-config.h"
+        major-version]]]]
     (keys '(LLVM_VERSION_MAJOR LLVM_VERSION_MINOR LLVM_VERSION_PATCH))
     [defines
      [call-with-input-file

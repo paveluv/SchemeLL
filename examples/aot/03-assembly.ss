@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; Emit native assembly text and show it.
 [import
  (chezscheme)

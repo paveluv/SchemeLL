@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; Aggregate constants: arrays of structs as global data, walked by index
 ;;; computed at run time.
 (import (chezscheme) (prefix (sll) sll:))

@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; Floating point: arithmetic, fast-math flags, fcmp, select.
 (import (chezscheme) (prefix (sll) sll:))
 

@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; Mutable global state living inside the JIT'd module.
 (import (chezscheme) (prefix (sll) sll:))
 

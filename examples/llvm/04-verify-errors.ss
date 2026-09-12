@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; The verifier and error discipline: broken IR raises a Scheme condition with
 ;;; LLVM's diagnosis, instead of crashing.
 (import (chezscheme) (prefix (llvm ir) ir:))

@@ -2,6 +2,40 @@
 
 Newest entries first. Format: date, Done / Decided / Next.
 
+## 2026-09-11 — S6: select LLVM with Scheme values
+
+### Done
+
+Added the pure `(llvm selection)` API: a validated immutable installation
+record, explicit `select!`, copied path strings, and sealing when the backend
+consumes the selection. Version, prefix, exact shared-object path and oracle
+header paths are Scheme values. An exact shared-object choice skips conventional
+installation-directory discovery. The hosted loader still checks the exact
+qualified release and refuses incompatible/preloaded libraries as before.
+
+`(llvm config)` no longer reads environment variables. Optional
+`(llvm host-environment)` imports the old strings only when explicitly installed
+and no Scheme selection exists. Hosted tools, tests and all standalone examples
+install that adapter; direct library clients select in Scheme or opt into the
+adapter. Explicit profiles take precedence over invalid inherited settings.
+The README and version contract document this compatibility boundary.
+
+Validation: 14 pure selection checks without LLVM; 324 ordinary checks on
+19.1.7 and 334 on 20.1.8; compiled selection/config/raw reused under 20/19/20;
+all 38 standalone examples and the existing example CLI checks pass on both
+releases. `make -o build examples` preserved source-loading conditions for
+Meik's paired measurements. C bindings, IR construction and normalization
+are unchanged; S5's full matching-corpus qualification remains the evidence
+for those layers, with no new exclusions or claimed S6 corpus rerun.
+
+### Decided / next
+
+Meik retains these logs with the S6 station evidence. This makes installation
+configuration independent of `getenv`; it does not replace Chez's FFI/loader
+or supply a kernel-only LLVM host. LLVM 19 remains the default. Future host
+service and backend work must keep configuration values separate from hosted
+discovery and loading.
+
 ## 2026-09-11 — Qualify LLVM 19.1.7 and 20.1.8
 
 ### Done

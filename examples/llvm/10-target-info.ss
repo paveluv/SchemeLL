@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; Host target facts: triple, CPU, features -- what the JIT and the object
 ;;; emitter configure modules with.
 (import (chezscheme) (prefix (llvm target) target:))

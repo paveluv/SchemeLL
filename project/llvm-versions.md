@@ -1,9 +1,44 @@
 # Selecting and qualifying LLVM
 
-`SCHEMELL_LLVM_VERSION` selects `19` (the default) or `20` before importing
-SchemeLL. The qualified release pins are 19.1.7 and 20.1.8. Selection is fixed
+`(llvm selection)` selects `19` (the default) or `20` before importing
+the LLVM bindings. The qualified release pins are 19.1.7 and 20.1.8. Selection is fixed
 for the process, including when importing compiled Chez libraries. Use fresh
 processes to compare versions.
+
+```scheme
+(import (chezscheme) (prefix (llvm selection) llvm:))
+(llvm:select! (llvm:make-selection '((major-version . 20))))
+(import (prefix (llvm config) config:))
+(config:version)
+```
+
+Execute these as separate top-level forms, so selection happens before
+the bindings load. `make-selection` accepts a strict alist; unknown and
+duplicate keys, unsupported majors, and invalid path values are errors.
+The record and its strings cannot be mutated through this API. The first
+consumer's `setting` seals the selection. `selected?` and `sealed?` expose
+those states; `selection-ref` reads a value. Reinstalling an equal selection
+is harmless; replacing a sealed installation is refused.
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `major-version` | `19` | qualified major, 19 or 20 |
+| `prefix` | `#f` | optional installation directory |
+| `shared-object` | `#f` | optional exact library path/name |
+| `header-directory` | `#f` | optional directory containing `Core.h` |
+| `version-header` | `#f` | optional exact `llvm-config.h` path |
+
+Path overrides accept `#f` or a nonempty string. The selection library does
+no I/O, host detection, environment reading, or native loading. Explicit
+`shared-object` selection skips conventional installation-directory discovery;
+`(llvm config)` still supplies the hosted loader and checks library identity.
+
+Hosted test/tool entry points explicitly install `(llvm host-environment)`.
+Its `install!` translates `SCHEMELL_LLVM_VERSION` and `SCHEMELL_LLVM_PREFIX`
+only if no Scheme selection exists. Importing the adapter alone reads nothing.
+An explicit selection wins over inherited environment input. Direct library
+clients must select in Scheme or explicitly install this compatibility
+adapter before importing the bindings. Existing hosted commands remain:
 
 ```sh
 SCHEMELL_LLVM_VERSION=19 make test
@@ -11,7 +46,7 @@ SCHEMELL_LLVM_VERSION=20 make test
 make test-version-cache
 ```
 
-The optional `SCHEMELL_LLVM_PREFIX` points to an installation with `lib/`
+The optional Scheme `prefix` (or hosted `SCHEMELL_LLVM_PREFIX`) points to an installation with `lib/`
 and `include/`. Otherwise SchemeLL looks in `/usr/lib/llvm-N` and
 `/usr/local/llvmN`, then uses the versioned system library name. Within a
 prefix it prefers `libLLVM-N.so`, with `libLLVM.so` as a fallback. It calls
@@ -74,7 +109,8 @@ a validation boundary. See Woof's [runtime qualification](../../project/llvm-ver
 
 `make test` audits all bound C entry names, exercises removal and refusal
 cases, checks header identity, and verifies layout restoration and its error
-path. `make test-version-cache` compiles config/raw once under 19 in an
+path. `make test` also checks the pure selection API without loading LLVM.
+`make test-version-cache` compiles selection/config/raw once under 19 in an
 isolated test directory, then runs them under 20/19/20 without rebuilding.
 
 Run `make corpus CORPUS_DIR=...` against each release's unmodified `llvm/test`

@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; The safety layer: (llvm ir) tracks ownership, so use-after-dispose raises a
 ;;; Scheme error instead of segfaulting the process.
 (import (chezscheme) (prefix (llvm ir) ir:))

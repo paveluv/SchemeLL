@@ -17,6 +17,7 @@
 ;;;     emitter): works for self-contained programs -- an @_start, no
 ;;;     external symbols, no data relocations (hello-world class).
 ;;;   -o PATH   set the output path
+(load "host/bootstrap.ss")
 [import
  (chezscheme)
  (prefix (sll) sll:)

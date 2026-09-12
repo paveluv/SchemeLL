@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; The cast family: truncation, extension (with nuw/nsw/nneg flags), and
 ;;; pointer<->integer round trips.
 (import (chezscheme) (prefix (sll) sll:))

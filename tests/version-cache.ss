@@ -1,5 +1,6 @@
 ;;; Two installed releases; compile config/raw once and reuse those Chez objects
 ;;; in fresh 20/19/20 processes. Original source caches are untouched.
+(load "host/bootstrap.ss")
 (import (chezscheme))
 (define cache "tests/tmp/version-cache")
 [define
@@ -25,6 +26,7 @@
 [case
  (and (pair? (cdr (command-line))) (string->symbol (cadr (command-line))))
  [(compile)
+  (compile-library (string-append cache "/llvm/selection.sls"))
   (compile-library (string-append cache "/llvm/config.sls"))
   (compile-library (string-append cache "/llvm/raw.sls"))]
  [(probe)
@@ -72,6 +74,6 @@
        (string-append cache "/llvm/" name)
        (file-options no-fail)]
       (lambda (p) (put-bytevector p data))]]]
-   '("config.sls" "raw.sls")]
+   '("selection.sls" "config.sls" "raw.sls")]
   (run 19 "compile")
   (for-each (lambda (major) (run major "probe")) '(20 19 20))]]

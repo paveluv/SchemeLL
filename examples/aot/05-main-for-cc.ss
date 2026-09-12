@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; A complete main.o that calls libc printf: everything up to the final link
 ;;; happens through the LLVM API. (Linking against libc is the system linker's
 ;;; job; the flagship zero-tool executable is hello.sll + sllc --exe, which

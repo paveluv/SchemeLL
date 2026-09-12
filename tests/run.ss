@@ -1,4 +1,5 @@
 ;;; Test entry point: scheme --libdirs . --script tests/run.ss
+(load "host/bootstrap.ss")
 (import (chezscheme) (prefix (tests harness) t:))
 
 (load "tests/test-datalayout.ss")

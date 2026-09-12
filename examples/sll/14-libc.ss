@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; Calling into the host process: the JIT resolves libc symbols, so a plain
 ;;; (declare ...) is all it takes.
 (import (chezscheme) (prefix (sll) sll:))

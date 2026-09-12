@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; AOT from a script: build an sll program and write a relocatable object --
 ;;; the LLVM API does the codegen, no external tools.
 [import

@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; The smallest possible sll program: one import, one function, one call.
 (import (chezscheme) (prefix (sll) sll:))
 

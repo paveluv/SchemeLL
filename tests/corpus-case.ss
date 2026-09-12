@@ -1,4 +1,5 @@
 ;;; Inspect one corpus round trip. Artifacts stay under tests/tmp/corpus-case/.
+(load "host/bootstrap.ss")
 [import
  (chezscheme)
  (prefix (llvm ir) ir:)

@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; Optimize before emitting: the same pipeline clang -O2 runs.
 [import
  (chezscheme)

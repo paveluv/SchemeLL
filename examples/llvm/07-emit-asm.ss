@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; Native assembly text for the host target.
 (import (chezscheme) (prefix (llvm ir) ir:) (prefix (llvm target) target:))
 

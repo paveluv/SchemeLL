@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; Arbitrary-width integers: 128-bit multiply internally, i64 halves at the FFI
 ;;; boundary (Chez's FFI speaks up to 64 bits).
 (import (chezscheme) (prefix (sll) sll:))

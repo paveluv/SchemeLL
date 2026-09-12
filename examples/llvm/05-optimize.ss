@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; The new pass manager: run an O2 pipeline over a module and watch the IR
 ;;; collapse.
 (import (chezscheme) (prefix (llvm ir) ir:) (prefix (llvm target) target:))

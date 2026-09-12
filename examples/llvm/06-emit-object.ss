@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; Object code without touching the filesystem: emit to a bytevector.
 (import (chezscheme) (prefix (llvm ir) ir:) (prefix (llvm target) target:))
 

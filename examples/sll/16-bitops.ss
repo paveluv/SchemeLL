@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; Bit twiddling: shifts, masks, and a popcount loop.
 (import (chezscheme) (prefix (sll) sll:))
 

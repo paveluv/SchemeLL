@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; SIMD vectors: literals, lane arithmetic, shufflevector, extractelement.
 (import (chezscheme) (prefix (sll) sll:))
 

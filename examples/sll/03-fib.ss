@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; Two mutually calling functions in one program.
 (import (chezscheme) (prefix (sll) sll:))
 

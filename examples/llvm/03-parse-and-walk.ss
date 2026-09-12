@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; Introspection: parse textual IR and walk the object model -- functions,
 ;;; blocks, instructions, opcodes.
 (import (chezscheme) (prefix (llvm ir) ir:))

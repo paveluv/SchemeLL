@@ -60,12 +60,15 @@ definition -- the same rule as for exports.
 
 ## Environment pins
 
-- **LLVM 19.1.7 / 20.1.8**, with 19 as the default. Installation/version facts
-  and named capabilities live in `llvm/config.sls`; C signatures in `llvm/raw.sls`;
+- **LLVM 19.1.7 / 20.1.8**, with 19 as the default. Pure installation selection
+  lives in `llvm/selection.sls`; hosted loading/version facts and named capabilities
+  live in `llvm/config.sls`; C signatures in `llvm/raw.sls`;
   compatibility behavior lives in SchemeLL's adapters. Higher layers query
   named capabilities rather than distributing numeric version tests. Woof owns
   its runtime qualification, and Meik owns neither set of version branches.
   See [version selection and qualification](llvm-versions.md).
+  Only an explicitly installed hosted adapter may read environment settings;
+  backend libraries consume Scheme selections.
 - **Chez Scheme 10.0**, machine type `ta6le` (x86_64 Linux, threaded).
 - 64-bit platform is assumed in `(llvm base)` (pointers are 8 bytes).
 

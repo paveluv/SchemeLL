@@ -9,6 +9,7 @@ SCHEME_SOURCES = '*.sls' '*.ss' '*.scm' '*.sps' '*.sll'
 .PHONY: test repl build corpus format check-format clean examples reference
 
 test:
+	$(CHEZ) --libdirs $(LIBDIRS) --script tests/selection.ss
 	CHEZ=$(CHEZ) $(CHEZ) --libdirs $(LIBDIRS) --script tests/run.ss
 
 repl:

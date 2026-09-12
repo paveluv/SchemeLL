@@ -62,6 +62,25 @@
    (version-contains? (call-with-input-file path get-string-all) expected)]]]
 (unless (file-exists? "tests/tmp") (mkdir "tests/tmp"))
 [t:check
+ "explicit Scheme selection takes precedence over invalid environment input"
+ [let*
+  [(path "tests/tmp/version-scheme-selection.log")
+   [status
+    [system
+     [format
+      "SCHEMELL_LLVM_VERSION=invalid SCHEMELL_LLVM_PREFIX=/invalid ~a --libdirs . --script tests/config-process.ss scheme-~a ignored > ~a 2>&1"
+      (version-quote (or (getenv "CHEZ") "scheme"))
+      config:major-version
+      (version-quote path)]]]]
+  [and
+   (zero? status)
+   [version-contains?
+    (call-with-input-file path get-string-all)
+    [format
+     "(~a 1 ~a)"
+     config:major-version
+     (if (= config:major-version 19) 7 8)]]]]]
+[t:check
  "unknown major is refused before library loading"
  [version-child
   "21"

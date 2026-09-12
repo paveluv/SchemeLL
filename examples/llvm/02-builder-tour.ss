@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; The (llvm ir) builder layer by hand: blocks, a phi loop, and the printer --
 ;;; everything sll:build does, spelled out.
 (import (chezscheme) (prefix (llvm ir) ir:))

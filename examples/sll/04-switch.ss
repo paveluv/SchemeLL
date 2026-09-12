@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; Control flow: switch with a default, plus unconditional branches.
 (import (chezscheme) (prefix (sll) sll:))
 

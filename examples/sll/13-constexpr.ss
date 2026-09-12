@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; Constant expressions: link-time address arithmetic in initializers.
 (import (chezscheme) (prefix (sll) sll:))
 

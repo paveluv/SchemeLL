@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; A counted loop written the SSA way: phi nodes carry the loop state. Note the
 ;;; (value %label) incoming pairs and that phis may reference blocks defined
 ;;; later.

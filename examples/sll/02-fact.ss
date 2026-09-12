@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; @fact, live: an sll program (plain data!) compiled in memory and called. Run
 ;;; with: scheme --libdirs . --script examples/sll/02-fact.ss
 (import (chezscheme) (prefix (sll) sll:))

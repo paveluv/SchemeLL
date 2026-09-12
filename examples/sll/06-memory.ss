@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; Stack memory: alloca, store, load -- with explicit alignment.
 (import (chezscheme) (prefix (sll) sll:))
 

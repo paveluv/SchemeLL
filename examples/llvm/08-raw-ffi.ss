@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; The bottom layer: (llvm raw) is the C API verbatim. The import prefix LLVM
 ;;; reconstructs the exact C names -- LLVMContextCreate here IS
 ;;; LLVMContextCreate in llvm-c. No safety nets down here.

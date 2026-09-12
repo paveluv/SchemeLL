@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; EXPERIMENTAL (sll asm): structured inline asm. Operands get NAMES; the
 ;;; library computes LangRef's $N numbering and builds the constraint string --
 ;;; the two classic hand-written asm bug classes gone. Target-specific

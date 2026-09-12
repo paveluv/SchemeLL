@@ -15,6 +15,7 @@
 ;;; (sll:unbuild's strict errors classify the file); MISMATCH and build-fail
 ;;; (bugs in our layer -- the burn-down list). Sorted counts at the end;
 ;;; mismatch/build-fail paths are written to tests/tmp/corpus-failures.txt.
+(load "host/bootstrap.ss")
 [import
  (chezscheme)
  (prefix (llvm ir) ir:)

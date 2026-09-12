@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; A library object with global data; the triple and datalayout are ordinary
 ;;; sll items, so the .o is reproducible bit-for-bit.
 [import

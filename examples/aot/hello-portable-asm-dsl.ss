@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; hello-portable-asm-dsl.ss -- hello-portable.ss rebuilt on (sll asm).
 ;;;
 ;;; In hello-portable.ss the per-kernel-ABI difference is two hand-written asm

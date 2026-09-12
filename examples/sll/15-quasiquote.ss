@@ -1,3 +1,6 @@
+;;; Optional legacy environment input belongs to this hosted example.
+(load "host/bootstrap.ss")
+
 ;;; The sll pitch in one example: programs are plain data, so quasiquote IS the
 ;;; macro system. Generate a fully unrolled x^n at run time.
 (import (chezscheme) (prefix (sll) sll:))
