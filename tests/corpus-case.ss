@@ -6,7 +6,8 @@
  (prefix (sll) sll:)
  (prefix (sll render) render:)
  (prefix (tests normalize) n:)]
-(define path (cadr (command-line)))
+(import (prefix (llvm host-command-line) host:))
+(define path (car (host:remaining-arguments)))
 (define ctx (ir:make-context))
 (define rctx (ir:make-context))
 (define m (ir:parse-ir ctx path (call-with-input-file path get-string-all)))

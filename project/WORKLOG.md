@@ -40,6 +40,7 @@ LLVM 19/20 full corpora and Metal were not tested on FreeBSD. The portability
 fixes are present in both working trees and their SHA-256 checksums match.
 Commit those fixes with the local documentation and retained logs; no push
 requested in this step.
+Newest entries first. Format: date, Done / Decided / Next.
 
 ## 2026-09-12 — Rebase LLVM 16 qualification and repeat every local gate
 
@@ -112,7 +113,53 @@ recorded in RULES. No new macOS/FreeBSD/Metal runtime run or LLVM 19/20 corpus
 campaign is claimed. Commit the compatibility fixes and qualification record;
 no push requested.
 
-Newest entries first. Format: date, Done / Decided / Next.
+## 2026-09-12 — S7: no environment variables; requirements resolve the release
+
+### Done
+
+`SCHEMELL_LLVM_VERSION` and `SCHEMELL_LLVM_PREFIX` are gone, and with them
+`(llvm host-environment)`. A process arrives at its release in one of three
+ways, in order of precedence: an explicit `select!` pin; `require!` naming
+the capabilities the program needs, resolved to the first *installed*
+release in preference order (19, 20, 16) that has them all; or nothing,
+which is the first installed release. `(llvm selection)` stays pure: it now
+also holds the capability table (`capability-of`), the qualified pins and
+the preference order, and `resolve!`, which `(llvm config)` calls at load
+with a probe of the host's conventional directories (`installed-releases`
+lists what it found). Resolution seals the selection; a pin or a later
+requirement the sealed release cannot satisfy is refused; an unsatisfiable
+set fails naming the requirements, the candidates and what is installed.
+
+Hosted commands take the release on the command line instead:
+`(llvm host-command-line)` parses `--llvm N`, `--llvm-prefix DIR` and
+`--chez PATH` (for scripts that spawn children) when `host/bootstrap.ss`
+installs it, and exposes `remaining-arguments` for scripts that parse their
+own (`sllc`, the corpus tools, the version cache). The Makefile passes
+`HOSTFLAGS` (`--chez $(CHEZ)` plus `LLVMFLAGS`) to every script;
+`make test-llvmNN` and `make examples-llvmNN` set `LLVMFLAGS="--llvm NN"`.
+`CHEZ` is no longer read from the environment either.
+
+Tests: 24 pure selection checks (candidates, pins vs requirements, sealing,
+the adapter's precedence, and a walk of every library source for
+`getenv`/`putenv`); test-version runs children with `--llvm`, checks that
+an unselected process resolves to the first installed release in
+preference order, that a requirement picks 16 when installed, that an
+unsatisfiable set and a pin lacking a requirement are refused.
+
+Validation on the M3 Mac with `env -i`: 342/342 on the resolved default
+(19), 312/312 on `--llvm 16`, 352/352 on `--llvm 20`, version cache
+20/19/16/20, examples on all three.
+
+### Decided
+
+Releases are never named by version in library code; programs name
+capabilities. The command line is the only hosted input, so every choice is
+visible in source or in the command that ran.
+
+### Next
+
+SchemeGPU: an env-free `(sgpu host)` that requires `typed-pointers` when
+Metal is present, so a Mac runs on the GPU with no configuration.
 
 ## 2026-09-12 — LLVM 16 qualified (typed pointers for AIR)
 

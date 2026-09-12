@@ -3,6 +3,7 @@
 ;;;   scheme --libdirs . --script tests/probe-mismatch.ss [failures-file]
 ;;; Pipe through `sort | uniq -c | sort -rn` for the histogram.
 [import
+ (prefix (llvm host-command-line) host:)
  (chezscheme)
  (prefix (llvm ir) ir:)
  (prefix (sll) sll:)
@@ -11,7 +12,7 @@
 [define
  failures-file
  [let
-  ((args (cdr (command-line))))
+  ((args (host:remaining-arguments)))
   (if (pair? args) (car args) "tests/tmp/corpus-failures.txt")]]
 
 [define

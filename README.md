@@ -248,13 +248,15 @@ importing the bindings, through the pure
     (prefix        . "/opt/llvm-20")]]]
 ```
 
-or, for the hosted commands (`make test`, the tools and the examples), through
-`SCHEMELL_LLVM_VERSION=20` and `SCHEMELL_LLVM_PREFIX=/opt/llvm-20`; an explicit
-Scheme selection takes precedence over the environment. A prefix holds
-`lib/libLLVM-N.<so|dylib|dll>` (or `lib/libLLVM.<suffix>`) and, for the
-coverage tests, `include/`; a `shared-object` entry names the library file
-directly. SchemeLL reads the loaded library's version with `LLVMGetVersion`
-and refuses any other release.
+or, for the hosted commands (`make test`, the tools and the examples), on
+the command line: `make test LLVMFLAGS="--llvm 20 --llvm-prefix /opt/llvm-20"`.
+Neither library reads the environment: with no selection, the first
+installed of 19, 20 and 16 is used, and a program that needs a feature
+states it (`(llvm:require! 'typed-pointers)`) and gets the release that has
+it. A prefix holds `lib/libLLVM-N.<so|dylib|dll>` and, for the coverage
+tests, `include/`; a `shared-object` entry names the library file directly.
+SchemeLL reads the loaded library's version with `LLVMGetVersion` and
+refuses any other release.
 
 **Submodules.** Schematter, the formatter, is pinned as a submodule: run
 `git submodule update --init --recursive`, or clone with
@@ -264,9 +266,9 @@ and refuses any other release.
 
 ```
 $ make build       # compile the libraries to .so (later runs start ~5x faster)
-$ make test        # selected-version suite (LLVM 19)
-$ SCHEMELL_LLVM_VERSION=20 make test
-$ SCHEMELL_LLVM_VERSION=16 make test
+$ make test        # the first installed of LLVM 19, 20, 16
+$ make test-llvm20 # a named release (LLVMFLAGS="--llvm 20")
+$ make test-llvm16
 $ make test-version-cache  # needs all three releases installed
 $ make examples    # smoke-runs 38 Scheme scripts and the CLI checks
 $ make reference   # (optional) fetch LLVM's test corpus for `make corpus`

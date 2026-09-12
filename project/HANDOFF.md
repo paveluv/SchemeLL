@@ -47,10 +47,12 @@ the normalized-entry kind).
 - **324 checks on 19, 334 on 20**, plus 14 pure selection checks (`make test`).
   The separate compiled-cache test runs the same selection/config/raw objects
   under 20/19/20 in fresh processes.
-- **Scheme configuration (S6)**: select in `(llvm selection)` before importing
-  the bindings. Hosted tools/tests/examples explicitly install the legacy
-  environment adapter. An explicit selection wins; changing a consumed
-  selection fails. No backend library reads `getenv`.
+- **Scheme configuration (S6, S7)**: select in `(llvm selection)` before
+  importing the bindings, or `require!` capabilities and let `(llvm config)`
+  resolve the release from what is installed (preference 19, 20, 16). Hosted
+  tools/tests/examples take `--llvm N` on the command line through
+  `(llvm host-command-line)`. An explicit selection wins; changing a consumed
+  selection fails. Nothing reads `getenv`.
 - **Platforms**: current two-release qualification is on x86-64 Linux.
   Historical LLVM 19 FreeBSD verification remains recorded; it was not rerun
   for S5. SchemeLL owns C API/ORC differences; Woof owns runtime protocols.
@@ -59,7 +61,7 @@ the normalized-entry kind).
 ## The stack, one line each
 
 - `llvm/selection.sls` — pure validated Scheme installation profile and sealing.
-- `llvm/host-environment.sls` — optional environment-to-profile adapter.
+- `llvm/host-command-line.sls` — optional command-line-to-profile adapter (`--llvm N`).
 - `llvm/config.sls` — hosted loading, installation identity, matching headers
   and C API capabilities; consumes the explicit selection.
 - `llvm/raw.sls` — C API verbatim; `(prefix (llvm raw) LLVM)`
@@ -349,8 +351,9 @@ the normalized-entry kind).
 ## Env setup on a new machine
 
 Chez 10 (`scheme` or `chez-scheme`, auto-detected) + LLVM 19.1.7 or 20.1.8
-with matching headers. Hosted commands can select 20 with
-`SCHEMELL_LLVM_VERSION=20`; the default is 19. Library clients use the
+with matching headers. Hosted commands name a release with `--llvm N`
+(`make test-llvm20`); with nothing named, the first installed of 19, 20, 16
+is used. Library clients use the
 [Scheme selection API](llvm-versions.md). Then: `make build` (compile libraries), `make test`, `make examples`,
 `make test-version-cache` (both releases installed), `make reference` (sparse
 llvm-project clone for `make corpus`; `git sparse-checkout add

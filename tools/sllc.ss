@@ -24,11 +24,14 @@
  (prefix (sll render) render:)
  (prefix (llvm ir) ir:)
  (prefix (llvm jit) jit:)
- (prefix (llvm target) target:)]
+ (prefix (llvm target) target:)
+ (prefix (llvm host-command-line) host:)]
 
 ;; ---- arguments -------------------------------------------------------------
 
-(define args (cdr (command-line)))
+[define
+ args
+ (host:remaining-arguments)]    ; --llvm/--llvm-prefix/--chez taken by bootstrap
 (define mode #f)                ; #f = the default, object emission
 (define opt-level #f)
 (define out-path #f)

@@ -27,7 +27,7 @@
 [define
  root
  [let
-  ((args (cdr (command-line))))
+  ((args (host:remaining-arguments)))
   (if (pair? args) (car args) "reference/llvm-project/llvm/test")]]
 
 ;; ---- file walk -----------------------------------------------------------

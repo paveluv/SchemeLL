@@ -68,8 +68,10 @@ definition -- the same rule as for exports.
   named capabilities rather than distributing numeric version tests. Woof owns
   its runtime qualification, and Meik owns neither set of version branches.
   See [version selection and qualification](llvm-versions.md).
-  Only an explicitly installed hosted adapter may read environment settings;
-  backend libraries consume Scheme selections.
+  Nothing reads the environment: hosted commands take `--llvm N` on their
+  command line through `(llvm host-command-line)`, libraries consume Scheme
+  selections, and with neither the first installed release in preference
+  order is used.
 - **Chez Scheme 10.0**, machine types `ta6le` (x86_64 Linux, threaded),
   `ta6fb` (x86_64 FreeBSD) and `tarm64osx` (Apple Silicon macOS). Host facts
   the code needs come from `(machine-type)` in one place each:

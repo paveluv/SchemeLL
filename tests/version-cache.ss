@@ -1,7 +1,7 @@
 ;;; The installed releases; compile config/raw once and reuse those Chez objects
 ;;; in fresh 20/19/16/20 processes. Original source caches are untouched.
 (load "host/bootstrap.ss")
-(import (chezscheme))
+(import (chezscheme) (prefix (llvm host-command-line) host:))
 (define cache "tests/tmp/version-cache")
 [define
  (q s)
@@ -17,14 +17,17 @@
   [zero?
    [system
     [format
-     "SCHEMELL_LLVM_VERSION=~a ~a --libdirs ~a --script tests/version-cache.ss ~a"
-     major
-     (q (or (getenv "CHEZ") "scheme"))
+     "~a --libdirs ~a --script tests/version-cache.ss --llvm ~a --chez ~a ~a"
+     (q (host:chez-command))
      (q (string-append cache ":."))
+     major
+     (q (host:chez-command))
      mode]]]
   (error 'version-cache "child failed" major mode)]]
 [case
- (and (pair? (cdr (command-line))) (string->symbol (cadr (command-line))))
+ [and
+  (pair? (host:remaining-arguments))
+  (string->symbol (car (host:remaining-arguments)))]
  [(compile)
   (compile-library (string-append cache "/llvm/selection.sls"))
   (compile-library (string-append cache "/llvm/config.sls"))
@@ -35,13 +38,12 @@
      [environment
       '(chezscheme)
       '(prefix (sll) sll:)
-      '(prefix (llvm config) config:)]]]
+      '(prefix (llvm config) config:)
+      '(prefix (llvm host-command-line) host:)]]]
    [eval
     '[begin
       [unless
-       [=
-        config:major-version
-        (string->number (getenv "SCHEMELL_LLVM_VERSION"))]
+       (= config:major-version (host:option-major))
        (error 'version-cache "cached selection")]
       [unless
        [=
@@ -54,10 +56,10 @@
     env]]]
  [else
   [when
-   (getenv "SCHEMELL_LLVM_PREFIX")
+   (host:option-prefix)
    [error
     'version-cache
-    "matrix needs default installations; unset SCHEMELL_LLVM_PREFIX"]]
+    "the matrix needs the conventional installations; drop --llvm-prefix"]]
   [for-each
    (lambda (p) (unless (file-exists? p) (mkdir p)))
    (list "tests/tmp" cache (string-append cache "/llvm"))]

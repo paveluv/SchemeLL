@@ -1,76 +1,102 @@
 # Selecting and qualifying LLVM
 
-`(llvm selection)` selects `16`, `19` (the default) or `20` before importing
-the LLVM bindings. The qualified release pins are 16.0.6, 19.1.7 and 20.1.8.
-Selection is fixed for the process, including when importing compiled Chez
-libraries. Use fresh processes to compare versions.
+The qualified releases are 16.0.6, 19.1.7 and 20.1.8. Which one a process
+uses is decided once, before the bindings load, by `(llvm selection)`, a
+pure library: no environment, no filesystem, no FFI. Three ways to decide,
+in order of precedence:
+
+1. **Pin a release**: `select!` with an explicit `major-version`.
+2. **State requirements**: `require!` names capabilities the program needs
+   (`typed-pointers`, `operand-bundles`, ...); the release is the first
+   installed one, in preference order, that has them all.
+3. **Nothing**: the first installed release in preference order, which is
+   19, then 20, then 16 (16 exists for typed-pointer bitcode).
+
+`prefer!` is the soft form of `require!`: candidates that have the preferred
+capabilities come first, but none is excluded, so a program can lean toward
+a release (SchemeGPU prefers `typed-pointers` on a Mac with a GPU) and still
+run when it is not installed.
+
+Installation is the one fact the selection library cannot know. When
+`(llvm config)` loads it calls `resolve!` with a probe of the host, and
+that seals the selection for the process, compiled Chez libraries
+included. Use fresh processes to compare releases.
 
 ```scheme
-(import (chezscheme) (prefix (llvm selection) llvm:))
-(llvm:select! (llvm:make-selection '((major-version . 20))))
+(import (prefix (llvm selection) llvm:))
+(llvm:require! 'typed-pointers)          ; or: (llvm:select! (llvm:make-selection '((major-version . 20))))
 (import (prefix (llvm config) config:))
-(config:version)
+(config:version)                         ; => (16 0 6)
 ```
 
-Execute these as separate top-level forms, so selection happens before
-the bindings load. `make-selection` accepts a strict alist; unknown and
-duplicate keys, unsupported majors, and invalid path values are errors.
-The record and its strings cannot be mutated through this API. The first
-consumer's `setting` seals the selection. `selected?` and `sealed?` expose
-those states; `selection-ref` reads a value. Reinstalling an equal selection
-is harmless; replacing a sealed installation is refused.
+Execute these as separate top-level forms, so the decision precedes the
+import that loads the bindings. `make-selection` accepts a strict alist;
+unknown and duplicate keys, unsupported majors, and invalid path values are
+errors. The record and its strings cannot be mutated through this API.
+`selected?` and `sealed?` expose the states; `selection-ref` reads a value;
+`requirements` and `candidates` show what was asked for and which majors
+could satisfy it. Reinstalling an equal selection is harmless; replacing a
+sealed installation is refused, and so is a pin or a later requirement the
+sealed release cannot satisfy. An unsatisfiable set fails with the
+requirements, the candidates and the releases found on the host.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `major-version` | `19` | qualified major: 16, 19 or 20 |
+| `major-version` | `#f` (resolve) | a qualified major: 16, 19 or 20 |
 | `prefix` | `#f` | optional installation directory |
-| `shared-object` | `#f` | optional exact library path/name |
+| `shared-object` | `#f` | optional exact library path/name (needs an explicit major) |
 | `header-directory` | `#f` | optional directory containing `Core.h` |
 | `version-header` | `#f` | optional exact `llvm-config.h` path |
 
-Path overrides accept `#f` or a nonempty string. The selection library does
-no I/O, host detection, environment reading, or native loading. Explicit
-`shared-object` selection skips conventional installation-directory discovery;
-`(llvm config)` still supplies the hosted loader and checks library identity.
+Path overrides accept `#f` or a nonempty string. Explicit `shared-object`
+selection skips installation-directory discovery; `(llvm config)` still
+supplies the hosted loader and checks library identity.
 
-Hosted test/tool entry points explicitly install `(llvm host-environment)`.
-Its `install!` translates `SCHEMELL_LLVM_VERSION` and `SCHEMELL_LLVM_PREFIX`
-only if no Scheme selection exists. Importing the adapter alone reads nothing.
-An explicit selection wins over inherited environment input. Direct library
-clients must select in Scheme or explicitly install this compatibility
-adapter before importing the bindings. Existing hosted commands remain:
+**Hosted commands** (`make test`, the tools and the examples) take the
+release on their command line, which `(llvm host-command-line)` parses
+when a script installs it (`host/bootstrap.ss`, the first form of every
+hosted script): `--llvm N`, `--llvm-prefix DIR`, and `--chez PATH` for
+scripts that spawn child processes. An explicit Scheme selection wins over
+the command line. Nothing in either library reads the environment; a
+release is visible in the source that required it or in the command that
+ran.
 
 ```sh
-SCHEMELL_LLVM_VERSION=19 make test
-SCHEMELL_LLVM_VERSION=20 make test
+make test                       # the first installed of 19, 20, 16
+make test-llvm20                # LLVMFLAGS="--llvm 20"
+make test LLVMFLAGS="--llvm-prefix /opt/llvm-20 --llvm 20"
 make test-version-cache
 ```
 
-The optional Scheme `prefix` (or hosted `SCHEMELL_LLVM_PREFIX`) points to an installation with `lib/`
+The optional `prefix` points to an installation with `lib/`
 and `include/`. Otherwise SchemeLL looks in `/usr/lib/llvm-N` and
 `/usr/local/llvmN` (Debian packages, manual builds), then in Homebrew's
 keg-only `/opt/homebrew/opt/llvm@N` (Apple Silicon) and
 `/usr/local/opt/llvm@N` (Intel Mac), then MacPorts' `/opt/local/libexec/llvm-N`;
-with no directory found it uses the versioned system library name. The
-library suffix follows the host: `.so` on ELF systems, `.dylib` on macOS,
-`.dll` on Windows (`config:shared-object-suffix`). Within a prefix it prefers
-`libLLVM-N.<suffix>`, with `libLLVM.<suffix>` as a fallback. It calls
+a release counts as installed when one of those directories holds its
+library (`config:installed-releases` lists them). The library suffix follows
+the host: `.so` on ELF systems, `.dylib` on macOS, `.dll` on Windows
+(`config:shared-object-suffix`). Within a directory it prefers
+`libLLVM-N.<suffix>`, with `libLLVM.<suffix>` as a fallback; under an
+explicit prefix only the versioned name identifies a release. It calls
 `LLVMGetVersion` before binding the rest of the C API and refuses a different
 major or patch release. It also refuses LLVM loaded outside SchemeLL, because
 Chez resolves foreign entries across the process. A failed load requires a
 fresh process; it cannot be retried against a different library.
 
-`(llvm config)` exposes `version`, `major-version`, `installation-directory`,
-`shared-object`, `header-directory`, `validate-headers!`, `capability?`, and
-`require-capability!`. Headers are needed by the coverage oracle, which checks
-their version against the loaded library; deployment does not require headers.
-Capabilities describe C API/IR differences, not Woof's runtime protocols.
+`(llvm config)` exposes `version`, `major-version`, `installed-releases`,
+`installation-directory`, `shared-object`, `header-directory`,
+`validate-headers!`, `capability?`, and `require-capability!`. Headers are
+needed by the coverage oracle, which checks their version against the
+loaded library; deployment does not require headers. Capabilities describe
+C API/IR differences, not Woof's runtime protocols; their table lives in
+`(llvm selection)` (`capability-of`) so requirements resolve before loading.
 
 ## Capabilities
 
 `config:capability?` names what the selected release's C API and IR can do;
 the raw bindings, the IR layer, unbuild and the tests consult these names,
-never version numbers. `config:require-capability!` raises
+never version numbers, and `selection:require!` resolves a release from them. `config:require-capability!` raises
 `feature unavailable in selected LLVM version` with the name and the major.
 
 | Capability | 16 | 19 | 20 | Meaning |
@@ -91,6 +117,7 @@ never version numbers. `config:require-capability!` raises
 | `fence-ordering-accessor` | – | yes | yes | correct `LLVMGetOrdering` for fences; 16 reads the ordering before metadata in the printed instruction |
 | `gep-no-wrap-flags` | – | yes | yes | `getelementptr nusw`/`nuw`; `inbounds` builds everywhere |
 | `blockaddress-inspection` | – | yes | yes | reading `blockaddress` constants back |
+| `fence-ordering-accessor` | – | yes | yes | `LLVMGetOrdering` reads fences; 16 misreads them (probed) and reads the printer instead |
 | `x86-mmx` | yes | yes | – | the MMX type |
 | `atomic-usub` | – | – | yes | atomicrmw `usub_cond`/`usub_sat` |
 | `jit-layout-bridge` | – | – | yes | LLJIT non-integral layout admission |

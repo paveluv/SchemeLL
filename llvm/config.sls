@@ -5,6 +5,7 @@
  [export
   major-version
   shared-object-suffix
+  installed-releases
   installation-directory
   shared-object
   header-directory
@@ -14,13 +15,6 @@
   capability?
   require-capability!]
  (import (chezscheme) (prefix (llvm selection) selection:))
-
- [define
-  qualified-versions
-  '[(16 0 6)
-    (19 1 7)
-    (20 1 8)]]
- (define major-version (selection:setting 'major-version))
 
  ;; The host's shared-library suffix, from Chez's machine type: ...osx is macOS
  ;; (dylib), ...nt is Windows (dll), everything else is ELF (so).
@@ -39,26 +33,70 @@
 
  ;; Conventional installation directories for a major release: Debian/Ubuntu
  ;; packages, a manual /usr/local build, Homebrew's keg-only llvm@N on Apple
- ;; Silicon and on Intel Macs, and MacPorts. Only directories that exist count.
+ ;; Silicon and on Intel Macs, and MacPorts. The first that exists counts.
+ [define
+  (conventional-directory major)
+  [find
+   file-directory?
+   [list
+    (format "/usr/lib/llvm-~a" major)
+    (format "/usr/local/llvm~a" major)
+    (format "/opt/homebrew/opt/llvm@~a" major)
+    (format "/usr/local/opt/llvm@~a" major)
+    (format "/opt/local/libexec/llvm-~a" major)]]]
+ [define
+  (versioned-name major)
+  (format "libLLVM-~a.~a" major shared-object-suffix)]
+ (define generic-name (string-append "libLLVM." shared-object-suffix))
+
+ ;; Is release MAJOR installed where this process would load it from? Under a
+ ;; selected prefix only the versioned library name identifies a release; an
+ ;; exact shared-object cannot be probed at all (its major must be explicit);
+ ;; otherwise a conventional directory holding the library.
+ [define
+  (installed-on-host? major)
+  [let
+   [(prefix (selection:setting 'prefix))
+    (so (selection:setting 'shared-object))]
+   [cond
+    (so #f)
+    [prefix
+     (file-exists? (string-append prefix "/lib/" (versioned-name major)))]
+    [else
+     [let
+      ((dir (conventional-directory major)))
+      [and
+       dir
+       [or
+        (file-exists? (string-append dir "/lib/" (versioned-name major)))
+        (file-exists? (string-append dir "/lib/" generic-name))]]]]]]]
+
+ ;; the qualified releases this process could load, in qualified order
+ [define
+  (installed-releases)
+  (filter installed-on-host? selection:qualified-majors)]
+
+ ;; The release: explicit, or resolved from the requirements and what is
+ ;; installed (see (llvm selection)); this seals the selection.
+ [define
+  major-version
+  [begin
+   [when
+    [and
+     (selection:setting 'shared-object)
+     (not (selection:setting 'major-version))]
+    [error
+     'llvm-config
+     "an exact shared-object selection needs an explicit major-version"]]
+   (selection:resolve! installed-on-host?)]]
+
  [define
   installation-directory
   [or
    (selection:setting 'prefix)
    [and
     (not (selection:setting 'shared-object))
-    [let
-     loop
-     [[paths
-       [list
-        (format "/usr/lib/llvm-~a" major-version)
-        (format "/usr/local/llvm~a" major-version)
-        (format "/opt/homebrew/opt/llvm@~a" major-version)
-        (format "/usr/local/opt/llvm@~a" major-version)
-        (format "/opt/local/libexec/llvm-~a" major-version)]]]
-     [cond
-      ((null? paths) #f)
-      ((file-directory? (car paths)) (car paths))
-      (else (loop (cdr paths)))]]]]]
+    (conventional-directory major-version)]]]
  [define
   shared-object
   [or
@@ -122,12 +160,12 @@
           (lambda (offset) (foreign-ref 'unsigned-32 out offset))
           '(0 4 8)]]]
        [unless
-        (equal? actual (assv major-version qualified-versions))
+        (equal? actual (assv major-version selection:qualified-versions))
         [error
          'llvm-config
          "unqualified LLVM release or mismatched installation"
          actual
-         (assv major-version qualified-versions)
+         (assv major-version selection:qualified-versions)
          shared-object]]
        (set! loaded-version actual)
        (set! load-failed? #f)]]
@@ -197,50 +235,9 @@
      (error 'llvm-config "missing LLVM C headers" header-directory)]
     actual]]]
 
- ;; Named C API / IR capabilities of the selected release. Each names the
- ;; release that introduced (or removed) the feature; the raw bindings, the IR
- ;; layer and unbuild consult these instead of version numbers, and
- ;; tests/test-version.ss checks that every optional C entry is present exactly
- ;; when its capability says so.
- [define
-  (capability? name)
-  [case
-   name
-   ;; LLVM 16: typed pointers still exist (LLVMContextSetOpaquePointers); needed
-   ;; to write bitcode for readers that predate opaque pointers
-   ((typed-pointers) (= major-version 16))
-   ;; LLVM 17 C API: 64-bit array lengths (LLVMArrayType2, LLVMConstArray2,
-   ;; LLVMGetArrayLength2), target extension inspection and atomicrmw
-   ;; uinc_wrap/udec_wrap (the IR operations already exist in 16).
-   ((array-length-64) (>= major-version 17))
-   ((target-ext-types) (>= major-version 17))
-   ((atomic-uinc-wrap) (>= major-version 17))
-   ((value-as-metadata-inspection) (>= major-version 17))
-   ;; LLVM 18: flag accessors (nsw/nuw/exact/nneg/disjoint and fast-math
-   ;; get/set), tail-call kinds beyond `tail`, operand bundles, inline-asm and
-   ;; prefix/prologue inspection, size_t string constants
-   ((flag-accessors) (>= major-version 18))
-   ((tail-call-kinds) (>= major-version 18))
-   ((operand-bundles) (>= major-version 18))
-   ((inline-asm-inspection) (>= major-version 18))
-   ((prefix-data-inspection) (>= major-version 18))
-   ((sized-string-constants) (>= major-version 18))
-   ;; LLVM 18 overloaded llvm.va_start/va_end/va_copy on the pointer type
-   ;; (llvm.va_start.p0); earlier releases know only the plain names
-   ((overloaded-va-intrinsics) (>= major-version 18))
-   ;; LLVM 19: callbr, getelementptr nusw/nuw, blockaddress inspection;
-   ;; LLVMGetOrdering reads fences correctly (16 misreads them, probed)
-   ((callbr) (>= major-version 19))
-   ((fence-ordering-accessor) (>= major-version 19))
-   ((gep-no-wrap-flags) (>= major-version 19))
-   ((blockaddress-inspection) (>= major-version 19))
-   ;; LLVM 20 removed MMX and added usub_cond/usub_sat, the JIT layout bridge
-   ;; and the samesign text detection
-   ((x86-mmx) (<= major-version 19))
-   ((atomic-usub) (>= major-version 20))
-   ((jit-layout-bridge) (>= major-version 20))
-   ((icmp-samesign-text) (>= major-version 20))
-   (else #f)]]
+ ;; Named C API / IR capabilities of the selected release; the table lives in
+ ;; (llvm selection) so requirements can be resolved before loading.
+ (define (capability? name) (selection:capability-of major-version name))
  [define
   (require-capability! name)
   [unless

@@ -92,4 +92,5 @@
    (ir:module-dispose! m)
    (ir:context-dispose! ctx)]]]
 
-(for-each bench (cdr (command-line)))
+(import (prefix (llvm host-command-line) host:))
+(for-each bench (host:remaining-arguments))

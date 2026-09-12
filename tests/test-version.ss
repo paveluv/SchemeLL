@@ -7,7 +7,9 @@
  (prefix (llvm raw) LLVM)
  (prefix (sll) sll:)
  (prefix (llvm jit) jit:)
- (prefix (llvm jit-layout) layout:)]
+ (prefix (llvm jit-layout) layout:)
+ (prefix (llvm selection) selection:)
+ (prefix (llvm host-command-line) host:)]
 (t:section "LLVM installation and capabilities")
 [printf
  "  LLVM ~s; ~a; headers ~a\n"
@@ -18,13 +20,17 @@
  "loaded release and C headers agree"
  (equal? (config:version) (config:validate-headers!))]
 [t:check
- "selection is frozen after import"
+ "selection is sealed after import: another release is refused"
  [let
-  ((old (getenv "SCHEMELL_LLVM_VERSION")) (version (config:version)))
-  [dynamic-wind
-   (lambda () (putenv "SCHEMELL_LLVM_VERSION" "unsupported"))
-   (lambda () (equal? version (config:version)))
-   (lambda () (putenv "SCHEMELL_LLVM_VERSION" (or old "19")))]]]
+  ((other (if (= config:major-version 19) 20 19)))
+  [guard
+   (e ((and (who-condition? e) (eq? (condition-who e) 'select!)) #t))
+   [selection:select!
+    (selection:make-selection (list (cons 'major-version other)))]
+   #f]]]
+[t:check
+ "the loaded release is one this host has installed"
+ (memv config:major-version (config:installed-releases))]
 [define
  (version-quote s)
  [string-append
@@ -43,47 +49,85 @@
    [or
     (string=? part (substring s i (+ i (string-length part))))
     (loop (+ i 1))]]]]
+(unless (file-exists? "tests/tmp") (mkdir "tests/tmp"))
+;; run tests/config-process.ss in a fresh process: -> (cons exit-status output)
 [define
- (version-child version prefix mode expected)
+ (config-child options mode arg)
  [let*
   [(path "tests/tmp/version-child.log")
    [status
     [system
      [format
-      "SCHEMELL_LLVM_VERSION=~a SCHEMELL_LLVM_PREFIX=~a ~a --libdirs . --script tests/config-process.ss ~a ~a > ~a 2>&1"
-      (version-quote version)
-      (version-quote prefix)
-      (version-quote (or (getenv "CHEZ") "scheme"))
+      "~a --libdirs . --script tests/config-process.ss ~a ~a ~a > ~a 2>&1"
+      (version-quote (host:chez-command))
+      options
       mode
-      (version-quote config:shared-object)
+      (if arg (version-quote arg) "")
       (version-quote path)]]]]
-  [and
-   (not (zero? status))
-   (version-contains? (call-with-input-file path get-string-all) expected)]]]
-(unless (file-exists? "tests/tmp") (mkdir "tests/tmp"))
+  (cons status (call-with-input-file path get-string-all))]]
+[define
+ (version-child version prefix mode expected)
+ [let
+  [[r
+    [config-child
+     (format "--llvm ~a --llvm-prefix ~a" version (version-quote prefix))
+     mode
+     (and (string=? mode "preload") config:shared-object)]]]
+  (and (not (zero? (car r))) (version-contains? (cdr r) expected))]]
+[define
+ (version-string major)
+ (format "~s" (assv major selection:qualified-versions))]
 [t:check
- "explicit Scheme selection takes precedence over invalid environment input"
- [let*
-  [(path "tests/tmp/version-scheme-selection.log")
-   [status
-    [system
-     [format
-      "SCHEMELL_LLVM_VERSION=invalid SCHEMELL_LLVM_PREFIX=/invalid ~a --libdirs . --script tests/config-process.ss scheme-~a ignored > ~a 2>&1"
-      (version-quote (or (getenv "CHEZ") "scheme"))
-      config:major-version
-      (version-quote path)]]]]
+ "explicit Scheme selection takes precedence over the command line"
+ [let
+  [[r
+    [config-child
+     (format "--llvm ~a" (if (= config:major-version 19) 20 19))
+     (format "scheme-~a" config:major-version)
+     #f]]]
   [and
-   (zero? status)
-   [version-contains?
-    (call-with-input-file path get-string-all)
-    (format "~s" (config:version))]]]]
+   (zero? (car r))
+   (version-contains? (cdr r) (format "~s" (config:version)))]]]
+[t:check
+ "with nothing selected, the release resolves from what is installed, in preference order"
+ [let
+  [(r (config-child "" "version" #f))
+   [expected
+    [find
+     (lambda (m) (memv m (config:installed-releases)))
+     selection:preference]]]
+  (and (zero? (car r)) (version-contains? (cdr r) (version-string expected)))]]
+[t:check
+ "a requirement picks the release that has it, or says why none does"
+ [let
+  ((r (config-child "" "require" "typed-pointers")))
+  [if
+   (memv 16 (config:installed-releases))
+   (and (zero? (car r)) (version-contains? (cdr r) (version-string 16)))
+   [and
+    (not (zero? (car r)))
+    (version-contains? (cdr r) "no qualified LLVM release")]]]]
+[t:check
+ "an unsatisfiable requirement set is refused with the candidates and what is installed"
+ [let
+  ((r (config-child "" "require" "typed-pointers,atomic-usub")))
+  [and
+   (not (zero? (car r)))
+   (version-contains? (cdr r) "no qualified LLVM release")
+   (version-contains? (cdr r) "(candidates)")
+   (version-contains? (cdr r) "(installed")]]]
+[t:check
+ "an explicit release that lacks a requirement is refused"
+ [let
+  [[r
+    [config-child
+     (format "--llvm ~a" config:major-version)
+     "require"
+     (if (= config:major-version 16) "atomic-usub" "typed-pointers")]]]
+  (and (not (zero? (car r))) (version-contains? (cdr r) "lacks"))]]
 [t:check
  "unknown major is refused before library loading"
- [version-child
-  "21"
-  "/does-not-exist"
-  "version"
-  "unsupported SCHEMELL_LLVM_VERSION"]]
+ (version-child "21" "/does-not-exist" "version" "unsupported --llvm")]
 [t:check
  "preloaded LLVM is refused before loading another library"
  [version-child

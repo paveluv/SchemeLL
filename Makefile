@@ -2,16 +2,30 @@
 # macOS, `chez-scheme` on FreeBSD (and some Linux distros); override
 # with `make CHEZ=...`. Detection runs in the recipe shell: neither
 # `!=` (GNU make >= 4.0, BSD make) nor `$(shell)` (GNU make only) exists
-# in every make. macOS's GNU make 3.81 supports `$(shell)`, but not `!=`.
+# in every make, and macOS ships GNU make 3.81, which has neither.
 CHEZ ?= $$(for c in scheme chez; do command -v $$c >/dev/null 2>&1 && echo $$c && exit 0; done; echo chez-scheme)
 LIBDIRS = .
 SCHEME_SOURCES = '*.sls' '*.ss' '*.scm' '*.sps' '*.sll'
 
-.PHONY: test repl build corpus format check-format clean examples reference
+# Which LLVM release: nothing selects the first installed of 19, 20, 16;
+# LLVMFLAGS="--llvm 20" (or --llvm-prefix DIR) names one for a run. Scripts
+# read these from their command line, never from the environment; --chez
+# tells scripts that spawn child processes which binary to use.
+LLVMFLAGS =
+HOSTFLAGS = --chez $(CHEZ) $(LLVMFLAGS)
+
+.PHONY: test test-llvm16 test-llvm19 test-llvm20 test-version-cache repl build corpus corpus-case format check-format clean examples examples-llvm16 examples-llvm19 examples-llvm20 reference
 
 test:
 	$(CHEZ) --libdirs $(LIBDIRS) --script tests/selection.ss
-	CHEZ=$(CHEZ) $(CHEZ) --libdirs $(LIBDIRS) --script tests/run.ss
+	$(CHEZ) --libdirs $(LIBDIRS) --script tests/run.ss $(HOSTFLAGS)
+
+test-llvm16:
+	@$(MAKE) test LLVMFLAGS="--llvm 16"
+test-llvm19:
+	@$(MAKE) test LLVMFLAGS="--llvm 19"
+test-llvm20:
+	@$(MAKE) test LLVMFLAGS="--llvm 20"
 
 repl:
 	$(CHEZ) --libdirs $(LIBDIRS)
@@ -20,16 +34,15 @@ repl:
 # (needs reference/llvm-project, see project/RULES.md)
 CORPUS_DIR = reference/llvm-project/llvm/test
 corpus:
-	$(CHEZ) --libdirs $(LIBDIRS) --script tests/corpus.ss $(CORPUS_DIR)
+	$(CHEZ) --libdirs $(LIBDIRS) --script tests/corpus.ss $(HOSTFLAGS) $(CORPUS_DIR)
 
 CORPUS_FILE =
 corpus-case:
-	$(CHEZ) --libdirs $(LIBDIRS) --script tests/corpus-case.ss "$(CORPUS_FILE)"
-.PHONY: corpus-case
+	$(CHEZ) --libdirs $(LIBDIRS) --script tests/corpus-case.ss $(HOSTFLAGS) "$(CORPUS_FILE)"
 
+# compile config/raw once, run them under every installed release
 test-version-cache:
-	CHEZ=$(CHEZ) $(CHEZ) --script tests/version-cache.ss
-.PHONY: test-version-cache
+	$(CHEZ) --script tests/version-cache.ss --chez $(CHEZ)
 
 # Populate reference/ with what the tests need: LLVM's regression
 # corpus (for `make corpus`), pinned to the LLVM version the bindings
@@ -46,23 +59,30 @@ reference:
 	  -name '*.ll' | wc -l) .ll files"
 
 # depends on build: each example is its own Chez process, and without
-# compiled library objects every one of the 38 re-compiles the whole
+# compiled library objects every one of the 37 re-compiles the whole
 # stack in memory (~35s total); with them the run takes ~5s.
 examples: build
 	@for f in examples/sll/*.ss examples/llvm/*.ss examples/aot/*.ss; do \
-	  echo "== $$f"; $(CHEZ) --libdirs $(LIBDIRS) --script $$f >/dev/null || exit 1; \
+	  echo "== $$f"; $(CHEZ) --libdirs $(LIBDIRS) --script $$f $(HOSTFLAGS) >/dev/null || exit 1; \
 	done
 	@sll_exit=0; \
-	  $(CHEZ) --libdirs $(LIBDIRS) --script tools/sllc.ss --run examples/aot/fact.sll || sll_exit=$$?; \
+	  $(CHEZ) --libdirs $(LIBDIRS) --script tools/sllc.ss $(HOSTFLAGS) --run examples/aot/fact.sll || sll_exit=$$?; \
 	  test $$sll_exit -eq 120 || exit 1
 	@if { [ "$$(uname -m)" = x86_64 ] || [ "$$(uname -m)" = amd64 ]; } && \
 	  { [ "$$(uname -s)" = Linux ] || [ "$$(uname -s)" = FreeBSD ]; }; then \
-	  $(CHEZ) --libdirs $(LIBDIRS) --script tools/sllc.ss --opt O2 --exe examples/aot/hello-metaprog.sll && \
+	  $(CHEZ) --libdirs $(LIBDIRS) --script tools/sllc.ss $(HOSTFLAGS) --opt O2 --exe examples/aot/hello-metaprog.sll && \
 	  ./examples/aot/hello-metaprog && rm -f examples/aot/hello-metaprog; \
 	else \
 	  echo "== --exe skipped: sllc writes x86-64 ELF executables, which this host cannot run"; \
 	fi
 	@echo "examples ok"
+
+examples-llvm16:
+	@$(MAKE) examples LLVMFLAGS="--llvm 16"
+examples-llvm19:
+	@$(MAKE) examples LLVMFLAGS="--llvm 19"
+examples-llvm20:
+	@$(MAKE) examples LLVMFLAGS="--llvm 20"
 
 schematter/schematter.sps:
 	@echo "Schematter is missing; run: git submodule update --init --recursive" >&2
