@@ -391,10 +391,12 @@
  ;; statepoint stack maps). Codegen's section symbol (__LLVM_StackMaps) is
  ;; LOCAL, so ORC lookup cannot see it (probed); a program that needs its map at
  ;; run time splices sll's stackmap-keeper items, which export a pointer to the
- ;; section under a name this looks up. The direct name is still tried first in
- ;; case a linking-layer configuration ever exports it. Multi-module programs:
- ;; one keeper NAME per module (the dylib holds one definition per symbol),
- ;; created with sll:stackmap-keeper-named and read back here by that name.
+ ;; section under a name this looks up (the keeper spells the section symbol
+ ;; with the \01 no-mangle prefix so it also binds on Mach-O). The direct name
+ ;; is still tried first in case a linking-layer configuration ever exports it.
+ ;; Multi-module programs: one keeper NAME per module (the dylib holds one
+ ;; definition per symbol), created with sll:stackmap-keeper-named and read back
+ ;; here by that name.
  [define
   stackmap-address
   [case-lambda

@@ -7,9 +7,11 @@ if [ ! -f schematter/schematter/hook.sls ]; then
     exit 1
 fi
 
-# Match the Makefile's Chez selection, including FreeBSD and $CHEZ overrides.
+# Match the Makefile's Chez selection: scheme, Homebrew's chez, FreeBSD's
+# chez-scheme, and $CHEZ overrides.
 if [ -z "$CHEZ" ]; then
     if command -v scheme >/dev/null 2>&1; then CHEZ=scheme
+    elif command -v chez >/dev/null 2>&1; then CHEZ=chez
     else CHEZ=chez-scheme
     fi
 fi

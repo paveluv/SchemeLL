@@ -5,6 +5,8 @@
  [export
   initialize-native!
   initialize-target!
+  native-target-name
+  native-object-format
   default-triple
   host-cpu-name
   host-cpu-features
@@ -28,7 +30,8 @@
 
  ;; The generic LLVMInitializeNativeTarget is a static inline in Target.h, so it
  ;; does not exist as a symbol; we call the per-target functions that do. Map
- ;; Chez's machine type to LLVM's target name.
+ ;; Chez's machine type to LLVM's target name ("X86", "AArch64"): the host's
+ ;; backend, which is also what host-specific inline asm must be written for.
  [define
   (native-target-name)
   [case
@@ -40,6 +43,17 @@
      'target:initialize-native!
      "unsupported machine type"
      (machine-type)]]]]
+
+ ;; The relocatable object format the host's default target machine emits:
+ ;; Mach-O on macOS, COFF on Windows, ELF everywhere else. Section names follow
+ ;; it (".text" on ELF, "__TEXT,__text" on Mach-O).
+ [define
+  (native-object-format)
+  [case
+   (machine-type)
+   ((a6osx ta6osx arm64osx tarm64osx) 'mach-o)
+   ((a6nt ta6nt i3nt ti3nt) 'coff)
+   (else 'elf)]]
 
  (define native-initialized? #f)
 

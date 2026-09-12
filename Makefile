@@ -1,8 +1,9 @@
-# Chez's binary is `scheme` on most systems, `chez-scheme` on FreeBSD
-# (and some Linux distros); override with `make CHEZ=...`. The !=
-# shell-assignment works in both BSD make and GNU make (>= 4.0).
-CHEZ_DETECTED != command -v scheme >/dev/null 2>&1 && echo scheme || echo chez-scheme
-CHEZ ?= $(CHEZ_DETECTED)
+# Chez's binary is `scheme` on most systems, `chez` from Homebrew on
+# macOS, `chez-scheme` on FreeBSD (and some Linux distros); override
+# with `make CHEZ=...`. Detection runs in the recipe shell: neither
+# `!=` (GNU make >= 4.0, BSD make) nor `$(shell)` (GNU make only) exists
+# in every make, and macOS ships GNU make 3.81, which has neither.
+CHEZ ?= $$(for c in scheme chez; do command -v $$c >/dev/null 2>&1 && echo $$c && exit 0; done; echo chez-scheme)
 LIBDIRS = .
 SCHEME_SOURCES = '*.sls' '*.ss' '*.scm' '*.sps' '*.sll'
 
@@ -53,8 +54,12 @@ examples: build
 	done
 	@$(CHEZ) --libdirs $(LIBDIRS) --script tools/sllc.ss --run examples/aot/fact.sll; \
 	  test $$? -eq 120 || exit 1
-	@$(CHEZ) --libdirs $(LIBDIRS) --script tools/sllc.ss --opt O2 --exe examples/aot/hello-metaprog.sll && \
-	  ./examples/aot/hello-metaprog && rm -f examples/aot/hello-metaprog
+	@if [ "$$(uname -m)" = x86_64 ] && { [ "$$(uname -s)" = Linux ] || [ "$$(uname -s)" = FreeBSD ]; }; then \
+	  $(CHEZ) --libdirs $(LIBDIRS) --script tools/sllc.ss --opt O2 --exe examples/aot/hello-metaprog.sll && \
+	  ./examples/aot/hello-metaprog && rm -f examples/aot/hello-metaprog; \
+	else \
+	  echo "== --exe skipped: sllc writes x86-64 ELF executables, which this host cannot run"; \
+	fi
 	@echo "examples ok"
 
 schematter/schematter.sps:

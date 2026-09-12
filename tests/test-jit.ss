@@ -173,8 +173,8 @@ entry:
   %p = call i32 @getpid()
   ret ptr addrspace(1) %a
 }
-@__LLVM_StackMaps = external global i8
-@sll_stackmaps_keeper = constant ptr @__LLVM_StackMaps"]]
+@\"\\01__LLVM_StackMaps\" = external global i8
+@sll_stackmaps_keeper = constant ptr @\"\\01__LLVM_StackMaps\""]]
   (j (jit:make))]
  (ir:run-module-passes! m "rewrite-statepoints-for-gc")
  (jit:add-module! j jc m)
@@ -218,8 +218,8 @@ entry:
   %p = call i32 @getpid()
   ret ptr addrspace(1) %a
 }
-@__LLVM_StackMaps = external global i8
-@~a = constant ptr @__LLVM_StackMaps"
+@\"\\01__LLVM_StackMaps\" = external global i8
+@~a = constant ptr @\"\\01__LLVM_StackMaps\""
          fname
          keeper]]]]
      (ir:run-module-passes! m "rewrite-statepoints-for-gc")

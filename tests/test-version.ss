@@ -113,7 +113,12 @@
  [lambda
   (major)
   [let
-   ((path (format "~a/lib/libLLVM-~a.so" version-fixture major)))
+   [[path
+     [format
+      "~a/lib/libLLVM-~a.~a"
+      version-fixture
+      major
+      config:shared-object-suffix]]]
    (when (file-exists? path) (delete-file path))
    [unless
     [zero?

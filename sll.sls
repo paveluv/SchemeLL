@@ -2605,9 +2605,12 @@
  ;; (AOT). A JIT dylib holds ONE definition per symbol name (probed: a second
  ;; module with the same keeper is a duplicate-definition error), so
  ;; multi-module programs give each module its own keeper name and pass it to
- ;; jit:stackmap-address. (@-literals here are what the file's #!chezscheme
- ;; directive is for: library sources lex in r6rs mode by default, which rejects
- ;; a leading @ -- see the HANDOFF Chez quirks catalog.)
+ ;; jit:stackmap-address. The section symbol is spelled with LLVM's \01 "do not
+ ;; mangle" prefix: codegen emits the label verbatim on every object format, but
+ ;; a plain @__LLVM_StackMaps global would be mangled to ___LLVM_StackMaps on
+ ;; Mach-O (macOS) and never bind to it (probed); on ELF there is no mangling
+ ;; and the prefix changes nothing.
+ (define stackmap-section (string->symbol "@\x1;__LLVM_StackMaps"))
  [define
   (stackmap-keeper-named keeper-sym)
   [unless
@@ -2615,8 +2618,8 @@
    (error "keeper name must be a symbol (no sigil)" keeper-sym)]
   [let
    ((keeper (name '@ keeper-sym)))
-   `[(= @__LLVM_StackMaps (global external i8)            )
-     (= ,keeper           (constant ptr @__LLVM_StackMaps))]]]
+   `[(= ,stackmap-section (global external i8)            )
+     (= ,keeper           (constant ptr ,stackmap-section))]]]
 
  (define stackmap-keeper (stackmap-keeper-named 'sll_stackmaps_keeper))
 

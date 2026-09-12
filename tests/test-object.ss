@@ -9,11 +9,9 @@
 
 (t:check "default-triple" (string? (target:default-triple)))
 (t:check "host-cpu-name" (string? (target:host-cpu-name)))
-[t:check
- "host-cpu-features non-empty"
- [let
-  ((f (target:host-cpu-features)))
-  (and (string? f) (positive? (string-length f)))]]
+;; LLVM reports Apple Silicon's features through the CPU name (apple-m1 ...) and
+;; returns an empty feature string there; x86 hosts list +sse2,... .
+(t:check "host-cpu-features is a string" (string? (target:host-cpu-features)))
 
 (t:section "target: emitting objects")
 
@@ -35,16 +33,22 @@
 
 (define obj (target:emit-object-bytevector tm mod))
 
+;; the host's relocatable object format (LLVM's default target machine follows
+;; the host triple): ELF magic, Mach-O 64-bit magic, or COFF's machine field
+;; (x86-64 or ARM64)
 [define
- (elf? bv)
+ (host-object? bv)
  [and
   (>= (bytevector-length bv) 4)
-  (= (bytevector-u8-ref bv 0) #x7f)
-  (= (bytevector-u8-ref bv 1) (char->integer #\E))
-  (= (bytevector-u8-ref bv 2) (char->integer #\L))
-  (= (bytevector-u8-ref bv 3) (char->integer #\F))]]
+  [case
+   (target:native-object-format)
+   ((elf) (= (bytevector-u32-ref bv 0 (endianness little)) #x464c457f))
+   ((mach-o) (= (bytevector-u32-ref bv 0 (endianness little)) #xfeedfacf))
+   [(coff)
+    (memv (bytevector-u16-ref bv 0 (endianness little)) '(#x8664 #xaa64))]
+   (else #f)]]]
 
-(t:check "in-memory object is ELF" (elf? obj))
+(t:check "in-memory object is in the host's object format" (host-object? obj))
 (t:check "object is non-trivial" (> (bytevector-length obj) 100))
 
 (unless (file-directory? "tests/tmp") (mkdir "tests/tmp"))
@@ -55,11 +59,11 @@
 
 (target:emit-object-file tm mod obj-path)
 [t:check
- "object file written and is ELF"
+ "object file written in the host's object format"
  [let*
   ((p (open-file-input-port obj-path)) (bv (get-bytevector-n p 4)))
   (close-port p)
-  (elf? bv)]]
+  (host-object? bv)]]
 
 (target:emit-assembly-file tm mod asm-path)
 [t:check
@@ -134,16 +138,13 @@
     "rewrite-statepoints-for-gc"
     'non-integral
     '(1)]]]
- [t:check
-  "sll:object emits ELF"
-  [and
-   (> (bytevector-length obj) 4)
-   (= (bytevector-u32-ref obj 0 (endianness little)) #x464c457f)]]
+ (t:check "sll:object emits the host's object format" (host-object? obj))
  ;; the statepoint pass ran: the object carries a stackmap section
+ ;; (.llvm_stackmaps on ELF, __LLVM_STACKMAPS,__llvm_stackmaps on Mach-O)
  [t:check
-  "sll:object with statepoint passes carries .llvm_stackmaps"
+  "sll:object with statepoint passes carries a llvm_stackmaps section"
   [let*
-   [(want (string->utf8 ".llvm_stackmaps"))
+   [(want (string->utf8 "llvm_stackmaps"))
     (wn (bytevector-length want))
     (n (bytevector-length obj))]
    [let

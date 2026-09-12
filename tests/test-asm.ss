@@ -3,7 +3,8 @@
  (chezscheme)
  (prefix (tests harness) t:)
  (prefix (sll asm) asm:)
- (prefix (sll) sll:)]
+ (prefix (sll) sll:)
+ (prefix (llvm target) target:)]
 
 (t:section "asm: constraint generation")
 
@@ -76,6 +77,18 @@
 
 (t:section "asm: end to end")
 
+;; the template is the host's: AT&T "add src, dst" on x86, three-operand "add
+;; dst, src1, src2" on AArch64 -- the operand names and numbering are the same
+;; either way
+[define
+ add-template
+ [let
+  ((host (target:native-target-name)))
+  [cond
+   ((string=? host "X86") '("add " b ", " sum))
+   ((string=? host "AArch64") '("add " sum ", " sum ", " b))
+   (else (error 'test-asm "no add template for this host" host))]]]
+
 [t:check
  "generated asm JITs and runs"
  [=
@@ -94,7 +107,7 @@
              '[(out sum r         )
                (in  a   (tied sum))
                (in  b   r         )]
-             '("add " b ", " sum)
+             add-template
              'sideeffect]
            (i64 %a)
            (i64 %b)]]]

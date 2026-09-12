@@ -4,6 +4,7 @@
  (llvm config)
  [export
   major-version
+  shared-object-suffix
   installation-directory
   shared-object
   header-directory
@@ -20,6 +21,24 @@
     (20 1 8)]]
  (define major-version (selection:setting 'major-version))
 
+ ;; The host's shared-library suffix, from Chez's machine type: ...osx is macOS
+ ;; (dylib), ...nt is Windows (dll), everything else is ELF (so).
+ [define
+  shared-object-suffix
+  [let*
+   [(name (symbol->string (machine-type)))
+    (n (string-length name))
+    [ends-with?
+     [lambda
+      (tail)
+      [let
+       ((m (string-length tail)))
+       (and (>= n m) (string=? tail (substring name (- n m) n)))]]]]
+   (cond ((ends-with? "osx") "dylib") ((ends-with? "nt") "dll") (else "so"))]]
+
+ ;; Conventional installation directories for a major release: Debian/Ubuntu
+ ;; packages, a manual /usr/local build, Homebrew's keg-only llvm@N on Apple
+ ;; Silicon and on Intel Macs, and MacPorts. Only directories that exist count.
  [define
   installation-directory
   [or
@@ -31,7 +50,10 @@
      [[paths
        [list
         (format "/usr/lib/llvm-~a" major-version)
-        (format "/usr/local/llvm~a" major-version)]]]
+        (format "/usr/local/llvm~a" major-version)
+        (format "/opt/homebrew/opt/llvm@~a" major-version)
+        (format "/usr/local/opt/llvm@~a" major-version)
+        (format "/opt/local/libexec/llvm-~a" major-version)]]]
      [cond
       ((null? paths) #f)
       ((file-directory? (car paths)) (car paths))
@@ -41,12 +63,16 @@
   [or
    (selection:setting 'shared-object)
    [let
-    ((name (format "libLLVM-~a.so" major-version)))
+    ((name (format "libLLVM-~a.~a" major-version shared-object-suffix)))
     [if
      installation-directory
      [let*
       [(versioned (string-append installation-directory "/lib/" name))
-       (generic (string-append installation-directory "/lib/libLLVM.so"))]
+       [generic
+        [string-append
+         installation-directory
+         "/lib/libLLVM."
+         shared-object-suffix]]]
       [if
        (or (file-exists? versioned) (not (file-exists? generic)))
        versioned

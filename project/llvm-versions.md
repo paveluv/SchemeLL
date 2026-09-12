@@ -48,8 +48,13 @@ make test-version-cache
 
 The optional Scheme `prefix` (or hosted `SCHEMELL_LLVM_PREFIX`) points to an installation with `lib/`
 and `include/`. Otherwise SchemeLL looks in `/usr/lib/llvm-N` and
-`/usr/local/llvmN`, then uses the versioned system library name. Within a
-prefix it prefers `libLLVM-N.so`, with `libLLVM.so` as a fallback. It calls
+`/usr/local/llvmN` (Debian packages, manual builds), then in Homebrew's
+keg-only `/opt/homebrew/opt/llvm@N` (Apple Silicon) and
+`/usr/local/opt/llvm@N` (Intel Mac), then MacPorts' `/opt/local/libexec/llvm-N`;
+with no directory found it uses the versioned system library name. The
+library suffix follows the host: `.so` on ELF systems, `.dylib` on macOS,
+`.dll` on Windows (`config:shared-object-suffix`). Within a prefix it prefers
+`libLLVM-N.<suffix>`, with `libLLVM.<suffix>` as a fallback. It calls
 `LLVMGetVersion` before binding the rest of the C API and refuses a different
 major or patch release. It also refuses LLVM loaded outside SchemeLL, because
 Chez resolves foreign entries across the process. A failed load requires a

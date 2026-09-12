@@ -2,6 +2,52 @@
 
 Newest entries first. Format: date, Done / Decided / Next.
 
+## 2026-09-12 — macOS (Apple Silicon) out of the box
+
+### Done
+
+`(llvm config)` now finds LLVM on macOS with no configuration: the library
+suffix follows the host (`config:shared-object-suffix`: `.so`, `.dylib`,
+`.dll`) and the conventional directories include Homebrew's keg-only
+`/opt/homebrew/opt/llvm@N` and `/usr/local/opt/llvm@N` and MacPorts'
+`/opt/local/libexec/llvm-N`. Apple's toolchain ships no LLVM C API library
+(probed: Command Line Tools have only `libclang.dylib`, zero `LLVM*`
+symbols), so Homebrew/MacPorts remain the source of LLVM.
+
+Host facts moved into two `(llvm target)` exports, `native-target-name`
+("X86"/"AArch64") and `native-object-format` (`elf`/`mach-o`/`coff`); tests
+and examples branch on those instead of on `(machine-type)`.
+
+Mach-O findings, each fixed: the stack-map keeper's `@__LLVM_StackMaps`
+global was mangled to `___LLVM_StackMaps` while codegen emits the section
+label verbatim, so the keeper never bound (now spelled with LLVM's `\01`
+no-mangle prefix, a no-op on ELF); `LLVMGetHostCPUFeatures` returns "" on
+Apple Silicon; bare `.text` is an invalid Mach-O section specifier (tests use
+`__TEXT,__text` there); the stackmap section is `__LLVM_STACKMAPS,__llvm_stackmaps`;
+AArch64 `add` is three-operand, so the asm end-to-end test and example 21
+(cycle counter via `cntvct_el0`) carry per-backend templates.
+
+macOS's `/usr/bin/make` is GNU make 3.81, which silently ignores `!=`; Chez
+detection now runs in the recipe shell and also finds Homebrew's `chez`. The
+pre-commit launcher matches. `make examples` skips the x86-64-ELF-only
+`--exe` step on other hosts.
+
+Validation on an Apple M-series Mac (Chez 10.4.1, `tarm64osx`): 14 selection
+checks; 324 checks on LLVM 19.1.7 and 334 on 20.1.8, both from Homebrew kegs
+with no environment input; all 37 examples on both; `make test-version-cache`
+across 20/19/20.
+
+### Decided
+
+Host-specific tests and examples name the backend or object format they need
+through `(llvm target)`; no `(machine-type)` case tables outside `config` and
+`target`. `--exe` stays x86-64 ELF only; a Mach-O emitter is a separate thread.
+
+### Next
+
+Run the suite on an Intel Mac (`/usr/local/opt/llvm@N`, `ta6osx`). Consider
+`--exe` for Mach-O once a freestanding program needs it.
+
 ## 2026-09-11 — Update the Schematter pin
 
 Updated Schematter from `d220dcf` to upstream `317895e`, including the

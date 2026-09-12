@@ -287,7 +287,11 @@ the normalized-entry kind).
   stripped from comparisons.
 - Stack-map delivery quirks (probed 2026-08-25): `__LLVM_StackMaps`
   is a LOCAL symbol (ORC lookup cannot see it — hence the keeper
-  globals); a JIT dylib's namespace is flat (same-name keepers in
+  globals); on Mach-O (macOS, probed 2026-09-12) codegen emits that
+  label verbatim while a plain `@__LLVM_StackMaps` global is mangled
+  to `___LLVM_StackMaps` and stays undefined — hence the keeper names
+  the section as `@"\01__LLVM_StackMaps"` (LLVM's no-mangle prefix,
+  a no-op on ELF); a JIT dylib's namespace is flat (same-name keepers in
   two modules = duplicate-definition error — hence
   `stackmap-keeper-named`); system linkers CONCATENATE one complete
   blob per object under the one section name (consumers must

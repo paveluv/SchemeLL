@@ -4,6 +4,7 @@
  (prefix (tests harness) t:)
  (prefix (llvm ir) ir:)
  (prefix (llvm jit) jit:)
+ (prefix (llvm target) target:)
  (prefix (sll) sll:)]
 
 [define
@@ -127,19 +128,23 @@
 ;; grammar has it; the build applies it and unbuild reads it back. (A function
 ;; naming its section is how an alignment below the target's preferred one
 ;; reaches the machine code: LLVM's printer keeps a smaller explicit alignment
-;; only then.)
+;; only then.) The name is the host's text section: Mach-O spells sections as
+;; "segment,section" and refuses a bare ".text" at codegen.
+[define
+ text-section
+ (if (eq? (target:native-object-format) 'mach-o) "__TEXT,__text" ".text")]
 [define
  sect-prog
- '[[define
+ `[[define
     i64
     (@packed (i64 %x))
     (attributes nounwind)
-    (section ".text")
+    (section ,text-section)
     (align 1)
     (label %entry (= %r (add i64 %x 1)) (ret i64 %r))]]]
 [t:check
  "section deco lands in the IR, before the alignment"
- (contains? (sll:dump sect-prog) "section \".text\" align 1")]
+ (contains? (sll:dump sect-prog) (format "section ~s align 1" text-section))]
 [let*
  [(sc (jit:make-context))
   (m (sll:build (jit:context-ir sc) "sect" sect-prog))
@@ -148,7 +153,7 @@
  [t:check
   "unbuild reads the section back, between the attributes and the alignment"
   [and
-   (equal? (list-ref f 4) '(section ".text"))
+   (equal? (list-ref f 4) (list 'section text-section))
    (equal? (list-ref f 5) '(align 1))]]
  [t:check
   "and the JIT runs the packed function"

@@ -5,16 +5,7 @@
 Always include a `Co-Authored-By` trailer for the AI model contributing to a commit.
 Use the exact runtime model identifier from the active session, including its version or
 snapshot suffix when exposed; never substitute a generic name such as Codex or GPT, infer
-the model from the configured default, or invent a version. For this session the trailer is:
-
-```text
-Co-Authored-By: gpt-6-astra <noreply@openai.com>
-```
-
-Verify the identifier again in future sessions. If multiple models contributed to the
-committed work, include one trailer per distinct exact model identifier. This rule supersedes
-older guidance against co-author trailers in project documents. Commit inside this
-repository and do not push without asking the user.
+the model from the configured default, or invent a version.
 
 ## Tooling and temporary scripts are Scheme
 

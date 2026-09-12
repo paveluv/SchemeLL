@@ -69,7 +69,14 @@ definition -- the same rule as for exports.
   See [version selection and qualification](llvm-versions.md).
   Only an explicitly installed hosted adapter may read environment settings;
   backend libraries consume Scheme selections.
-- **Chez Scheme 10.0**, machine type `ta6le` (x86_64 Linux, threaded).
+- **Chez Scheme 10.0**, machine types `ta6le` (x86_64 Linux, threaded),
+  `ta6fb` (x86_64 FreeBSD) and `tarm64osx` (Apple Silicon macOS). Host facts
+  the code needs come from `(machine-type)` in one place each:
+  `config:shared-object-suffix` (`.so`/`.dylib`/`.dll`),
+  `target:native-target-name` (`"X86"`/`"AArch64"`, also which backend
+  inline asm is written for) and `target:native-object-format`
+  (`elf`/`mach-o`/`coff`, which decides section-name spelling). Tests and
+  examples branch on those, never on `(machine-type)` directly.
 - 64-bit platform is assumed in `(llvm base)` (pointers are 8 bytes).
 
 ## FFI conventions (layer 0)

@@ -188,19 +188,70 @@ datalayout/triple, and more.
 The whole stack is about **5,800 lines of Scheme**. There is no C to
 compile: everything talks to stock `libLLVM` through Chez's FFI.
 
+## Installation instructions
+
+SchemeLL needs Chez Scheme 10 and one qualified LLVM release, 19.1.7 (the
+default) or 20.1.8, installed as a shared library with the C API. Nothing
+else: no C compiler, no Python. The library is located automatically in the
+layouts below; anything else is pointed at explicitly.
+
+**Debian / Ubuntu**
+
+```
+apt install chezscheme llvm-19-dev      # or llvm-20-dev, or both
+```
+
+`llvm-N-dev` installs `/usr/lib/llvm-N/lib/libLLVM-N.so` plus the headers the
+coverage oracle checks, and `/usr/lib/llvm-N` is searched first. Debian's
+Chez binary is `scheme` (`chez-scheme` on some releases; the Makefile tries
+both).
+
+**macOS (Homebrew)**
+
+```
+brew install chezscheme llvm@19         # or llvm@20, or both
+```
+
+Apple's own toolchain (Xcode, Command Line Tools) ships no LLVM C API
+library, so Homebrew's keg-only `llvm@N` is the source of LLVM. Its
+`/opt/homebrew/opt/llvm@N/lib/libLLVM-N.dylib` (Apple Silicon;
+`/usr/local/opt/llvm@N` on Intel) is found without any configuration: no
+`PATH`, `LDFLAGS` or `DYLD_*` changes. Homebrew's Chez binary is `chez`, which
+the Makefile finds. MacPorts' `/opt/local/libexec/llvm-N` is searched too.
+
+**FreeBSD**
+
+```
+pkg install chez-scheme llvm19          # or llvm20
+```
+
+The port installs under `/usr/local/llvm19`, which is searched. The Chez
+binary is `chez-scheme`.
+
+**Any other layout**
+
+Point SchemeLL at the installation explicitly, either from Scheme before
+importing the bindings, through the pure
+[selection API](project/llvm-versions.md):
+
+```scheme
+(import (prefix (llvm selection) llvm:))
+(llvm:select! (llvm:make-selection '((major-version . 20) (prefix . "/opt/llvm-20"))))
+```
+
+or, for the hosted commands (`make test`, the tools and the examples), through
+`SCHEMELL_LLVM_VERSION=20` and `SCHEMELL_LLVM_PREFIX=/opt/llvm-20`; an explicit
+Scheme selection takes precedence over the environment. A prefix holds
+`lib/libLLVM-N.<so|dylib|dll>` (or `lib/libLLVM.<suffix>`) and, for the
+coverage tests, `include/`; a `shared-object` entry names the library file
+directly. SchemeLL reads the loaded library's version with `LLVMGetVersion`
+and refuses any other release.
+
+**Submodules.** Schematter, the formatter, is pinned as a submodule: run
+`git submodule update --init --recursive`, or clone with
+`--recurse-submodules`. `make CHEZ=...` overrides the Chez binary.
+
 ## Getting started
-
-Requirements: Chez Scheme 10 and LLVM 19.1.7 (default) or 20.1.8. On Debian,
-`llvm-19-dev` / `llvm-20-dev` provide the library, tools, and coverage headers.
-Select LLVM through the pure Scheme [selection API](project/llvm-versions.md)
-before importing its bindings. Hosted test/tool commands retain
-`SCHEMELL_LLVM_VERSION=20` and optional `SCHEMELL_LLVM_PREFIX` inputs;
-an explicit Scheme selection takes precedence.
-
-**Status: work in progress.** SchemeLL has so far been tested only on
-x86-64 Linux and x86-64 FreeBSD with LLVM 19 (including the freestanding
-`--exe` executables on both). LLVM 20 qualification is on x86-64 Linux.
-See [version selection, compatibility, and qualification](project/llvm-versions.md).
 
 ```
 $ make build       # compile the libraries to .so (later runs start ~5x faster)
@@ -213,11 +264,9 @@ $ scheme --libdirs . --script examples/sll/01-add.ss
 2 + 40 = 42
 ```
 
-Schematter is pinned as a submodule. Initialize it with
-`git submodule update --init --recursive`
-(or clone with `--recurse-submodules`), then use `make format` to format all
-tracked Scheme sources, including `.sll`, and `make check-format` to check
-them. Enable the pre-commit formatting hook with
+`make format` formats all tracked Scheme sources with Schematter, including
+`.sll`, and `make check-format` checks them. Enable the pre-commit formatting
+hook with
 `git config core.hooksPath project/hooks`. The hook also formats Scheme
 code blocks in staged Markdown files.
 
@@ -230,3 +279,32 @@ rationale (`sll-design.md`, built nanopass-friendly: prefix-only
 forms, no mid-form keywords), the coverage methodology and final
 standing (`coverage-plan.md`), and the exclusions ledger
 (`not-modeled.md`).
+
+## Tested platforms
+
+`make test`, `SCHEMELL_LLVM_VERSION=20 make test`, `make examples` and
+`make test-version-cache` were run end to end on the machines below. Add a
+row when you verify another one. Rows dated *inferred* are reconstructed from
+earlier status notes and from SchemeGPU's runs on the same stack, not from a
+recorded SchemeLL run; replace them when the suite is run there again.
+
+| Date | OS | CPU | Chez | LLVM | Result |
+|---|---|---|---|---|---|
+| 2026-09-12 | macOS 15.7.9 (Darwin 24.6), arm64 | Apple M3 Pro | 10.4.1 (Homebrew, `chez`) | 19.1.7, 20.1.8 (Homebrew `llvm@19`, `llvm@20`) | 324/324 checks on 19, 334/334 on 20; 37 examples on both (`--exe` skipped); version cache 20/19/20 |
+| inferred | Debian 13 (trixie), Linux 6.12, x86_64 | AMD Ryzen Threadripper PRO 9965WX | 10.0.0 (`scheme`) | 19.1.7, 20.1.8 (`llvm-19-dev`, `llvm-20-dev`) | LLVM 19 suite, examples and `--exe` executables; LLVM 20 qualification; SchemeGPU's 140/140 on both |
+| inferred | FreeBSD, x86_64 | ? | ? (`chez-scheme`) | 19.1.7 | suite and `--exe` executables (ELFOSABI_FREEBSD branding) |
+
+Notes:
+
+- `--exe` writes x86-64 ELF executables for the Linux and FreeBSD process
+  ABIs only; `make examples` skips that step on other hosts. Objects,
+  assembly and the JIT work on every host.
+- On Apple Silicon `LLVMGetHostCPUFeatures` returns an empty string (the CPU
+  name carries the features), Mach-O section names are spelled
+  `segment,section`, the stack-map section is
+  `__LLVM_STACKMAPS,__llvm_stackmaps`, and the JIT's stack-map keeper needs
+  LLVM's `\01` no-mangle spelling of `__LLVM_StackMaps`. The library and its
+  tests handle all of these; see `project/HANDOFF.md`.
+- macOS's `/usr/bin/make` is GNU make 3.81, which has neither `!=` nor
+  `$(shell)`; the Makefile detects Chez in the recipe shell instead, so it
+  runs there, on GNU make 4.x and on BSD make.
