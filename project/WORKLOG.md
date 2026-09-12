@@ -1,5 +1,14 @@
 # Work log
 
+## 2026-09-12 — Deduplicate Tested platforms
+
+### Done
+
+Removed the superseded Debian LLVM 19/20 row, retaining the latest LLVM
+16/19/20 results. The table now has one row each for FreeBSD, Debian and macOS;
+its guidance says to update an environment's existing row when retesting.
+Verified the documentation diff and whitespace.
+
 ## 2026-09-12 — Qualify FreeBSD 15.0 amd64 on LLVM 16/19/20
 
 ### Done
