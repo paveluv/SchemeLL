@@ -12,10 +12,10 @@
  "outputs, tied input, clobber"
  [equal?
   [asm:expr
-   '((out sum r) (in a (tied sum)) (in b r) (clobber cc))
+   '((out sum r) (in a (tied sum)) (in b r) (clobber flags))
    '("add " b ", " sum)
    'sideeffect]
-  '(asm "add ${2}, ${0}" "=r,0,r,~{cc}" sideeffect)]]
+  '(asm "add ${2}, ${0}" "=r,0,r,~{flags}" sideeffect)]]
 
 [t:check
  "explicit registers reproduce the hand-written hello string"
