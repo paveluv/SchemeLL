@@ -12,10 +12,15 @@
 ;;;     '((out  sum r)              ; "=r"      -> $sum is operand 0
 ;;;       (in   a (tied sum))       ; "0"       -> tied to sum's location
 ;;;       (in   b r)                ; "r"
-;;;       (clobber cc))             ; "~{cc}"
+;;;       (clobber flags))          ; "~{flags}" on x86
 ;;;     '("add " b ", " sum)        ; template: "add ${2}, ${0}"
 ;;;     'sideeffect)
-;;;   => (asm "add ${2}, ${0}" "=r,0,r,~{cc}" sideeffect)
+;;;   => (asm "add ${2}, ${0}" "=r,0,r,~{flags}" sideeffect)
+;;;
+;;; Clobber names are LLVM target register names, also passed through without
+;;; translation. In particular, x86 arithmetic changes "flags" (EFLAGS); GCC's
+;;; generic "cc" spelling alone does not invalidate that LLVM register. An
+;;; accepted constraint string is not evidence that its clobbers are right.
 ;;;
 ;;; Operands are referenced BY NAME in the template and in (tied ...); the
 ;;; library computes the $N numbering (outputs first, then inputs, as LangRef
