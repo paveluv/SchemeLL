@@ -4,9 +4,11 @@
 # (--compile-imported-libraries) and reuses them on every later run
 # when they are newer than their sources; `make clean` removes them.
 root="$(cd "$(dirname "$0")/.." && pwd)"
-# `scheme` on most systems, `chez-scheme` on FreeBSD; $CHEZ overrides.
+# `scheme` on most systems, Homebrew's `chez` on macOS, `chez-scheme` on
+# FreeBSD; $CHEZ overrides. Same order as the Makefile and pre-commit hook.
 if [ -z "$CHEZ" ]; then
   if command -v scheme >/dev/null 2>&1; then CHEZ=scheme
+  elif command -v chez >/dev/null 2>&1; then CHEZ=chez
   else CHEZ=chez-scheme
   fi
 fi
