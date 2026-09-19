@@ -30,7 +30,7 @@
 (target:initialize-native!)
 (define tm (target:make-machine))
 (target:configure-module! m tm)
-(ir:run-module-passes! m "default<O2>")
+(ir:run-module-passes! m "default<O2>" (target:machine-live-ptr tm))
 (printf "=== optimized IR ===~%~a~%" (ir:module->string m))
 (target:emit-object-file tm m "/tmp/sums.o")
 (printf "wrote /tmp/sums.o~%")

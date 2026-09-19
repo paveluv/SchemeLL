@@ -27,6 +27,6 @@
 (target:initialize-native!)
 (define tm (target:make-machine))
 (target:configure-module! m tm)
-(ir:run-module-passes! m "default<O2>")
+(ir:run-module-passes! m "default<O2>" (target:machine-live-ptr tm))
 (target:emit-assembly-file tm m "/tmp/iabs.s")
 (display (call-with-input-file "/tmp/iabs.s" get-string-all))

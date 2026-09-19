@@ -173,7 +173,10 @@
     (target:configure-module! m tm)
     [when
      opt-level
-     (ir:run-module-passes! m (string-append "default<" opt-level ">"))]]
+     [ir:run-module-passes!
+      m
+      (string-append "default<" opt-level ">")
+      (target:machine-live-ptr tm)]]]
    tm]]]
 
 ;; an output path may never coincide with the input (finding: --exe on an

@@ -25,5 +25,7 @@ next:
 
 (printf "=== before ===~%~a~%" (ir:module->string m))
 (target:initialize-native!)
-(ir:run-module-passes! m "default<O2>")
+(define tm (target:make-machine))
+(target:configure-module! m tm)
+(ir:run-module-passes! m "default<O2>" (target:machine-live-ptr tm))
 (printf "=== after default<O2> ===~%~a" (ir:module->string m))

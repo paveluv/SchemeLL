@@ -2679,7 +2679,10 @@
     (ctx (ir:make-context))
     (m (build ctx "sll" prog))]
    (target:configure-module! m tm (or (opt 'non-integral) '()))
-   (cond ((opt 'passes) => (lambda (p) (ir:run-module-passes! m p))))
+   [cond
+    ((opt 'passes)
+     =>
+     (lambda (p) (ir:run-module-passes! m p (target:machine-live-ptr tm))))]
    (ir:verify-module m)
    [let
     ((result (emit tm m)))

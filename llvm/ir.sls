@@ -402,15 +402,20 @@
 
  ;; Run new-pass-manager passes, e.g. (run-module-passes! m "default<O2>").
  ;; Verify first: LLVM passes SIGSEGV on invalid IR instead of diagnosing.
+ ;; Optional third argument is a target-machine pointer (from
+ ;; target:machine-live-ptr); without it, target-aware passes see no TM.
  [define
-  (run-module-passes! m passes)
-  (verify-module m)
-  [let
-   ((opts (LLVMCreatePassBuilderOptions)))
-   [let
-    ((err (LLVMRunPasses (module-live-ptr m) passes base:null-ptr opts)))
-    (LLVMDisposePassBuilderOptions opts)
-    (base:check-error-ref 'ir:run-module-passes! err)]]]
+  run-module-passes!
+  [case-lambda
+   ((m passes) (run-module-passes! m passes base:null-ptr))
+   [(m passes tm)
+    (verify-module m)
+    [let
+     ((opts (LLVMCreatePassBuilderOptions)))
+     [let
+      ((err (LLVMRunPasses (module-live-ptr m) passes tm opts)))
+      (LLVMDisposePassBuilderOptions opts)
+      (base:check-error-ref 'ir:run-module-passes! err)]]]]]
 
  ;; Parse textual LLVM IR into a fresh module, using LLVM's own parser. Raises
  ;; with the parser's diagnostics on malformed IR.
