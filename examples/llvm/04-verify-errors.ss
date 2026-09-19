@@ -18,4 +18,5 @@
 [guard
  (e (#t (printf "verifier said:~%~a~%" (condition-message e))))
  (ir:verify-module m)
- (printf "unexpectedly verified?!~%")]
+ (printf "unexpectedly verified?!~%")
+ (exit 1)]

@@ -16,7 +16,9 @@
    [printf
     "after dispose, module->string raised:~%  ~a~%"
     (condition-message e)]]]
- (ir:module->string m)]
+ (ir:module->string m)
+ (printf "use-after-dispose did not raise~%")
+ (exit 1)]
 
 (ir:context-dispose! ctx)
 [guard
@@ -25,4 +27,6 @@
    [printf
     "after context dispose, make-module raised:~%  ~a~%"
     (condition-message e)]]]
- (ir:make-module ctx "zombie")]
+ (ir:make-module ctx "zombie")
+ (printf "use-after-dispose did not raise~%")
+ (exit 1)]
