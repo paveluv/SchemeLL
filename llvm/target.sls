@@ -32,11 +32,13 @@
  ;; does not exist as a symbol; we call the per-target functions that do. Map
  ;; Chez's machine type to LLVM's target name ("X86", "AArch64"): the host's
  ;; backend, which is also what host-specific inline asm must be written for.
+ ;; 32-bit Chez (i3le, ti3le, ...) is refused: (llvm base) assumes 8-byte
+ ;; pointers.
  [define
   (native-target-name)
   [case
    (machine-type)
-   ((a6le ta6le a6nt ta6nt a6osx ta6osx i3le ti3le a6fb ta6fb) "X86")
+   ((a6le ta6le a6nt ta6nt a6osx ta6osx a6fb ta6fb) "X86")
    ((arm64le tarm64le arm64osx tarm64osx) "AArch64")
    [else
     [base:error
