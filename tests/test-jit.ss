@@ -187,6 +187,17 @@
  (t:check-exn "jit refuses an unknown-OS triple" (jit:add-module! j jc m))
  (jit:context-dispose! jc)]
 
+;; the guard's predicate is exported for callers that restamp a module's triple
+;; with the host's before add-module! (sllc --run --opt)
+[let
+ ((j (jit:make)))
+ [t:check
+  "host-triple-compatible?: the host, no triple, a foreign platform"
+  [and
+   (jit:host-triple-compatible? (jit:target-triple j))
+   (jit:host-triple-compatible? "")
+   (not (jit:host-triple-compatible? "wasm32-unknown-wasi"))]]]
+
 [let*
  [(jc (jit:make-context))
   (ctx (jit:context-ir jc))

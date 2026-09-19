@@ -36,6 +36,7 @@
   context-ir
   context-dispose!
   add-module!
+  host-triple-compatible?
   lookup-address
   function
   stackmap-address]
@@ -334,6 +335,22 @@
 
  (define (triple-os t) (exists component-os (cdr (split-dash t))))
 
+ ;; Whether a module triple names THIS machine: the same normalized arch and a
+ ;; known, equal OS token; "" (no triple) is compatible. Exported so a caller
+ ;; that restamps a module with the host triple (sllc --run --opt) can check the
+ ;; declared one first, as add-module! would have.
+ [define
+  (host-triple-compatible? mt)
+  [let
+   ((host (target:default-triple)))
+   [or
+    (string=? mt "")
+    [and
+     (string=? (triple-arch mt) (triple-arch host))
+     [let
+      ((os-m (triple-os mt)) (os-h (triple-os host)))
+      (and os-m os-h (string=? os-m os-h))]]]]]
+
  [define
   (add-module! j jc m)
   [unless
@@ -348,21 +365,14 @@
   ;; the JIT compiles for THIS machine: a module declaring a foreign target
   ;; would produce code that cannot run here
   [let
-   [(mt (base:cstring->string (LLVMGetTarget (ir:module-live-ptr m))))
-    (host (target:default-triple))]
-   [when
-    (and mt (not (string=? mt "")))
-    [unless
-     [and
-      (string=? (triple-arch mt) (triple-arch host))
-      [let
-       ((os-m (triple-os mt)) (os-h (triple-os host)))
-       (and os-m os-h (string=? os-m os-h))]]
-     [base:error
-      'jit:add-module!
-      "module targets a different platform than this JIT's host"
-      mt
-      host]]]]
+   ((mt (base:cstring->string (LLVMGetTarget (ir:module-live-ptr m)))))
+   [unless
+    (host-triple-compatible? (or mt ""))
+    [base:error
+     'jit:add-module!
+     "module targets a different platform than this JIT's host"
+     mt
+     (target:default-triple)]]]
   (layout:prepare! (ir:module-live-ptr m) (data-layout j))
   (capture-signatures! j m)
   [let

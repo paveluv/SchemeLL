@@ -516,9 +516,18 @@
      (m2 (sll:build (jit:context-ir jc) "main" prog))
      (j (jit:make))]
     ;; --opt applies to what actually RUNS; stamp the host layout first, same
-    ;; order as get-tm for --exe / --print-canonical
+    ;; order as get-tm for --exe / --print-canonical. configure-module! also
+    ;; restamps the triple with the host's, which would hide a declared foreign
+    ;; platform from add-module!'s guard: check it first.
     [when
      opt-level
+     [when
+      (and declared-triple (not (jit:host-triple-compatible? declared-triple)))
+      [error
+       'sllc
+       "--run executes on this host; the program declares another platform -- emit a .o instead"
+       declared-triple
+       (target:default-triple)]]
      (target:initialize-native!)
      [let
       ((tm (target:make-machine)))
