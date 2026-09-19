@@ -99,9 +99,10 @@ check-format: schematter/schematter.sps
 
 # Compile every library to Chez object files (*.so -- Chez objects,
 # not ELF; gitignored). Any later run with --libdirs reuses them; the
-# ./sllc wrapper also compiles on demand.
+# ./sllc wrapper also compiles on demand. Bootstrap so LLVMFLAGS
+# (--llvm N, --llvm-prefix DIR) select the same release as make test.
 build:
-	echo '(compile-imported-libraries #t)(import (prefix (sll) sll:) (prefix (sll render) render:) (prefix (sll asm) asm:) (prefix (llvm target) target:) (prefix (tests normalize) n:))' | $(CHEZ) -q --libdirs $(LIBDIRS)
+	echo '(load "host/bootstrap.ss")(compile-imported-libraries #t)(import (prefix (sll) sll:) (prefix (sll render) render:) (prefix (sll asm) asm:) (prefix (llvm target) target:) (prefix (tests normalize) n:))' | $(CHEZ) -q --libdirs $(LIBDIRS) $(HOSTFLAGS)
 
 clean:
 	find llvm sll tests -name '*.so' -delete 2>/dev/null; \
