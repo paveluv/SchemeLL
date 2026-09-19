@@ -395,11 +395,20 @@
     ;; against a 2^n-aligned base; 0x78 alone is 8 mod 16 and misaligns aligned
     ;; constants/jump tables inside the section)
     (text-align (max 1 (s-align text)))
+    ;; SysV functions expect RSP ≡ 8 (mod 16) on entry; the kernel starts
+    ;; @_start with RSP 16-aligned. A 7-byte trampoline (push 0; jmp rel32)
+    ;; sits in the padding after the headers and becomes e_entry.
+    (trampoline-off #x78)       ; ehdr (64) + one phdr (56)
+    (trampoline-size 7)
     [text-off
-     [let
-      ((h #x78))                ; ehdr (64) + one phdr (56)
-      (* (div (+ h text-align -1) text-align) text-align)]]
-    (entry (+ base text-off start-off))
+     (*
+      (div
+       (+ trampoline-off trampoline-size text-align -1)
+       text-align)
+      text-align)]
+    (entry (+ base trampoline-off))
+    [start-va (+ base text-off start-off)]
+    [jmp-rel (- start-va (+ base trampoline-off trampoline-size))]
     (total (+ text-off (bytevector-length text-bytes)))
     (exe (make-bytevector total 0))]
    ;; ELF header
@@ -428,6 +437,10 @@
    (bytevector-u64-set! exe #x60 total (endianness little)) ; filesz
    (bytevector-u64-set! exe #x68 total (endianness little)) ; memsz
    (bytevector-u64-set! exe #x70 #x1000 (endianness little)) ; align
+   (bytevector-u8-set! exe trampoline-off #x6A)             ; push imm8
+   (bytevector-u8-set! exe (+ trampoline-off 1) 0)
+   (bytevector-u8-set! exe (+ trampoline-off 2) #xE9)       ; jmp rel32
+   (bytevector-u32-set! exe (+ trampoline-off 3) jmp-rel (endianness little))
    (bytevector-copy! text-bytes 0 exe text-off (bytevector-length text-bytes))
    (when (file-exists? path) (delete-file path))
    [call-with-port

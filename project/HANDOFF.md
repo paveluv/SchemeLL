@@ -368,7 +368,9 @@ Silicon + raw syscalls being an unstable ABI there; hello-libc.sll
 ELF emitter lessons (`--exe`): place `.text` at a file offset honoring
 `sh_addralign` — an earlier version used the first free offset (0x78,
 8 mod 16) and a `.balign 16`-assuming access (movaps class) SIGSEGV'd;
-the fix is why executables are 194 bytes with entry 0x400080. Sections
+the fix is why executables are 194 bytes with .text at 0x400080. e_entry
+is a 7-byte trampoline at 0x400078 (push 0; jmp _start) so SysV stack
+alignment matches process entry. Sections
 are judged by FLAGS, not names: any SHF_ALLOC PROGBITS/NOBITS data
 section is refused (one RX PT_LOAD only, no relocations applied), while
 non-alloc and `.eh_frame`/X86_64_UNWIND drop silently.

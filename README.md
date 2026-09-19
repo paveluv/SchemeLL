@@ -131,7 +131,7 @@ compile time:
 
 ```
 $ scheme --libdirs . --script tools/sllc.ss --opt O2 --exe examples/aot/hello-metaprog.sll
-wrote executable examples/aot/hello-metaprog (194 bytes, entry #x400080)
+wrote executable examples/aot/hello-metaprog (194 bytes, entry #x400078)
 $ ./examples/aot/hello-metaprog
 Hello, SchemeLL!
 ```
