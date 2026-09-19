@@ -812,18 +812,60 @@
       %e
       (= %r (call i64 ((asm "mov $1, $0" "=r,r,") (i64 %a))))
       (ret i64 %r)]]]]]
+;; LLVM IR has no read-write +: LLVM reads "+r" as an input with an unknown code
+;; (clang lowers GCC's "+r" to "=r,0"), and its parser rejects the i64 (i64)
+;; form with "inline asm without outputs must return void"
 [t:check-exn
- "read-write + counts as an input and an output"
+ "+r is one input: void () has none"
  [sll:build
   (ir:make-context)
   "x"
   '[[define
      void
      (@f)
+     (label %e (call void ((asm "nop" "+r" sideeffect))) (ret void))]]]]
+[t:check-exn
+ "+r is not an output: i64 (i64) is refused"
+ [sll:build
+  (ir:make-context)
+  "x"
+  '[[define
+     i64
+     (@f (i64 %a))
      [label
       %e
-      (call void ((asm "nop" "+r" sideeffect)))
-      (ret void)]]]]]
+      (= %r (call i64 ((asm "nop" "+r" sideeffect) (i64 %a))))
+      (ret i64 %r)]]]]]
+[t:check
+ "+r on void (i64) builds, as LLVM parses it"
+ [begin
+  [sll:build
+   (ir:make-context)
+   "x"
+   '[[define
+      void
+      (@f (i64 %a))
+      [label
+       %e
+       (call void ((asm "nop" "+r" sideeffect) (i64 %a)))
+       (ret void)]]]]
+  #t]]
+[t:check
+ "=r,0 ties the input to the output: i64 (i64)"
+ [begin
+  [sll:build
+   (ir:make-context)
+   "x"
+   '[[define
+      i64
+      (@f (i64 %a))
+      [label
+       %e
+       (= %r (call i64 ((asm "mov $1, $0" "=r,0" sideeffect) (i64 %a))))
+       (ret i64 %r)]]]]
+  #t]]
+;; indirect constraints need an elementtype call-site attribute, which sll does
+;; not model; LLVM's verifier would reject the call without it
 [t:check-exn
  "indirect * constraints are refused"
  [sll:build
@@ -836,20 +878,6 @@
       %e
       (call void ((asm "nop" "*m" sideeffect) (ptr %p)))
       (ret void)]]]]]
-[t:check
- "read-write +r matches i64 (i64)"
- (begin
-  [sll:build
-   (ir:make-context)
-   "x"
-   '[[define
-      i64
-      (@f (i64 %a))
-      [label
-       %e
-       (= %r (call i64 ((asm "nop" "+r" sideeffect) (i64 %a))))
-       (ret i64 %r)]]]]
-  #t)]
 
 ;; load-sll: escape side effects observe strict file order
 [let
@@ -920,9 +948,9 @@
 [t:check
  "render prints hidden and section, not align"
  [let
-  ((txt
-    (render:sll->ll
-     '((= @g (global i32 7 (section ".foo") (visibility hidden)))))))
+  [[txt
+    [render:sll->ll
+     '((= @g (global i32 7 (section ".foo") (visibility hidden))))]]]
   [and
    (contains? txt "hidden")
    (contains? txt "section \".foo\"")
@@ -938,9 +966,7 @@
     void
     (@f)
     (personality ptr @pers)
-    [label
-     %e
-     (invoke (addrspace 1) void (null) (label %ok) (label %pad))]
+    (label %e (invoke (addrspace 1) void (null) (label %ok) (label %pad)))
     (label %ok (ret void))
     [label
      %pad
@@ -976,9 +1002,12 @@
  [(config:capability? 'callbr)
   [t:check-exn
    "void callbr cannot bind a result"
-   (sll:dump
-    '((define void (@f) (label %e (= %r (callbr void ((asm "nop" "")) (label %e) ()))))))]]
- [else (t:check "void callbr bind skipped (no callbr C API)" #t)]]
+   [sll:dump
+    '[[define
+       void
+       (@f)
+       (label %e (= %r (callbr void ((asm "nop" "")) (label %e) ())))]]]]]
+ (else (t:check "void callbr bind skipped (no callbr C API)" #t))]
 
 (t:section "sll: typed pointer type form (ptr T (addrspace N))")
 

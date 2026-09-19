@@ -665,9 +665,12 @@
  ;; callbr requires an asm callee (LLVM restriction). count an asm constraint
  ;; string's operands and compare with the call-site function type: LLVM
  ;; SEGFAULTS on a mismatch instead of erroring, so this is a safety check, not
- ;; pedantry. + is read-write (one output and one input). * (indirect) is
- ;; refused rather than guessed. ~clobbers and !label constraints (callbr)
- ;; count as neither.
+ ;; pedantry. The count mirrors LLVM's InlineAsm::Verify: an item is an output
+ ;; only with a leading =. LLVM IR has no read-write + (clang lowers GCC's "+r"
+ ;; to "=r,0"): LLVM reads "+r" as an input with an unknown code, so it counts
+ ;; as one input. * (indirect) needs an elementtype call-site attribute sll does
+ ;; not model, so LLVM's verifier would reject it; refused with that reason.
+ ;; ~clobbers and !label constraints (callbr) count as neither.
  [define
   (check-asm-arity fnty form)
   [let
@@ -690,48 +693,48 @@
       [else
        [let
         loop
-        ((i from) (out? #f) (in? #f))
+        ((i from) (out? #f))
         [cond
-         ((>= i to)
-          [cond
-           ((and out? in?) (values (+ outs 1) (+ ins 1)))
-           (out? (values (+ outs 1) ins))
-           (else (values outs (+ ins 1)))])
-         ((char=? (string-ref cs i) #\=) (loop (+ i 1) #t in?))
-         ((char=? (string-ref cs i) #\+) (loop (+ i 1) #t #t))
+         ((>= i to) (if out? (values (+ outs 1) ins) (values outs (+ ins 1))))
+         ((char=? (string-ref cs i) #\=) (loop (+ i 1) #t))
          [(char=? (string-ref cs i) #\*)
           [error
-           "indirect (*) asm constraints are refused (LLVM would crash on a mismatch)"
+           "indirect (*) asm constraints need an elementtype call-site attribute, which sll does not model (LLVM's verifier rejects them without it)"
            cs
            form]]
-         ((memv (string-ref cs i) '(#\& #\% #\@)) (loop (+ i 1) out? in?))
-         (else (loop to out? in?))]]]]]
+         ((memv (string-ref cs i) '(#\& #\% #\@)) (loop (+ i 1) out?))
+         (else (loop to out?))]]]]]
+    [if
+     (= i (string-length cs))
+     [let-values
+      (((outs ins) (classify start i outs ins)))
+      [let*
+       [(retty (ir:type-return-type fnty))
+        [want-outs
+         [case
+          (ir:type-kind retty)
+          ((void) 0)
+          ((struct) (ir:struct-field-count retty))
+          (else 1)]]
+        (want-ins (length (ir:type-param-types fnty)))]
+       [unless
+        (and (= outs want-outs) (= ins want-ins))
+        [apply
+         error
+         "asm constraint operand counts do not match the call-site type (LLVM would crash on this)"
+         `(constraints ,cs outputs ,outs inputs ,ins)
+         `(type wants outputs ,want-outs inputs ,want-ins)
+         form
+         [if
+          (memv #\+ (string->list cs))
+          '("LLVM IR has no read-write +; write the output as =r and tie the input by number, e.g. \"=r,0\"")
+          '()]]]]]
      [if
-      (= i (string-length cs))
+      (char=? (string-ref cs i) #\,)
       [let-values
        (((outs ins) (classify start i outs ins)))
-       [let*
-        [(retty (ir:type-return-type fnty))
-         [want-outs
-          [case
-           (ir:type-kind retty)
-           ((void) 0)
-           ((struct) (ir:struct-field-count retty))
-           (else 1)]]
-         (want-ins (length (ir:type-param-types fnty)))]
-        [unless
-         (and (= outs want-outs) (= ins want-ins))
-         [error
-          "asm constraint operand counts do not match the call-site type (LLVM would crash on this)"
-          `(constraints ,cs outputs ,outs inputs ,ins)
-          `(type wants outputs ,want-outs inputs ,want-ins)
-          form]]]]
-      [if
-       (char=? (string-ref cs i) #\,)
-       [let-values
-        (((outs ins) (classify start i outs ins)))
-        (loop (+ i 1) (+ i 1) outs ins)]
-       (loop (+ i 1) start outs ins)]]]]]
+       (loop (+ i 1) (+ i 1) outs ins)]
+      (loop (+ i 1) start outs ins)]]]]]
 
  [define
   resolve-callee
@@ -2726,9 +2729,9 @@
     (m (build ctx "sll" prog))]
    (target:configure-module! m tm (or (opt 'non-integral) '()))
    [cond
-    ((opt 'passes)
+    [(opt 'passes)
      =>
-     (lambda (p) (ir:run-module-passes! m p (target:machine-live-ptr tm))))]
+     (lambda (p) (ir:run-module-passes! m p (target:machine-live-ptr tm)))]]
    (ir:verify-module m)
    [let
     ((result (emit tm m)))
