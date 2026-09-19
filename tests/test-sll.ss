@@ -771,6 +771,20 @@
       (call void ((asm "nop" "={rax},{rdi}" sideeffect)))
       (ret void)]]]]]
 
+[t:check-exn
+ "forward reference type mismatch"
+ [sll:dump
+  '[[define
+     i64
+     (@f)
+     (label %entry (br (label %b)))
+     [label
+      %b
+      (= %a (add i32 %v 1))
+      (= %c (add i64 %v 1))
+      (= %v (add i64 0 0))
+      (ret i64 %c)]]]]]
+
 (t:section "sll: bug-hunt regressions")
 
 ;; empty constraint strings and empty items are arity-checked too

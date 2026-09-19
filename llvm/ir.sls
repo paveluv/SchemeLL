@@ -80,6 +80,7 @@
   function-param
   function-params
   value-name
+  value-type
   set-value-name!
   declaration?
   set-alignment!
@@ -677,6 +678,8 @@
    [[(str-ptr len)
      (base:call-with-out-ptr (lambda (out) (LLVMGetValueName2 v out)))]]
    (base:cstring->string/len str-ptr len)]]
+
+ (define (value-type v) (LLVMTypeOf v))
 
  [define
   (set-value-name! v name)

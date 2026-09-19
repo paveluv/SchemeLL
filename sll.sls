@@ -454,31 +454,43 @@
  ;; fixup-forwards! rewires every use to the real value
  [define
   (forward-placeholder st ty name)
-  [or
-   (hashtable-ref (fstate-pending st) name #f)
-   [let
-    ((b (fstate-builder st)))
-    [let
-     [(cur (ir:insert-block b))
-      [scratch
-       [or
-        (fstate-scratch st)
-        [let
-         ((sb (ir:append-block (fstate-ctx st) (fstate-fn st) "sll.fwd")))
-         (fstate-scratch-set! st sb)
-         sb]]]]
-     (ir:position-at-end! b scratch)
-     ;; freeze cannot take a token; a token placeholder is a parentless
-     ;; cleanuppad in the scratch block instead
+  [let
+   ((existing (hashtable-ref (fstate-pending st) name #f)))
+   [cond
+    [existing
+     [unless
+      (eqv? (ir:value-type existing) ty)
+      [error
+       "forward reference type mismatch"
+       name
+       (ir:type->string (ir:value-type existing))
+       (ir:type->string ty)
+       (fstate-fname st)]]
+     existing]
+    [else
      [let
-      [[ph
-        [if
-         (eq? (ir:type-kind ty) 'token)
-         (ir:build-cleanuppad b (ir:const-null ty) '() "")
-         (ir:build-freeze b (ir:undef-value ty) "")]]]
-      (ir:position-at-end! b cur)
-      (hashtable-set! (fstate-pending st) name ph)
-      ph]]]]]
+      ((b (fstate-builder st)))
+      [let
+       [(cur (ir:insert-block b))
+        [scratch
+         [or
+          (fstate-scratch st)
+          [let
+           ((sb (ir:append-block (fstate-ctx st) (fstate-fn st) "sll.fwd")))
+           (fstate-scratch-set! st sb)
+           sb]]]]
+       (ir:position-at-end! b scratch)
+       ;; freeze cannot take a token; a token placeholder is a parentless
+       ;; cleanuppad in the scratch block instead
+       [let
+        [[ph
+          [if
+           (eq? (ir:type-kind ty) 'token)
+           (ir:build-cleanuppad b (ir:const-null ty) '() "")
+           (ir:build-freeze b (ir:undef-value ty) "")]]]
+        (ir:position-at-end! b cur)
+        (hashtable-set! (fstate-pending st) name ph)
+        ph]]]]]]]
 
  [define
   (fixup-forwards! st)
@@ -490,6 +502,14 @@
      [let
       ((real (hashtable-ref (fstate-locals st) name #f)))
       (unless real (error "unbound local" name (fstate-fname st)))
+      [unless
+       (eqv? (ir:value-type ph) (ir:value-type real))
+       [error
+        "forward reference type mismatch"
+        name
+        (ir:type->string (ir:value-type ph))
+        (ir:type->string (ir:value-type real))
+        (fstate-fname st)]]
       (ir:replace-all-uses! ph real)
       (ir:erase-instruction! ph)]]
     names
