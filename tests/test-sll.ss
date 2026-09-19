@@ -1006,7 +1006,37 @@
     '[[define
        void
        (@f)
-       (label %e (= %r (callbr void ((asm "nop" "")) (label %e) ())))]]]]]
+       (label %e (= %r (callbr void ((asm "nop" "")) (label %e) ())))]]]]
+  ;; call-site attribute groups sit between the callee and the labels, as
+  ;; unbuild emits them; the builder applies them and unbuild reads them back
+  [let*
+   [(ctx (ir:make-context))
+    [m
+     [sll:build
+      ctx
+      "cba"
+      '[[define
+         void
+         (@f)
+         [label
+          %e
+          (callbr void ((asm "nop" "")) (attributes nounwind) (label %done) ())]
+         (label %done (ret void))]]]]
+    (u (sll:unbuild m))
+    [callbr-form
+     [let
+      walk
+      ((x u))
+      [cond
+       ((and (pair? x) (eq? (car x) 'callbr)) x)
+       ((pair? x) (or (walk (car x)) (walk (cdr x))))
+       (else #f)]]]]
+   (ir:verify-module m)
+   [t:check
+    "callbr keeps its call-site attributes through unbuild"
+    (and callbr-form (member '(attributes nounwind) callbr-form) #t)]
+   (ir:module-dispose! m)
+   (ir:context-dispose! ctx)]]
  (else (t:check "void callbr bind skipped (no callbr C API)" #t))]
 
 (t:section "sll: typed pointer type form (ptr T (addrspace N))")
