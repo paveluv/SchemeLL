@@ -907,6 +907,20 @@
              (loop (+ i 1) next (cons `(= ,next (add i64 ,prev ,i)) acc))]]]]]]
     "sum10"]]]]
 
+(t:section "sll: render global section and visibility")
+
+[t:check
+ "render prints hidden and section, not align"
+ [let
+  ((txt
+    (render:sll->ll
+     '((= @g (global i32 7 (section ".foo") (visibility hidden)))))))
+  [and
+   (contains? txt "hidden")
+   (contains? txt "section \".foo\"")
+   (not (contains? txt "align .foo"))
+   (not (contains? txt "align hidden"))]]]
+
 (t:section "sll: invoke/callbr addrspace matches call")
 
 [define

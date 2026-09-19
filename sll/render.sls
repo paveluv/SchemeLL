@@ -1031,22 +1031,38 @@
     (rest (if ext-init? (cdr rest) rest))
     (ty (car rest))
     (rest (cdr rest))
+    [attr?
+     (lambda (x) (and (pair? x) (memq (car x) '(align visibility section))))]
     [init
-     [and
-      (pair? rest)
-      (not (and (pair? (car rest)) (eq? (caar rest) 'align)))
-      (car rest)]]
-    (attrs (if init (cdr rest) rest))]
+     (and (pair? rest) (not (attr? (car rest))) (car rest))]
+    (attrs (if init (cdr rest) rest))
+    [vis
+     [let
+      ((a (find (lambda (x) (eq? (car x) 'visibility)) attrs)))
+      (and a (not (eq? (cadr a) 'default)) (cadr a))]]
+    [tail
+     (filter (lambda (x) (not (eq? (car x) 'visibility))) attrs)]]
    [string-append
     [words
      (format "~a =" (name->text name))
      (if lk (symbol->string lk) "")
+     (if vis (symbol->string vis) "")
      (if as (format "addrspace(~a)" as) "")
      (if ext-init? "externally_initialized" "")
      (symbol->string kind)
      (type->text ty)
      (if init (operand->text env ty init) "")]
-    (tail-text attrs)]]]
+    [apply
+     string-append
+     [map
+      [lambda
+       (x)
+       [case
+        (car x)
+        ((align) (format ", align ~a" (cadr x)))
+        ((section) (format ", section ~s" (cadr x)))
+        (else (error "unknown global attribute" x))]]
+      tail]]]]]
 
  [define
   (signature->text env sig groups?)
