@@ -236,6 +236,7 @@
        (bv-u64 obj (sh i #x18)) ; offset
        (bv-u64 obj (sh i #x20)) ; size
        (bv-u32 obj (sh i #x28)) ; link
+       (bv-u32 obj (sh i #x2C)) ; info
        (bv-u64 obj (sh i #x30))] ; addralign
       acc]]]]]]
 
@@ -245,7 +246,8 @@
 (define (s-off s) (list-ref s 3))
 (define (s-size s) (list-ref s 4))
 (define (s-link s) (list-ref s 5))
-(define (s-align s) (list-ref s 6))
+(define (s-info s) (list-ref s 6))
+(define (s-align s) (list-ref s 7))
 
 [define
  (section-named secs name)
@@ -326,11 +328,19 @@
     [or
      (section-named secs ".text")
      (error 'sllc "no .text section in the object")]]]
-  [when
-   (section-named secs ".rela.text")
-   [error
-    'sllc
-    "--exe handles only self-contained code (no relocations); use --run, or link the .o with a system linker"]]
+  [for-each
+   [lambda
+    (s)
+    [when
+     [and
+      (memv (s-type s) '(4 9))   ; SHT_RELA, SHT_REL
+      (< (s-info s) (length secs))
+      (eq? (list-ref secs (s-info s)) text)]
+     [error
+      'sllc
+      "--exe handles only self-contained code (no relocations); use --run, or link the .o with a system linker"
+      (s-name s)]]]
+   secs]
   ;; any loadable data (ALLOC + PROGBITS/NOBITS, size > 0) other than .text
   ;; would be silently absent from the executable; refuse by FLAGS, which also
   ;; covers .rodata.cst8-style suffixed names and .bss (NOBITS). .eh_frame
