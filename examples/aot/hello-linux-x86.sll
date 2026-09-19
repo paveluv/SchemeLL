@@ -9,6 +9,8 @@
 ;;   scheme --libdirs . --script tools/sllc.ss --exe examples/aot/hello-linux-x86.sll
 ;;   ./examples/aot/hello-linux-x86        => Hello, SchemeLL!
 
+(triple "x86_64-unknown-linux-gnu")
+
 [define
  void
  (@_start)
