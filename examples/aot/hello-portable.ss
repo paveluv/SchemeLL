@@ -86,8 +86,8 @@
      [(ctx (ir:make-context))
       (m (sll:build ctx (symbol->string abi) (hello-prog abi)))
       (tm (target:make-machine triple "generic" "" 'default))]
+     (target:configure-module! m tm)
      (ir:verify-module m)
-     (ir:set-module-target-triple! m triple)
      (target:emit-object-file tm m out)
      (printf "  -> ~a~%" out)]
     (printf "  (this libLLVM has no ~a backend; skipped)~%" backend)]]]
