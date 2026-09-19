@@ -665,38 +665,47 @@
  ;; callbr requires an asm callee (LLVM restriction). count an asm constraint
  ;; string's operands and compare with the call-site function type: LLVM
  ;; SEGFAULTS on a mismatch instead of erroring, so this is a safety check, not
- ;; pedantry. Constraints using + or * (tied-by-plus, indirect) have subtler
- ;; counting and are skipped; ~clobbers and !label constraints (callbr) count as
- ;; neither.
+ ;; pedantry. + is read-write (one output and one input). * (indirect) is
+ ;; refused rather than guessed. ~clobbers and !label constraints (callbr)
+ ;; count as neither.
  [define
   (check-asm-arity fnty form)
   [let
    ((cs (caddr form)))
-   ;; + (read-write) and * (indirect) make counting subtler; skip
-   [unless
-    [let
-     loop
-     ((i 0))
-     [and
-      (< i (string-length cs))
-      (or (memv (string-ref cs i) '(#\+ #\*)) (loop (+ i 1)))]]
-    [let
-     loop
-     ((i 0) (start 0) (outs 0) (ins 0))
-     [define
-      (classify from to outs ins)
-      [cond
-       [(= from to)
-        ;; an empty ITEM (doubled or trailing comma) is fatal to LLVM; an empty
-        ;; STRING is simply zero items
-        [if
-         (zero? (string-length cs))
-         (values outs ins)
-         (error "empty constraint item (doubled or trailing comma?)" cs form)]]
-       ((char=? (string-ref cs from) #\~) (values outs ins))
-       ((char=? (string-ref cs from) #\!) (values outs ins))
-       ((char=? (string-ref cs from) #\=) (values (+ outs 1) ins))
-       (else (values outs (+ ins 1)))]]
+   [let
+    loop
+    ((i 0) (start 0) (outs 0) (ins 0))
+    [define
+     (classify from to outs ins)
+     [cond
+      [(= from to)
+       ;; an empty ITEM (doubled or trailing comma) is fatal to LLVM; an empty
+       ;; STRING is simply zero items
+       [if
+        (zero? (string-length cs))
+        (values outs ins)
+        (error "empty constraint item (doubled or trailing comma?)" cs form)]]
+      ((char=? (string-ref cs from) #\~) (values outs ins))
+      ((char=? (string-ref cs from) #\!) (values outs ins))
+      [else
+       [let
+        loop
+        ((i from) (out? #f) (in? #f))
+        [cond
+         ((>= i to)
+          [cond
+           ((and out? in?) (values (+ outs 1) (+ ins 1)))
+           (out? (values (+ outs 1) ins))
+           (else (values outs (+ ins 1)))])
+         ((char=? (string-ref cs i) #\=) (loop (+ i 1) #t in?))
+         ((char=? (string-ref cs i) #\+) (loop (+ i 1) #t #t))
+         [(char=? (string-ref cs i) #\*)
+          [error
+           "indirect (*) asm constraints are refused (LLVM would crash on a mismatch)"
+           cs
+           form]]
+         ((memv (string-ref cs i) '(#\& #\% #\@)) (loop (+ i 1) out? in?))
+         (else (loop to out? in?))]]]]]
      [if
       (= i (string-length cs))
       [let-values
@@ -722,7 +731,7 @@
        [let-values
         (((outs ins) (classify start i outs ins)))
         (loop (+ i 1) (+ i 1) outs ins)]
-       (loop (+ i 1) start outs ins)]]]]]]
+       (loop (+ i 1) start outs ins)]]]]]
 
  [define
   resolve-callee

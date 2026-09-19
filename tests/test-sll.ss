@@ -812,6 +812,44 @@
       %e
       (= %r (call i64 ((asm "mov $1, $0" "=r,r,") (i64 %a))))
       (ret i64 %r)]]]]]
+[t:check-exn
+ "read-write + counts as an input and an output"
+ [sll:build
+  (ir:make-context)
+  "x"
+  '[[define
+     void
+     (@f)
+     [label
+      %e
+      (call void ((asm "nop" "+r" sideeffect)))
+      (ret void)]]]]]
+[t:check-exn
+ "indirect * constraints are refused"
+ [sll:build
+  (ir:make-context)
+  "x"
+  '[[define
+     void
+     (@f (ptr %p))
+     [label
+      %e
+      (call void ((asm "nop" "*m" sideeffect) (ptr %p)))
+      (ret void)]]]]]
+[t:check
+ "read-write +r matches i64 (i64)"
+ (begin
+  [sll:build
+   (ir:make-context)
+   "x"
+   '[[define
+      i64
+      (@f (i64 %a))
+      [label
+       %e
+       (= %r (call i64 ((asm "nop" "+r" sideeffect) (i64 %a))))
+       (ret i64 %r)]]]]
+  #t)]
 
 ;; load-sll: escape side effects observe strict file order
 [let
