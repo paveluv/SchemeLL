@@ -29,7 +29,9 @@
 
 [t:check
  "optimization passes run"
- (begin (ir:run-module-passes! mod "default<O2>" (target:machine-live-ptr tm)) #t)]
+ [begin
+  (ir:run-module-passes! mod "default<O2>" (target:machine-live-ptr tm))
+  #t]]
 
 (define obj (target:emit-object-bytevector tm mod))
 

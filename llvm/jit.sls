@@ -225,8 +225,8 @@
    [(integer)
     [case
      (ir:type-int-width t)
-     ;; i1 is a byte 0/1 in the ABI. Chez boolean treats every non-#f as
-     ;; true, so Scheme 0 would pass 1.
+     ;; i1 is a byte 0/1 in the ABI. Chez boolean treats every non-#f as true,
+     ;; so Scheme 0 would pass 1.
      ((1) 'unsigned-8)
      ((8) 'integer-8)
      ((16) 'integer-16)
@@ -273,11 +273,11 @@
  ;; ---- adding modules and looking up code
  ;; ----------------------------------------
 
- ;; the arch and OS of a target triple, for host matching (vendor is
- ;; irrelevant: -pc- and -unknown- are the same machine). Arch aliases:
- ;; aarch64/arm64, x86_64/amd64. OS is a hyphen-bounded token (so
- ;; "darwin" does not match inside another word) with darwin/macos/macosx
- ;; as one OS. Unknown OS does not compare equal to another unknown OS.
+ ;; the arch and OS of a target triple, for host matching (vendor is irrelevant:
+ ;; -pc- and -unknown- are the same machine). Arch aliases: aarch64/arm64,
+ ;; x86_64/amd64. OS is a hyphen-bounded token (so "darwin" does not match
+ ;; inside another word) with darwin/macos/macosx as one OS. Unknown OS does not
+ ;; compare equal to another unknown OS.
  [define
   (split-dash s)
   [let
@@ -291,10 +291,10 @@
 
  [define
   (normalize-arch a)
-  (cond
+  [cond
    ((member a '("aarch64" "arm64")) "aarch64")
    ((member a '("x86_64" "amd64")) "x86_64")
-   (else a))]
+   (else a)]]
 
  ;; longest names first so macosx wins over macos
  [define
@@ -330,13 +330,9 @@
        (cdar names)
        (loop (cdr names))]]]]]]
 
- [define
-  (triple-arch t)
-  (normalize-arch (car (split-dash t)))]
+ (define (triple-arch t) (normalize-arch (car (split-dash t))))
 
- [define
-  (triple-os t)
-  (exists component-os (cdr (split-dash t)))]
+ (define (triple-os t) (exists component-os (cdr (split-dash t))))
 
  [define
   (add-module! j jc m)

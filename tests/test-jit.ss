@@ -158,8 +158,8 @@
 (t:section "jit: host-platform guard")
 
 ;; a module declaring a foreign target must be refused: the JIT compiles for
-;; THIS machine. wasm32 is never a Chez host; aarch64-linux would be the host
-;; on that platform and would not exercise the guard.
+;; THIS machine. wasm32 is never a Chez host; aarch64-linux would be the host on
+;; that platform and would not exercise the guard.
 [let*
  [(jc (jit:make-context))
   (ctx (jit:context-ir jc))
@@ -195,14 +195,12 @@
   (host (jit:target-triple j))
   [aliased
    [cond
-    [(let
+    [[let
       loop
       ((i 0))
       [and
        (<= (+ i 7) (string-length host))
-       (or
-        (string=? (substring host i (+ i 7)) "aarch64")
-        (loop (+ i 1)))])
+       (or (string=? (substring host i (+ i 7)) "aarch64") (loop (+ i 1)))]]
      [let
       loop
       ((i 0))
@@ -211,24 +209,19 @@
        [(string=? (substring host i (+ i 7)) "aarch64")
         (string-append (substring host 0 i) "arm64" (substring host (+ i 7)))]
        (else (loop (+ i 1)))]]]
-    [(let
+    [[let
       loop
       ((i 0))
       [and
        (<= (+ i 5) (string-length host))
-       (or
-        (string=? (substring host i (+ i 5)) "arm64")
-        (loop (+ i 1)))])
+       (or (string=? (substring host i (+ i 5)) "arm64") (loop (+ i 1)))]]
      [let
       loop
       ((i 0))
       [cond
        ((> (+ i 5) (string-length host)) host)
        [(string=? (substring host i (+ i 5)) "arm64")
-        (string-append
-         (substring host 0 i)
-         "aarch64"
-         (substring host (+ i 5)))]
+        (string-append (substring host 0 i) "aarch64" (substring host (+ i 5)))]
        (else (loop (+ i 1)))]]]
     (else host)]]]
  (ir:set-module-target-triple! m aliased)

@@ -1033,15 +1033,13 @@
     (rest (cdr rest))
     [attr?
      (lambda (x) (and (pair? x) (memq (car x) '(align visibility section))))]
-    [init
-     (and (pair? rest) (not (attr? (car rest))) (car rest))]
+    (init (and (pair? rest) (not (attr? (car rest))) (car rest)))
     (attrs (if init (cdr rest) rest))
     [vis
      [let
       ((a (find (lambda (x) (eq? (car x) 'visibility)) attrs)))
       (and a (not (eq? (cadr a) 'default)) (cadr a))]]
-    [tail
-     (filter (lambda (x) (not (eq? (car x) 'visibility))) attrs)]]
+    (tail (filter (lambda (x) (not (eq? (car x) 'visibility))) attrs))]
    [string-append
     [words
      (format "~a =" (name->text name))
@@ -1117,7 +1115,8 @@
         (caar b)
         ((attributes) (deco (cdr b) (cons (attrs-words (cdr (car b))) acc)))
         ((align) (deco (cdr b) (cons (format "align ~a" (cadr (car b))) acc)))
-        ((section) (deco (cdr b) (cons (format "section ~s" (cadr (car b))) acc)))
+        [(section)
+         (deco (cdr b) (cons (format "section ~s" (cadr (car b))) acc))]
         ((gc) (deco (cdr b) (cons (format "gc ~s" (cadr (car b))) acc)))
         (else (join " " (reverse acc)))]
        (join " " (reverse acc))]]]

@@ -18,13 +18,12 @@
 ;;;     external symbols, no data relocations (hello-world class).
 ;;;   -o PATH   set the output path
 ;; Load bootstrap from the repo, not CWD: the wrapper passes an absolute
-;; --script path, and `scheme --script tools/sllc.ss` is relative to the
-;; repo root. path-parent twice walks tools/sllc.ss -> tools -> root
-;; (Chez yields "" for the parent of a bare directory name).
+;; --script path, and `scheme --script tools/sllc.ss` is relative to the repo
+;; root. path-parent twice walks tools/sllc.ss -> tools -> root (Chez yields ""
+;; for the parent of a bare directory name).
 [let
  ((root (path-parent (path-parent (car (command-line))))))
- (load
-  (string-append (if (string=? root "") "." root) "/host/bootstrap.ss"))]
+ (load (string-append (if (string=? root "") "." root) "/host/bootstrap.ss"))]
 [import
  (chezscheme)
  (prefix (sll) sll:)
@@ -333,7 +332,7 @@
     (s)
     [when
      [and
-      (memv (s-type s) '(4 9))   ; SHT_RELA, SHT_REL
+      (memv (s-type s) '(4 9))  ; SHT_RELA, SHT_REL
       (< (s-info s) (length secs))
       (eq? (list-ref secs (s-info s)) text)]
      [error
@@ -396,19 +395,17 @@
     ;; constants/jump tables inside the section)
     (text-align (max 1 (s-align text)))
     ;; SysV functions expect RSP ≡ 8 (mod 16) on entry; the kernel starts
-    ;; @_start with RSP 16-aligned. A 7-byte trampoline (push 0; jmp rel32)
-    ;; sits in the padding after the headers and becomes e_entry.
+    ;; @_start with RSP 16-aligned. A 7-byte trampoline (push 0; jmp rel32) sits
+    ;; in the padding after the headers and becomes e_entry.
     (trampoline-off #x78)       ; ehdr (64) + one phdr (56)
     (trampoline-size 7)
     [text-off
-     (*
-      (div
-       (+ trampoline-off trampoline-size text-align -1)
-       text-align)
-      text-align)]
+     [*
+      (div (+ trampoline-off trampoline-size text-align -1) text-align)
+      text-align]]
     (entry (+ base trampoline-off))
-    [start-va (+ base text-off start-off)]
-    [jmp-rel (- start-va (+ base trampoline-off trampoline-size))]
+    (start-va (+ base text-off start-off))
+    (jmp-rel (- start-va (+ base trampoline-off trampoline-size)))
     (total (+ text-off (bytevector-length text-bytes)))
     (exe (make-bytevector total 0))]
    ;; ELF header
@@ -518,8 +515,8 @@
     [(jc (jit:make-context))
      (m2 (sll:build (jit:context-ir jc) "main" prog))
      (j (jit:make))]
-    ;; --opt applies to what actually RUNS; stamp the host layout first,
-    ;; same order as get-tm for --exe / --print-canonical
+    ;; --opt applies to what actually RUNS; stamp the host layout first, same
+    ;; order as get-tm for --exe / --print-canonical
     [when
      opt-level
      (target:initialize-native!)
