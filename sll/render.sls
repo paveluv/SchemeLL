@@ -635,15 +635,8 @@
            (cdr args)]]]]
        [(call)
         ;; parser order: [tail] call [fmf] [cconv] [addrspace] ty
-        [let*
-         [(cc (cc-spec (car args)))
-          (args (if cc (cdr args) args))
-          [as
-           [and
-            (pair? (car args))
-            (eq? (caar args) 'addrspace)
-            (cadr (car args))]]
-          (args (if as (cdr args) args))]
+        [let-values
+         (((cc as args) (peel-cc-addrspace args)))
          [words
           [cond
            ((memq 'tail flags) "tail")
@@ -679,40 +672,58 @@
              (string-append " " (attrs-words (apply append (map cdr agroups))))]
             (bundles->text env bs)]]]]]
        [(invoke)
-        [let*
-         [(cc (cc-spec (car args)))
-          (args (if cc (cdr args) args))
-          (bs (filter bundle-form? (cddr args)))
-          (attr-group? (lambda (x) (and (pair? x) (eq? (car x) 'attributes))))
-          (agroups (filter attr-group? (cddr args)))
-          [labels
-           [filter
-            (lambda (x) (not (or (bundle-form? x) (attr-group? x))))
-            (cddr args)]]]
-         [format
-          "invoke ~a~a~a~a to ~a unwind ~a"
-          (if cc (string-append (cc-text cc) " ") "")
-          (app->text env (car args) (cadr args) #f)
-          [if
-           (null? agroups)
-           ""
-           (string-append " " (attrs-words (apply append (map cdr agroups))))]
-          (bundles->text env bs)
-          (label-ref (car labels))
-          (label-ref (cadr labels))]]]
+        [let-values
+         (((cc as args) (peel-cc-addrspace args)))
+         [let*
+          [(bs (filter bundle-form? (cddr args)))
+           (attr-group? (lambda (x) (and (pair? x) (eq? (car x) 'attributes))))
+           (agroups (filter attr-group? (cddr args)))
+           [labels
+            [filter
+             (lambda (x) (not (or (bundle-form? x) (attr-group? x))))
+             (cddr args)]]]
+          [words
+           "invoke"
+           (flags-text flags)
+           (cc-text cc)
+           (if as (format "addrspace(~a)" as) "")
+           [string-append
+            (app->text env (car args) (cadr args) #f)
+            [if
+             (null? agroups)
+             ""
+             (string-append " " (attrs-words (apply append (map cdr agroups))))]
+            (bundles->text env bs)]
+           "to"
+           (label-ref (car labels))
+           "unwind"
+           (label-ref (cadr labels))]]]]
        [(callbr)
-        [let*
-         [(cc (cc-spec (car args)))
-          (args (if cc (cdr args) args))
-          (bs (filter bundle-form? (cddr args)))
-          (rest (filter (lambda (x) (not (bundle-form? x))) (cddr args)))]
-         [format
-          "callbr ~a~a~a to ~a [~a]"
-          (if cc (string-append (cc-text cc) " ") "")
-          (app->text env (car args) (cadr args) #f)
-          (bundles->text env bs)
-          (label-ref (car rest))
-          (join ", " (map label-ref (cadr rest)))]]]
+        [let-values
+         (((cc as args) (peel-cc-addrspace args)))
+         [let*
+          [(bs (filter bundle-form? (cddr args)))
+           (attr-group? (lambda (x) (and (pair? x) (eq? (car x) 'attributes))))
+           (agroups (filter attr-group? (cddr args)))
+           [rest
+            [filter
+             (lambda (x) (not (or (bundle-form? x) (attr-group? x))))
+             (cddr args)]]]
+          [words
+           "callbr"
+           (flags-text flags)
+           (cc-text cc)
+           (if as (format "addrspace(~a)" as) "")
+           [string-append
+            (app->text env (car args) (cadr args) #f)
+            [if
+             (null? agroups)
+             ""
+             (string-append " " (attrs-words (apply append (map cdr agroups))))]
+            (bundles->text env bs)]
+           "to"
+           (label-ref (car rest))
+           (format "[~a]" (join ", " (map label-ref (cadr rest))))]]]]
        [(landingpad)
         [words
          "landingpad"
@@ -952,6 +963,20 @@
   [and
    (or (and (symbol? x) (memq x cc-words)) (and (pair? x) (eq? (car x) 'cc)))
    x]]
+
+ [define
+  (peel-cc-addrspace args)
+  [let*
+   [(cc (and (pair? args) (cc-spec (car args))))
+    (args (if cc (cdr args) args))
+    [as
+     [and
+      (pair? args)
+      (pair? (car args))
+      (eq? (caar args) 'addrspace)
+      (cadr (car args))]]
+    (args (if as (cdr args) args))]
+   (values cc as args)]]
 
  [define
   (cc-text c)

@@ -79,8 +79,6 @@ entry `function-attributes` is the pin.
 | attached metadata (`!dbg`, `!tbaa`, `!prof`, `!range`, ...) | detected |
 | LLVM 20 `icmp samesign` (no C API accessor or setter) | detected from the printed instruction's opcode prefix; quoted SSA names are skipped; never silently dropped |
 | call-site attributes at return/parameter positions | undetected |
-| operand bundles on callbr | detected (call and invoke bundles are modeled) |
-| calls through null/undef pointer constants in non-zero address spaces (the untyped callee slot cannot carry the addrspace) | detected |
 | named syncscopes (`syncscope("agent")`, ...) | undetected (no C API in LLVM 19); the harness normalizes them textually |
 | `swifterror` / `inalloca` bits on alloca | undetected (no C API); normalized textually |
 | sanitizer metadata on globals (`no_sanitize_address`, ...) | undetected (no C API); normalized textually |

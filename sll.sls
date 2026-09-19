@@ -1242,14 +1242,21 @@
              attr-groups]
             v]]]]
         [(invoke)
-         ;; (invoke cconv? type (callee args...) bundles... (label %ok) (label
-         ;; %pad))
+         ;; (invoke cconv? (addrspace n)? type (callee args...) bundles...
+         ;;         (label %ok) (label %pad))
          [arity>=
           4
           "(invoke type (callee args...) bundles... (label %ok) (label %pad))"]
          [let*
           [(ccv (cc-spec (car args) form))
            (args (if ccv (cdr args) args))
+           [callee-as
+            [and
+             (pair? args)
+             (pair? (car args))
+             (eq? (caar args) 'addrspace)
+             (cadr (car args))]]
+           (args (if callee-as (cdr args) args))
            (app (cadr args))
            (bundles (filter bundle-form? (cddr args)))
            (attr-group? (lambda (x) (and (pair? x) (eq? (car x) 'attributes))))
@@ -1277,7 +1284,7 @@
                [ir:build-invoke
                 b
                 fnty
-                (resolve-callee st fnty (car app))
+                (resolve-callee st fnty (car app) (or callee-as 0))
                 avals
                 (block-ref st (car labels))
                 (block-ref st (cadr labels))
@@ -1289,7 +1296,7 @@
                    [ir:build-invoke-bundles
                     b
                     fnty
-                    (resolve-callee st fnty (car app))
+                    (resolve-callee st fnty (car app) (or callee-as 0))
                     avals
                     (block-ref st (car labels))
                     (block-ref st (cadr labels))
@@ -1311,7 +1318,7 @@
              attr-groups]
             v]]]]
         [(callbr)
-         ;; (callbr cconv? type ((asm ...) args...) bundles...
+         ;; (callbr cconv? (addrspace n)? type ((asm ...) args...) bundles...
          ;;         (label %fallthrough) ((label %indirect) ...))
          [arity>=
           4
@@ -1319,6 +1326,13 @@
          [let*
           [(ccv (cc-spec (car args) form))
            (args (if ccv (cdr args) args))
+           [callee-as
+            [and
+             (pair? args)
+             (pair? (car args))
+             (eq? (caar args) 'addrspace)
+             (cadr (car args))]]
+           (args (if callee-as (cdr args) args))
            (bundles (filter bundle-form? (cddr args)))
            [args
             [cons
@@ -1338,6 +1352,9 @@
           [let-values
            [[(fnty retty avals)
              (callsite-signature st ctx (car args) (cdr app) form)]]
+           [when
+            (and (eq? (ir:type-kind retty) 'void) (not (string=? name "")))
+            (error "cannot bind the result of a void callbr" form)]
            [let
             [[v
               [if
@@ -1345,7 +1362,7 @@
                [ir:build-callbr
                 b
                 fnty
-                (resolve-callee st fnty (car app))
+                (resolve-callee st fnty (car app) (or callee-as 0))
                 (block-ref st (caddr args))
                 (map (lambda (d) (block-ref st d)) (cadddr args))
                 avals
@@ -1357,7 +1374,7 @@
                    [ir:build-callbr
                     b
                     fnty
-                    (resolve-callee st fnty (car app))
+                    (resolve-callee st fnty (car app) (or callee-as 0))
                     (block-ref st (caddr args))
                     (map (lambda (d) (block-ref st d)) (cadddr args))
                     avals

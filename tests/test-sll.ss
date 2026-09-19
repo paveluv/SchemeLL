@@ -907,6 +907,57 @@
              (loop (+ i 1) next (cons `(= ,next (add i64 ,prev ,i)) acc))]]]]]]
     "sum10"]]]]
 
+(t:section "sll: invoke/callbr addrspace matches call")
+
+[define
+ invoke-as-prog
+ '[(declare i32 (@pers))
+   [define
+    void
+    (@f)
+    (personality ptr @pers)
+    [label
+     %e
+     (invoke (addrspace 1) void (null) (label %ok) (label %pad))]
+    (label %ok (ret void))
+    [label
+     %pad
+     (= %lp (landingpad (struct ptr i32) cleanup))
+     (resume (struct ptr i32) %lp)]]]]
+
+[let
+ ((txt (render:sll->ll invoke-as-prog)))
+ [t:check
+  "render prints invoke addrspace(1)"
+  (contains? txt "invoke addrspace(1)")]]
+
+[let*
+ [(ctx (ir:make-context))
+  (m (sll:build ctx "ias" invoke-as-prog))
+  (u (sll:unbuild m))
+  [invoke-form
+   [let
+    walk
+    ((x u))
+    [cond
+     ((and (pair? x) (eq? (car x) 'invoke)) x)
+     ((pair? x) (or (walk (car x)) (walk (cdr x))))
+     (else #f)]]]]
+ (ir:verify-module m)
+ [t:check
+  "unbuild keeps invoke addrspace"
+  (equal? (cadr invoke-form) '(addrspace 1))]
+ (ir:module-dispose! m)
+ (ir:context-dispose! ctx)]
+
+[cond
+ [(config:capability? 'callbr)
+  [t:check-exn
+   "void callbr cannot bind a result"
+   (sll:dump
+    '((define void (@f) (label %e (= %r (callbr void ((asm "nop" "")) (label %e) ()))))))]]
+ [else (t:check "void callbr bind skipped (no callbr C API)" #t)]]
+
 (t:section "sll: typed pointer type form (ptr T (addrspace N))")
 
 ;; the form builds everywhere; only an LLVM 16 context switched to typed

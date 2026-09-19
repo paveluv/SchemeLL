@@ -1233,7 +1233,9 @@
          ,@(callsite-attr-part ins)]]
       [(invoke)
        `[invoke
+         ,@(fmf-flags ins)
          ,@(cc-part (ir:instruction-call-conv ins))
+         ,@(callee-addrspace-marker st ins)
          ,(call-type-slot (LLVMGetCalledFunctionType ins))
          ,(application st ins)
          ,@(bundle-forms st ins)
@@ -1242,10 +1244,13 @@
          ,(block-label st (LLVMGetUnwindDest ins))]]
       [(callbr)
        `[callbr
+         ,@(fmf-flags ins)
          ,@(cc-part (ir:instruction-call-conv ins))
+         ,@(callee-addrspace-marker st ins)
          ,(call-type-slot (LLVMGetCalledFunctionType ins))
          ,(application st ins)
          ,@(bundle-forms st ins)
+         ,@(callsite-attr-part ins)
          ,(successor st ins 0)
          ,[let
            loop
