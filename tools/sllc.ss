@@ -495,11 +495,19 @@
     [(jc (jit:make-context))
      (m2 (sll:build (jit:context-ir jc) "main" prog))
      (j (jit:make))]
-    ;; --opt applies to what actually RUNS
+    ;; --opt applies to what actually RUNS; stamp the host layout first,
+    ;; same order as get-tm for --exe / --print-canonical
     [when
      opt-level
      (target:initialize-native!)
-     (ir:run-module-passes! m2 (string-append "default<" opt-level ">"))]
+     [let
+      ((tm (target:make-machine)))
+      (target:configure-module! m2 tm)
+      [ir:run-module-passes!
+       m2
+       (string-append "default<" opt-level ">")
+       (target:machine-live-ptr tm)]
+      (target:machine-dispose! tm)]]
     (jit:add-module! j jc m2)
     (jit:context-dispose! jc)
     [cond
