@@ -273,45 +273,70 @@
  ;; ---- adding modules and looking up code
  ;; ----------------------------------------
 
- ;; the arch and OS components of a target triple, for host matching (the vendor
- ;; field is irrelevant: -pc- and -unknown- are the same machine)
+ ;; the arch and OS of a target triple, for host matching (vendor is
+ ;; irrelevant: -pc- and -unknown- are the same machine). Arch aliases:
+ ;; aarch64/arm64, x86_64/amd64. OS is a hyphen-bounded token (so
+ ;; "darwin" does not match inside another word) with darwin/macos/macosx
+ ;; as one OS. Unknown OS does not compare equal to another unknown OS.
  [define
-  (triple-arch t)
+  (split-dash s)
   [let
    loop
-   ((i 0))
+   ((i 0) (start 0) (acc '()))
    [cond
-    ((= i (string-length t)) t)
-    ((char=? (string-ref t i) #\-) (substring t 0 i))
-    (else (loop (+ i 1)))]]]
+    ((= i (string-length s)) (reverse (cons (substring s start i) acc)))
+    [(char=? (string-ref s i) #\-)
+     (loop (+ i 1) (+ i 1) (cons (substring s start i) acc))]
+    (else (loop (+ i 1) start acc))]]]
 
  [define
-  os-keywords
-  '["linux"
-    "darwin"
-    "macos"
-    "windows"
-    "freebsd"
-    "netbsd"
-    "openbsd"
-    "solaris"
-    "wasi"]]
+  (normalize-arch a)
+  (cond
+   ((member a '("aarch64" "arm64")) "aarch64")
+   ((member a '("x86_64" "amd64")) "x86_64")
+   (else a))]
+
+ ;; longest names first so macosx wins over macos
+ [define
+  os-aliases
+  '[("macosx"  . "darwin" )
+    ("darwin"  . "darwin" )
+    ("macos"   . "darwin" )
+    ("linux"   . "linux"  )
+    ("windows" . "windows")
+    ("win32"   . "windows")
+    ("freebsd" . "freebsd")
+    ("netbsd"  . "netbsd" )
+    ("openbsd" . "openbsd")
+    ("solaris" . "solaris")
+    ("wasi"    . "wasi"   )]]
+
+ [define
+  (component-os c)
+  [let
+   ((n (string-length c)))
+   [let
+    loop
+    ((names os-aliases))
+    [and
+     (pair? names)
+     [let*
+      ((key (caar names)) (m (string-length key)))
+      [if
+       [and
+        (>= n m)
+        (string=? (substring c 0 m) key)
+        (or (= n m) (not (char-alphabetic? (string-ref c m))))]
+       (cdar names)
+       (loop (cdr names))]]]]]]
+
+ [define
+  (triple-arch t)
+  (normalize-arch (car (split-dash t)))]
 
  [define
   (triple-os t)
-  [find
-   [lambda
-    (os)
-    [let
-     ((n (string-length t)) (m (string-length os)))
-     [let
-      loop
-      ((i 0))
-      [cond
-       ((> (+ i m) n) #f)
-       ((string=? (substring t i (+ i m)) os) #t)
-       (else (loop (+ i 1)))]]]]
-   os-keywords]]
+  (exists component-os (cdr (split-dash t)))]
 
  [define
   (add-module! j jc m)
@@ -334,7 +359,9 @@
     [unless
      [and
       (string=? (triple-arch mt) (triple-arch host))
-      (equal? (triple-os mt) (triple-os host))]
+      [let
+       ((os-m (triple-os mt)) (os-h (triple-os host)))
+       (and os-m os-h (string=? os-m os-h))]]
      [base:error
       'jit:add-module!
       "module targets a different platform than this JIT's host"

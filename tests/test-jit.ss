@@ -158,14 +158,86 @@
 (t:section "jit: host-platform guard")
 
 ;; a module declaring a foreign target must be refused: the JIT compiles for
-;; THIS machine
+;; THIS machine. wasm32 is never a Chez host; aarch64-linux would be the host
+;; on that platform and would not exercise the guard.
 [let*
  [(jc (jit:make-context))
   (ctx (jit:context-ir jc))
   (m (ir:make-module ctx "foreign"))
   (j (jit:make))]
- (ir:set-module-target-triple! m "aarch64-unknown-linux-gnu")
+ (ir:set-module-target-triple! m "wasm32-unknown-wasi")
  (t:check-exn "jit refuses a foreign-triple module" (jit:add-module! j jc m))
+ (jit:context-dispose! jc)]
+
+[let*
+ [(jc (jit:make-context))
+  (ctx (jit:context-ir jc))
+  (m (ir:make-module ctx "haiku"))
+  (j (jit:make))
+  (host (jit:target-triple j))
+  [arch
+   [let
+    loop
+    ((i 0))
+    [cond
+     ((= i (string-length host)) host)
+     ((char=? (string-ref host i) #\-) (substring host 0 i))
+     (else (loop (+ i 1)))]]]]
+ (ir:set-module-target-triple! m (string-append arch "-unknown-haiku"))
+ (t:check-exn "jit refuses an unknown-OS triple" (jit:add-module! j jc m))
+ (jit:context-dispose! jc)]
+
+[let*
+ [(jc (jit:make-context))
+  (ctx (jit:context-ir jc))
+  (m (ir:make-module ctx "alias"))
+  (j (jit:make))
+  (host (jit:target-triple j))
+  [aliased
+   [cond
+    [(let
+      loop
+      ((i 0))
+      [and
+       (<= (+ i 7) (string-length host))
+       (or
+        (string=? (substring host i (+ i 7)) "aarch64")
+        (loop (+ i 1)))])
+     [let
+      loop
+      ((i 0))
+      [cond
+       ((> (+ i 7) (string-length host)) host)
+       [(string=? (substring host i (+ i 7)) "aarch64")
+        (string-append (substring host 0 i) "arm64" (substring host (+ i 7)))]
+       (else (loop (+ i 1)))]]]
+    [(let
+      loop
+      ((i 0))
+      [and
+       (<= (+ i 5) (string-length host))
+       (or
+        (string=? (substring host i (+ i 5)) "arm64")
+        (loop (+ i 1)))])
+     [let
+      loop
+      ((i 0))
+      [cond
+       ((> (+ i 5) (string-length host)) host)
+       [(string=? (substring host i (+ i 5)) "arm64")
+        (string-append
+         (substring host 0 i)
+         "aarch64"
+         (substring host (+ i 5)))]
+       (else (loop (+ i 1)))]]]
+    (else host)]]]
+ (ir:set-module-target-triple! m aliased)
+ [if
+  (string=? aliased host)
+  (t:check "no aarch64/arm64 alias to probe on this host" #t)
+  [t:check
+   "arm64 and aarch64 are the same JIT host"
+   (begin (jit:add-module! j jc m) #t)]]
  (jit:context-dispose! jc)]
 
 (t:section "jit: diagnostics")
