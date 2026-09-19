@@ -81,6 +81,37 @@
 (define hypot2 (jit:function j "hypot2"))
 (t:check "hypot2: doubles" (= (hypot2 3.0 4.0) 25.0))
 
+(t:section "jit: i1 is a 0/1 byte")
+
+;; Chez boolean would treat Scheme 0 as true and pass 1.
+[let*
+ [(jc1 (jit:make-context))
+  (ctx1 (jit:context-ir jc1))
+  (m1 (ir:make-module ctx1 "i1"))
+  (b1 (ir:make-builder ctx1))
+  (i1 (ir:int1-type ctx1))
+  (i64 (ir:int64-type ctx1))
+  (sel-ty (ir:function-type i64 (list i1 i64 i64)))
+  (sel-fn (ir:add-function m1 "sel" sel-ty))]
+ (ir:position-at-end! b1 (ir:append-block ctx1 sel-fn "entry"))
+ [ir:build-ret
+  b1
+  [ir:build-select
+   b1
+   (ir:function-param sel-fn 0)
+   (ir:function-param sel-fn 1)
+   (ir:function-param sel-fn 2)]]
+ (ir:verify-module m1)
+ (ir:builder-dispose! b1)
+ [let
+  ((j1 (jit:make)))
+  (jit:add-module! j1 jc1 m1)
+  (jit:context-dispose! jc1)
+  [let
+   ((sel (jit:function j1 "sel")))
+   (t:check "i1 0 selects the false operand" (= (sel 0 10 20) 20))
+   (t:check "i1 1 selects the true operand" (= (sel 1 10 20) 10))]]]
+
 (t:section "jit: lookups and errors")
 
 [t:check

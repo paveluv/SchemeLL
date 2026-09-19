@@ -304,8 +304,7 @@ the normalized-entry kind).
   (already final) — the JIT's in-memory blob is the fully resolved
   artifact. `--exe` still refuses SHF_ALLOC data sections, so
   freestanding statepointed executables await that open thread.
-- `i1` maps to Chez `boolean` at the FFI: Scheme `0` is TRUTHY —
-  pass `#f`.
+- `i1` maps to Chez `unsigned-8` at the FFI: pass and expect 0/1.
 
 ## Chez quirks catalog
 

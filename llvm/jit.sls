@@ -225,8 +225,9 @@
    [(integer)
     [case
      (ir:type-int-width t)
-     ;; i1: relies on LLVM materializing 0/1 in the return register
-     ((1) 'boolean)
+     ;; i1 is a byte 0/1 in the ABI. Chez boolean treats every non-#f as
+     ;; true, so Scheme 0 would pass 1.
+     ((1) 'unsigned-8)
      ((8) 'integer-8)
      ((16) 'integer-16)
      ((32) 'integer-32)
