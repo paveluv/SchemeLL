@@ -103,7 +103,10 @@
         (n acc)
         [let*
          [(s (symbol->string n))
-          (k (LLVMGetEnumAttributeKindForName s (string-length s)))]
+          [k
+           [LLVMGetEnumAttributeKindForName
+            s
+            (bytevector-length (string->utf8 s))]]]
          (if (zero? k) acc (cons (cons n k) acc))]]
        '()
        enum-names]]]

@@ -15,7 +15,9 @@
   (prefix (llvm config) config:)]
  (define key "schemell.jit.non-integral-layout")
  (define restoration-observer (make-parameter (lambda (layout) (void))))
- (define (flag m) (LLVMGetModuleFlag m key (string-length key)))
+ [define
+  (flag m)
+  (LLVMGetModuleFlag m key (bytevector-length (string->utf8 key)))]
  [define
   (physical forms)
   (filter (lambda (f) (not (eq? (car f) 'non-integral))) forms)]
@@ -53,11 +55,11 @@
       m
       0
       key
-      (string-length key)
+      (bytevector-length (string->utf8 key))
       [LLVMMDStringInContext2
        (LLVMGetModuleContext m)
        original
-       (string-length original)]]
+       (bytevector-length (string->utf8 original))]]
      (LLVMSetDataLayout m host)]]]]
  [define
   (callback-error e)
