@@ -836,7 +836,7 @@
    ;; wider than the C API's uint64: go through decimal text
    [let
     ((s (number->string n)))
-    (LLVMConstIntOfStringAndSize ty s (string-length s) 10)]]]
+    (LLVMConstIntOfStringAndSize ty s (bytevector-length (string->utf8 s)) 10)]]]
 
  (define (const-real ty x) (LLVMConstReal ty (inexact x)))
  (define (const-null ty) (LLVMConstNull ty))
@@ -1003,7 +1003,10 @@
  ;; content is an empty tuple
  [define
   (md-kind-id ctx name)
-  (LLVMGetMDKindIDInContext (context-live-ptr ctx) name (string-length name))]
+  (LLVMGetMDKindIDInContext
+   (context-live-ptr ctx)
+   name
+   (bytevector-length (string->utf8 name)))]
  [define
   (set-instruction-metadata! ctx instr kind-name)
   [LLVMSetMetadata
@@ -1648,7 +1651,9 @@
  ;; 0 = LLVM has no enum attribute of this name
  [define
   (enum-attribute-kind-named name)
-  (LLVMGetEnumAttributeKindForName name (string-length name))]
+  (LLVMGetEnumAttributeKindForName
+   name
+   (bytevector-length (string->utf8 name)))]
 
  [define
   (create-enum-attribute ctx kind value)
