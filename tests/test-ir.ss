@@ -67,6 +67,9 @@
  (ir:add-function bad-mod "no_terminator" (ir:function-type i32 '()))]
 (ir:append-block ctx bad-fn "entry") ; block with no terminator: invalid
 (t:check-exn "verify-module raises on invalid IR" (ir:verify-module bad-mod))
+[t:check-exn
+ "run-module-passes! verifies before running passes"
+ (ir:run-module-passes! bad-mod "default<O2>")]
 (ir:module-dispose! bad-mod)
 
 (t:section "ir: lifetime discipline")

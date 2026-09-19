@@ -401,8 +401,10 @@
   (LLVMSetDataLayout (module-live-ptr m) layout-string)]
 
  ;; Run new-pass-manager passes, e.g. (run-module-passes! m "default<O2>").
+ ;; Verify first: LLVM passes SIGSEGV on invalid IR instead of diagnosing.
  [define
   (run-module-passes! m passes)
+  (verify-module m)
   [let
    ((opts (LLVMCreatePassBuilderOptions)))
    [let
