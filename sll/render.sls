@@ -1117,6 +1117,7 @@
         (caar b)
         ((attributes) (deco (cdr b) (cons (attrs-words (cdr (car b))) acc)))
         ((align) (deco (cdr b) (cons (format "align ~a" (cadr (car b))) acc)))
+        ((section) (deco (cdr b) (cons (format "section ~s" (cadr (car b))) acc)))
         ((gc) (deco (cdr b) (cons (format "gc ~s" (cadr (car b))) acc)))
         (else (join " " (reverse acc)))]
        (join " " (reverse acc))]]]

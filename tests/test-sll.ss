@@ -907,6 +907,14 @@
              (loop (+ i 1) next (cons `(= ,next (add i64 ,prev ,i)) acc))]]]]]]
     "sum10"]]]]
 
+(t:section "sll: render declare section")
+
+[t:check
+ "render prints declare section"
+ [contains?
+  (render:sll->ll '((declare void (@f) (section ".text.hot"))))
+  "section \".text.hot\""]]
+
 (t:section "sll: render global section and visibility")
 
 [t:check
