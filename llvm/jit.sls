@@ -226,8 +226,9 @@
    [(integer)
     [case
      (ir:type-int-width t)
-     ;; i1 is a byte 0/1 in the ABI. Chez boolean treats every non-#f as true,
-     ;; so Scheme 0 would pass 1.
+     ;; i1 arguments are a 0/1 byte the callee masks; Chez boolean treats every
+     ;; non-#f as true, so Scheme 0 would pass 1. Results are masked in
+     ;; function: only bit 0 of an un-annotated i1 return is defined.
      ((1) 'unsigned-8)
      ((8) 'integer-8)
      ((16) 'integer-16)
@@ -414,12 +415,20 @@
        [fp
         [eval
          `(foreign-procedure ,addr ,(cdr sig) ,(car sig))
-         (environment '(chezscheme))]]]
+         (environment '(chezscheme))]]
+       ;; an un-annotated i1 return only defines bit 0 (x86-64 promotes it with
+       ;; anyext, so trunc i8 2 to i1 arrives as the byte 2): mask it.
+       ;; unsigned-8 is the i1 mapping, see llvm-type->foreign-type.
+       [call
+        [if
+         (eq? (car sig) 'unsigned-8)
+         (lambda args (fxand (apply fp args) 1))
+         fp]]]
       [lambda
        args
        ;; liveness check; also keeps j reachable from this closure
        (jit-live-ptr j)
-       (apply fp args)]]]]]]
+       (apply call args)]]]]]]
 
  ;; Run-time address of the JIT'd module's .llvm_stackmaps section (GC
  ;; statepoint stack maps). Codegen's section symbol (__LLVM_StackMaps) is

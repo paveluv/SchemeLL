@@ -112,6 +112,31 @@
    (t:check "i1 0 selects the false operand" (= (sel 0 10 20) 20))
    (t:check "i1 1 selects the true operand" (= (sel 1 10 20) 10))]]]
 
+;; an un-annotated i1 return only defines bit 0 (x86-64 promotes it with anyext,
+;; so trunc i8 2 to i1 comes back as the byte 2); jit:function masks the result
+;; to 0/1
+[let*
+ [(jc2 (jit:make-context))
+  (ctx2 (jit:context-ir jc2))
+  (m2 (ir:make-module ctx2 "i1ret"))
+  (b2 (ir:make-builder ctx2))
+  (i1 (ir:int1-type ctx2))
+  (i8 (ir:int8-type ctx2))
+  (low-fn (ir:add-function m2 "low" (ir:function-type i1 (list i8))))]
+ (ir:position-at-end! b2 (ir:append-block ctx2 low-fn "entry"))
+ (ir:build-ret b2 (ir:build-trunc b2 (ir:function-param low-fn 0) i1 ""))
+ (ir:verify-module m2)
+ (ir:builder-dispose! b2)
+ [let
+  ((j2 (jit:make)))
+  (jit:add-module! j2 jc2 m2)
+  (jit:context-dispose! jc2)
+  [let
+   ((low (jit:function j2 "low")))
+   (t:check "i1 result is masked: trunc i8 2 is 0" (= (low 2) 0))
+   (t:check "i1 result is masked: trunc i8 3 is 1" (= (low 3) 1))
+   (t:check "i1 result is masked: trunc i8 255 is 1" (= (low 255) 1))]]]
+
 (t:section "jit: lookups and errors")
 
 [t:check

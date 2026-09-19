@@ -304,7 +304,10 @@ the normalized-entry kind).
   (already final) — the JIT's in-memory blob is the fully resolved
   artifact. `--exe` still refuses SHF_ALLOC data sections, so
   freestanding statepointed executables await that open thread.
-- `i1` maps to Chez `unsigned-8` at the FFI: pass and expect 0/1.
+- `i1` maps to Chez `unsigned-8` at the FFI: pass 0/1. Results are
+  masked to bit 0 by `jit:function`: an un-annotated `i1` return only
+  defines that bit (x86-64 promotes it with anyext, so a `trunc i8 2
+  to i1` arrives as the byte 2).
 
 ## Chez quirks catalog
 
