@@ -17,7 +17,14 @@
 ;;;     emitter): works for self-contained programs -- an @_start, no
 ;;;     external symbols, no data relocations (hello-world class).
 ;;;   -o PATH   set the output path
-(load "host/bootstrap.ss")
+;; Load bootstrap from the repo, not CWD: the wrapper passes an absolute
+;; --script path, and `scheme --script tools/sllc.ss` is relative to the
+;; repo root. path-parent twice walks tools/sllc.ss -> tools -> root
+;; (Chez yields "" for the parent of a bare directory name).
+[let
+ ((root (path-parent (path-parent (car (command-line))))))
+ (load
+  (string-append (if (string=? root "") "." root) "/host/bootstrap.ss"))]
 [import
  (chezscheme)
  (prefix (sll) sll:)
