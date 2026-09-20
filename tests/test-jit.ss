@@ -223,43 +223,41 @@
    (jit:host-triple-compatible? "")
    (not (jit:host-triple-compatible? "wasm32-unknown-wasi"))]]]
 
+;; Exercise construction on every host: otherwise an invalid Scheme call in the
+;; ARM-only setup can remain hidden by a successful x86 suite.
+[define
+ (alternate-arm-triple host)
+ [let
+  loop
+  ((i 0))
+  [cond
+   ((= i (string-length host)) host)
+   [(char=? (string-ref host i) #\-)
+    [let
+     [(arch (substring host 0 i))
+      (suffix (substring host i (string-length host)))]
+     [cond
+      ((string=? arch "aarch64") (string-append "arm64" suffix))
+      ((string=? arch "arm64") (string-append "aarch64" suffix))
+      (else host)]]]
+   (else (loop (+ i 1)))]]]
+[t:check
+ "ARM alias fixture constructs both spellings on every host"
+ [and
+  [string=?
+   (alternate-arm-triple "aarch64-unknown-linux-gnu")
+   "arm64-unknown-linux-gnu"]
+  (string=? (alternate-arm-triple "arm64-apple-darwin") "aarch64-apple-darwin")
+  [string=?
+   (alternate-arm-triple "x86_64-unknown-linux-gnu")
+   "x86_64-unknown-linux-gnu"]]]
 [let*
  [(jc (jit:make-context))
   (ctx (jit:context-ir jc))
   (m (ir:make-module ctx "alias"))
   (j (jit:make))
   (host (jit:target-triple j))
-  [aliased
-   [cond
-    [[let
-      loop
-      ((i 0))
-      [and
-       (<= (+ i 7) (string-length host))
-       (or (string=? (substring host i (+ i 7)) "aarch64") (loop (+ i 1)))]]
-     [let
-      loop
-      ((i 0))
-      [cond
-       ((> (+ i 7) (string-length host)) host)
-       [(string=? (substring host i (+ i 7)) "aarch64")
-        (string-append (substring host 0 i) "arm64" (substring host (+ i 7)))]
-       (else (loop (+ i 1)))]]]
-    [[let
-      loop
-      ((i 0))
-      [and
-       (<= (+ i 5) (string-length host))
-       (or (string=? (substring host i (+ i 5)) "arm64") (loop (+ i 1)))]]
-     [let
-      loop
-      ((i 0))
-      [cond
-       ((> (+ i 5) (string-length host)) host)
-       [(string=? (substring host i (+ i 5)) "arm64")
-        (string-append (substring host 0 i) "aarch64" (substring host (+ i 5)))]
-       (else (loop (+ i 1)))]]]
-    (else host)]]]
+  (aliased (alternate-arm-triple host))]
  (ir:set-module-target-triple! m aliased)
  [if
   (string=? aliased host)
